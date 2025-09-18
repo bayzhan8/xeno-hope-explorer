@@ -8,60 +8,60 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Medical/Scientific Color Palette */
+    /* NYU Color Palette */
     --background: 0 0% 99%;
-    --foreground: 215 25% 15%;
+    --foreground: 270 15% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 15%;
+    --card-foreground: 270 15% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 15%;
+    --popover-foreground: 270 15% 15%;
 
-    /* Medical Blue Primary */
-    --primary: 208 85% 48%;
+    /* NYU Violet Primary */
+    --primary: 270 85% 28%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 208 95% 68%;
+    --primary-glow: 270 75% 48%;
 
     /* Soft Gray Secondary */
-    --secondary: 215 15% 96%;
-    --secondary-foreground: 215 25% 25%;
+    --secondary: 270 15% 96%;
+    --secondary-foreground: 270 25% 25%;
 
-    --muted: 215 15% 95%;
-    --muted-foreground: 215 15% 45%;
+    --muted: 270 15% 95%;
+    --muted-foreground: 270 15% 45%;
 
-    --accent: 208 85% 95%;
-    --accent-foreground: 208 85% 25%;
+    --accent: 270 85% 95%;
+    --accent-foreground: 270 85% 25%;
 
-    /* Medical Alert Colors */
+    /* Alert Colors */
     --destructive: 0 75% 55%;
     --destructive-foreground: 0 0% 100%;
     --warning: 38 92% 55%;
     --success: 142 76% 36%;
 
-    --border: 215 15% 88%;
-    --input: 215 15% 92%;
-    --ring: 208 85% 48%;
+    --border: 270 15% 88%;
+    --input: 270 15% 92%;
+    --ring: 270 85% 28%;
 
-    /* Custom Medical Theme Variables */
-    --medical-surface: 215 20% 98%;
-    --medical-border: 215 15% 85%;
-    --chart-grid: 215 15% 90%;
+    /* Custom NYU Theme Variables */
+    --medical-surface: 270 20% 98%;
+    --medical-border: 270 15% 85%;
+    --chart-grid: 270 15% 90%;
     
-    /* Data Visualization Colors */
-    --chart-primary: 208 85% 48%;
+    /* Data Visualization Colors - NYU Palette */
+    --chart-primary: 270 85% 28%;
     --chart-secondary: 142 76% 36%;
     --chart-tertiary: 38 92% 55%;
-    --chart-quaternary: 280 65% 55%;
+    --chart-quaternary: 270 65% 55%;
     
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(208 85% 48%), hsl(208 95% 68%));
-    --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%), hsl(215 20% 98%));
+    --gradient-primary: linear-gradient(135deg, hsl(270 85% 28%), hsl(270 75% 48%));
+    --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%), hsl(270 20% 98%));
     
     /* Shadows */
-    --shadow-soft: 0 2px 8px -2px hsl(215 25% 15% / 0.08);
-    --shadow-medium: 0 4px 16px -4px hsl(215 25% 15% / 0.12);
-    --shadow-strong: 0 8px 32px -8px hsl(215 25% 15% / 0.16);
+    --shadow-soft: 0 2px 8px -2px hsl(270 15% 15% / 0.08);
+    --shadow-medium: 0 4px 16px -4px hsl(270 15% 15% / 0.12);
+    --shadow-strong: 0 8px 32px -8px hsl(270 15% 15% / 0.16);
 
     --radius: 0.5rem;
 

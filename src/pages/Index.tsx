@@ -43,7 +43,7 @@ const Index = () => {
                 <Beaker className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-primary">Xeno Kidney Impact Simulator</h1>
+                <h1 className="text-2xl font-bold text-primary">NYU Xeno Kidney Impact Simulator</h1>
                 <p className="text-sm text-muted-foreground">
                   Exploring xenotransplantation outcomes for high-CPRA patients
                 </p>
@@ -60,9 +60,11 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-          {/* Controls Sidebar */}
+          {/* Controls Sidebar - Sticky */}
           <div className="xl:col-span-1">
-            <SimulationControls params={params} onParamsChange={setParams} />
+            <div className="xl:sticky xl:top-8">
+              <SimulationControls params={params} onParamsChange={setParams} />
+            </div>
           </div>
 
           {/* Charts and Metrics */}
