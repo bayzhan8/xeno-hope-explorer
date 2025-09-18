@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend, Tooltip } from 'recharts';
 
 interface SimulationData {
   waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number }>;
@@ -21,6 +21,40 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
     quaternary: 'hsl(var(--chart-quaternary))',
   };
 
+  // Custom tooltip component
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-card border border-medical-border rounded-lg p-3 shadow-[var(--shadow-medium)]">
+          <p className="text-sm font-medium text-foreground mb-1">{`Year: ${label}`}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} className="text-sm" style={{ color: entry.color }}>
+              {`${entry.name}: ${typeof entry.value === 'number' ? entry.value.toLocaleString() : entry.value}`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Custom percentage tooltip
+  const PercentageTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-card border border-medical-border rounded-lg p-3 shadow-[var(--shadow-medium)]">
+          <p className="text-sm font-medium text-foreground mb-1">{`Year: ${label}`}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} className="text-sm" style={{ color: entry.color }}>
+              {`${entry.name}: ${(entry.value * 100).toFixed(1)}%`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Waitlist Size Over Time */}
@@ -36,17 +70,24 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
+                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
+                label={{ value: 'Patients on Waitlist', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend 
+                wrapperStyle={{ paddingTop: '20px' }}
+                iconType="line"
               />
               <Line 
                 type="monotone" 
                 dataKey="total" 
                 stroke={COLORS.primary} 
                 strokeWidth={3}
-                name="Total"
+                name="Total Waitlist"
                 dot={{ fill: COLORS.primary, strokeWidth: 2, r: 4 }}
               />
               <Line 
@@ -54,7 +95,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 dataKey="lowCPRA" 
                 stroke={COLORS.secondary} 
                 strokeWidth={2}
-                name="Low CPRA (0-85)"
+                name="Low CPRA (0-85%)"
                 dot={{ fill: COLORS.secondary, strokeWidth: 2, r: 3 }}
               />
               <Line 
@@ -62,7 +103,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 dataKey="highCPRA" 
                 stroke={COLORS.tertiary} 
                 strokeWidth={2}
-                name="High CPRA (85-100)"
+                name="High CPRA (85-100%)"
                 dot={{ fill: COLORS.tertiary, strokeWidth: 2, r: 3 }}
               />
             </LineChart>
@@ -83,21 +124,27 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
+                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
+                label={{ value: 'Lives Saved', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend 
+                wrapperStyle={{ paddingTop: '20px' }}
               />
               <Bar 
                 dataKey="highCPRA" 
                 fill={COLORS.tertiary}
-                name="High CPRA"
+                name="High CPRA Deaths Prevented"
                 radius={[2, 2, 0, 0]}
               />
               <Bar 
                 dataKey="lowCPRA" 
                 fill={COLORS.secondary}
-                name="Low CPRA"
+                name="Low CPRA Deaths Prevented"
                 radius={[2, 2, 0, 0]}
               />
             </BarChart>
@@ -118,21 +165,27 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
+                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
+                label={{ value: 'Cumulative Transplants', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend 
+                wrapperStyle={{ paddingTop: '20px' }}
               />
               <Bar 
                 dataKey="human" 
                 fill={COLORS.primary}
-                name="Human"
+                name="Human Kidney Transplants"
                 radius={[2, 2, 0, 0]}
               />
               <Bar 
                 dataKey="xeno" 
                 fill={COLORS.quaternary}
-                name="Xeno"
+                name="Xeno Kidney Transplants"
                 radius={[2, 2, 0, 0]}
               />
             </BarChart>
@@ -153,19 +206,25 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
+                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
                 domain={[0, 1]}
                 tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
+                label={{ value: 'Penetration Rate (%)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+              />
+              <Tooltip content={<PercentageTooltip />} />
+              <Legend 
+                wrapperStyle={{ paddingTop: '20px' }}
               />
               <Line 
                 type="monotone" 
                 dataKey="proportion" 
                 stroke={COLORS.quaternary} 
                 strokeWidth={3}
-                name="Proportion Transplanted"
+                name="High CPRA Transplant Rate"
                 dot={{ fill: COLORS.quaternary, strokeWidth: 2, r: 4 }}
               />
             </LineChart>

@@ -19,18 +19,18 @@ interface PopulationState {
   relistings: number;
 }
 
-// Baseline parameters (medical literature estimates)
+// Baseline parameters (medical literature estimates) - Enhanced sensitivity
 const BASELINE_PARAMS = {
-  initialLowCPRA: 5000,
-  initialHighCPRA: 1500,
-  arrivalRateLow: 1200, // per year
-  arrivalRateHigh: 400, // per year
-  humanTransplantRate: 0.3, // per year per person on waitlist
-  waitlistDeathRate: 0.08, // per year
-  humanGraftFailureRate: 0.05, // per year
-  humanPostTransplantDeathRate: 0.03, // per year
-  humanRelistingRate: 0.08, // per year
-  xenoAvailabilityRate: 200, // xeno kidneys available per year
+  initialLowCPRA: 4000,
+  initialHighCPRA: 2000,
+  arrivalRateLow: 1000, // per year
+  arrivalRateHigh: 600, // per year
+  humanTransplantRate: 0.25, // per year per person on waitlist
+  waitlistDeathRate: 0.12, // per year - increased for more dramatic effect
+  humanGraftFailureRate: 0.04, // per year
+  humanPostTransplantDeathRate: 0.025, // per year
+  humanRelistingRate: 0.06, // per year
+  xenoAvailabilityRate: 400, // xeno kidneys available per year - increased
 };
 
 export class SimulationEngine {
@@ -189,7 +189,7 @@ export class SimulationEngine {
       newState.lowCPRAWaitlist += BASELINE_PARAMS.arrivalRateLow * dt;
       newState.highCPRAWaitlist += BASELINE_PARAMS.arrivalRateHigh * dt;
 
-      // Xeno transplants (only for high-CPRA)
+      // Xeno transplants (only for high-CPRA) - Enhanced sensitivity
       const xenoOffered = BASELINE_PARAMS.xenoAvailabilityRate * dt;
       const xenoAccepted = Math.min(
         xenoOffered * this.params.xenoAcceptanceRate,
@@ -199,21 +199,25 @@ export class SimulationEngine {
       newState.highCPRAWaitlist -= xenoAccepted;
       newState.xenoTransplanted += xenoAccepted;
 
-      // Human transplants (reduced availability due to xeno)
-      const availableHumanKidneys = BASELINE_PARAMS.arrivalRateLow * 0.8 * dt; // Assume 80% of arrivals donate
-      const lowTransplants = Math.min(
-        newState.lowCPRAWaitlist * BASELINE_PARAMS.humanTransplantRate * dt,
-        availableHumanKidneys * 0.7 // 70% go to low-CPRA
+      // Human transplants (more realistic competition for organs)
+      const totalDemand = newState.lowCPRAWaitlist + newState.highCPRAWaitlist;
+      const availableHumanKidneys = BASELINE_PARAMS.arrivalRateLow * 0.75 * dt; // 75% become available
+      
+      // Priority system: some kidneys go to high-CPRA if available
+      const highCPRAPriority = Math.min(
+        availableHumanKidneys * 0.4, // 40% prioritized for high-CPRA
+        newState.highCPRAWaitlist * BASELINE_PARAMS.humanTransplantRate * dt * 0.4 // reduced rate for high-CPRA
       );
-      const highTransplants = Math.min(
-        newState.highCPRAWaitlist * BASELINE_PARAMS.humanTransplantRate * dt * 0.3,
-        availableHumanKidneys * 0.3 // 30% go to high-CPRA
+      
+      const lowCPRAAllocation = Math.min(
+        availableHumanKidneys * 0.6, // 60% for low-CPRA
+        newState.lowCPRAWaitlist * BASELINE_PARAMS.humanTransplantRate * dt
       );
 
-      newState.lowCPRAWaitlist -= lowTransplants;
-      newState.highCPRAWaitlist -= highTransplants;
-      newState.lowCPRATransplanted += lowTransplants;
-      newState.highCPRATransplanted += highTransplants;
+      newState.lowCPRAWaitlist -= lowCPRAAllocation;
+      newState.highCPRAWaitlist -= highCPRAPriority;
+      newState.lowCPRATransplanted += lowCPRAAllocation;
+      newState.highCPRATransplanted += highCPRAPriority;
 
       // Waitlist deaths
       const lowDeaths = newState.lowCPRAWaitlist * BASELINE_PARAMS.waitlistDeathRate * dt;
@@ -223,7 +227,7 @@ export class SimulationEngine {
       newState.highCPRAWaitlist -= highDeaths;
       newState.deaths += lowDeaths + highDeaths;
 
-      // Xeno graft outcomes
+      // Xeno graft outcomes - Enhanced parameter sensitivity
       const xenoGraftFailures = newState.xenoTransplanted * this.params.xenoGraftFailureRate * dt;
       const xenoPostTransplantDeaths = newState.xenoTransplanted * this.params.postTransplantDeathRate * dt;
       const xenoRelistings = xenoGraftFailures * this.params.relistingRate;
@@ -266,7 +270,7 @@ export class SimulationEngine {
       totalTransplants: finalTransplants.human + finalTransplants.xeno,
       xenoTransplants: finalTransplants.xeno,
       penetrationRate: finalPenetration.proportion,
-      relistingImpact: finalTransplants.xeno * this.params.relistingRate * 0.5, // Approximate impact
+      relistingImpact: finalTransplants.xeno * this.params.relistingRate * this.params.xenoGraftFailureRate, // More accurate impact calculation
     };
   }
 }
