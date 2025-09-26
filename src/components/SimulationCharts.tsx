@@ -4,7 +4,10 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarC
 
 interface SimulationData {
   waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number }>;
-  deathsData: Array<{ year: number; waitlistDeathsPrevented: number; postTransplantDeaths: number; totalPrevented: number }>;
+  waitlistDeathsData: Array<{ year: number; waitlistDeaths: number }>;
+  postTransplantDeathsData: Array<{ year: number; xenoPostTransplantDeaths: number; humanPostTransplantDeaths: number }>;
+  netDeathsPreventedData: Array<{ year: number; netDeathsPrevented: number }>;
+  graftFailuresData: Array<{ year: number; xenoGraftFailures: number; humanGraftFailures: number }>;
   transplantsData: Array<{ year: number; human: number; xeno: number }>;
   penetrationData: Array<{ year: number; proportion: number }>;
   waitingTimeData: Array<{ year: number; averageWaitingTime: number }>;
@@ -112,14 +115,60 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
         </CardContent>
       </Card>
 
-      {/* Deaths Impact Analysis */}
+      {/* Graft Failures */}
       <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
         <CardHeader className="border-b border-medical-border bg-medical-surface">
-          <CardTitle className="text-lg font-semibold text-primary">Deaths Impact Analysis</CardTitle>
+          <CardTitle className="text-lg font-semibold text-primary">Graft Failures</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={data.deathsData}>
+            <BarChart data={data.graftFailuresData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+              <XAxis 
+                dataKey="year" 
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 12 }}
+                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+              />
+              <YAxis 
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 12 }}
+                label={{ value: 'Graft Failures', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend 
+                wrapperStyle={{ paddingTop: '20px' }}
+              />
+              <Bar 
+                dataKey="humanGraftFailures" 
+                stackId="graft"
+                fill={COLORS.secondary}
+                name="Human Graft Failures"
+                radius={[0, 0, 0, 0]}
+              />
+              <Bar 
+                dataKey="xenoGraftFailures" 
+                stackId="graft"
+                fill={COLORS.tertiary}
+                name="Xeno Graft Failures"
+                radius={[2, 2, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Waitlist & Post-Transplant Deaths */}
+      <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
+        <CardHeader className="border-b border-medical-border bg-medical-surface">
+          <CardTitle className="text-lg font-semibold text-primary">Deaths Analysis</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={data.postTransplantDeathsData.map((item, index) => ({
+              ...item,
+              waitlistDeaths: data.waitlistDeathsData[index]?.waitlistDeaths || 0
+            }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 dataKey="year" 
@@ -137,15 +186,21 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 wrapperStyle={{ paddingTop: '20px' }}
               />
               <Bar 
-                dataKey="waitlistDeathsPrevented" 
-                fill={COLORS.secondary}
-                name="Waitlist Deaths Prevented"
+                dataKey="waitlistDeaths" 
+                fill={COLORS.primary}
+                name="Waitlist Deaths"
                 radius={[2, 2, 0, 0]}
               />
               <Bar 
-                dataKey="postTransplantDeaths" 
+                dataKey="xenoPostTransplantDeaths" 
                 fill={COLORS.tertiary}
-                name="Post-Transplant Deaths (Xeno)"
+                name="Xeno Post-Transplant Deaths"
+                radius={[2, 2, 0, 0]}
+              />
+              <Bar 
+                dataKey="humanPostTransplantDeaths" 
+                fill={COLORS.secondary}
+                name="Human Post-Transplant Deaths"
                 radius={[2, 2, 0, 0]}
               />
             </BarChart>
@@ -231,13 +286,48 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
         </CardContent>
       </Card>
 
+      {/* Net Deaths Prevented */}
+      <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
+        <CardHeader className="border-b border-medical-border bg-medical-surface">
+          <CardTitle className="text-lg font-semibold text-primary">Net Deaths Prevented</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={data.netDeathsPreventedData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+              <XAxis 
+                dataKey="year" 
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 12 }}
+                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+              />
+              <YAxis 
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 12 }}
+                label={{ value: 'Net Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend 
+                wrapperStyle={{ paddingTop: '20px' }}
+              />
+              <Bar 
+                dataKey="netDeathsPrevented" 
+                fill={COLORS.quaternary}
+                name="Net Deaths Prevented"
+                radius={[2, 2, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
       {/* High CPRA Penetration */}
-      <Card className="col-span-1 lg:col-span-2 bg-card shadow-[var(--shadow-medium)] border-medical-border">
+      <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
         <CardHeader className="border-b border-medical-border bg-medical-surface">
           <CardTitle className="text-lg font-semibold text-primary">High CPRA Transplant Penetration</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={250}>
             <LineChart data={data.penetrationData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
