@@ -12,6 +12,8 @@ interface SimulationParams {
   postTransplantDeathRate: number;
   relistingRate: number;
   simulationHorizon: number;
+  xenoAvailabilityRate: number;
+  highCPRAThreshold: number;
 }
 
 const Index = () => {
@@ -21,6 +23,8 @@ const Index = () => {
     postTransplantDeathRate: 0.05,
     relistingRate: 0.15,
     simulationHorizon: 5,
+    xenoAvailabilityRate: 400,
+    highCPRAThreshold: 85,
   });
 
   // Create simulation engine and run simulation whenever parameters change

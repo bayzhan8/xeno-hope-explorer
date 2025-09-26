@@ -7,6 +7,8 @@ interface SimulationParams {
   postTransplantDeathRate: number;
   relistingRate: number;
   simulationHorizon: number;
+  xenoAvailabilityRate: number;
+  highCPRAThreshold: number;
 }
 
 interface PopulationState {
@@ -15,8 +17,10 @@ interface PopulationState {
   lowCPRATransplanted: number;
   highCPRATransplanted: number;
   xenoTransplanted: number;
-  deaths: number;
+  waitlistDeaths: number;
+  postTransplantDeaths: number;
   relistings: number;
+  totalWaitingTime: number;
 }
 
 // Baseline parameters (medical literature estimates) - Enhanced sensitivity
@@ -45,9 +49,10 @@ export class SimulationEngine {
   runSimulation() {
     const results = {
       waitlistData: [] as Array<{ year: number; total: number; lowCPRA: number; highCPRA: number }>,
-      deathsData: [] as Array<{ year: number; totalPrevented: number; lowCPRA: number; highCPRA: number }>,
+      deathsData: [] as Array<{ year: number; waitlistDeathsPrevented: number; postTransplantDeaths: number; totalPrevented: number }>,
       transplantsData: [] as Array<{ year: number; human: number; xeno: number }>,
       penetrationData: [] as Array<{ year: number; proportion: number }>,
+      waitingTimeData: [] as Array<{ year: number; averageWaitingTime: number }>,
     };
 
     // Run baseline simulation (no xeno)
@@ -70,16 +75,30 @@ export class SimulationEngine {
         highCPRA: xenoResults.states[xenoIndex]?.highCPRAWaitlist || 0,
       });
 
-      // Deaths prevented
-      const baselineDeaths = baselineResults.states[baselineIndex]?.deaths || 0;
-      const xenoDeaths = xenoResults.states[xenoIndex]?.deaths || 0;
-      const deathsPrevented = Math.max(0, baselineDeaths - xenoDeaths);
+      // Deaths prevented and breakdown
+      const baselineWaitlistDeaths = baselineResults.states[baselineIndex]?.waitlistDeaths || 0;
+      const xenoWaitlistDeaths = xenoResults.states[xenoIndex]?.waitlistDeaths || 0;
+      const waitlistDeathsPrevented = Math.max(0, baselineWaitlistDeaths - xenoWaitlistDeaths);
+      
+      const xenoPostTransplantDeaths = xenoResults.states[xenoIndex]?.postTransplantDeaths || 0;
+      const totalDeathsPrevented = waitlistDeathsPrevented - xenoPostTransplantDeaths * 0.5; // Account for some xeno post-transplant deaths
 
       results.deathsData.push({
         year,
-        totalPrevented: deathsPrevented,
-        lowCPRA: deathsPrevented * 0.3, // Approximate distribution
-        highCPRA: deathsPrevented * 0.7,
+        waitlistDeathsPrevented: waitlistDeathsPrevented,
+        postTransplantDeaths: xenoPostTransplantDeaths,
+        totalPrevented: Math.max(0, totalDeathsPrevented),
+      });
+
+      // Waiting time calculation
+      const totalWaitlist = (xenoResults.states[xenoIndex]?.lowCPRAWaitlist || 0) + (xenoResults.states[xenoIndex]?.highCPRAWaitlist || 0);
+      const totalArrivals = BASELINE_PARAMS.arrivalRateLow + BASELINE_PARAMS.arrivalRateHigh;
+      const totalTransplantRate = BASELINE_PARAMS.humanTransplantRate + (this.params.xenoAvailabilityRate / 1000); // Convert to rate
+      const avgWaitingTime = totalWaitlist > 0 ? totalWaitlist / (totalArrivals * totalTransplantRate) : 0;
+
+      results.waitingTimeData.push({
+        year,
+        averageWaitingTime: avgWaitingTime,
       });
 
       // Transplants
@@ -112,8 +131,10 @@ export class SimulationEngine {
       lowCPRATransplanted: 0,
       highCPRATransplanted: 0,
       xenoTransplanted: 0,
-      deaths: 0,
+      waitlistDeaths: 0,
+      postTransplantDeaths: 0,
       relistings: 0,
+      totalWaitingTime: 0,
     };
 
     states.push({ ...currentState });
@@ -148,7 +169,7 @@ export class SimulationEngine {
 
       newState.lowCPRAWaitlist -= lowDeaths;
       newState.highCPRAWaitlist -= highDeaths;
-      newState.deaths += lowDeaths + highDeaths;
+      newState.waitlistDeaths += lowDeaths + highDeaths;
 
       // Post-transplant outcomes
       const graftFailures = (newState.lowCPRATransplanted + newState.highCPRATransplanted) * 
@@ -157,7 +178,7 @@ export class SimulationEngine {
                                   BASELINE_PARAMS.humanPostTransplantDeathRate * dt;
 
       newState.relistings += graftFailures * BASELINE_PARAMS.humanRelistingRate;
-      newState.deaths += postTransplantDeaths;
+      newState.postTransplantDeaths += postTransplantDeaths;
 
       currentState = newState;
       states.push({ ...currentState });
@@ -174,8 +195,10 @@ export class SimulationEngine {
       lowCPRATransplanted: 0,
       highCPRATransplanted: 0,
       xenoTransplanted: 0,
-      deaths: 0,
+      waitlistDeaths: 0,
+      postTransplantDeaths: 0,
       relistings: 0,
+      totalWaitingTime: 0,
     };
 
     states.push({ ...currentState });
@@ -189,8 +212,8 @@ export class SimulationEngine {
       newState.lowCPRAWaitlist += BASELINE_PARAMS.arrivalRateLow * dt;
       newState.highCPRAWaitlist += BASELINE_PARAMS.arrivalRateHigh * dt;
 
-      // Xeno transplants (only for high-CPRA) - Enhanced sensitivity
-      const xenoOffered = BASELINE_PARAMS.xenoAvailabilityRate * dt;
+      // Xeno transplants (only for high-CPRA) - Use dynamic availability
+      const xenoOffered = this.params.xenoAvailabilityRate * dt;
       const xenoAccepted = Math.min(
         xenoOffered * this.params.xenoAcceptanceRate,
         newState.highCPRAWaitlist
@@ -225,7 +248,7 @@ export class SimulationEngine {
 
       newState.lowCPRAWaitlist -= lowDeaths;
       newState.highCPRAWaitlist -= highDeaths;
-      newState.deaths += lowDeaths + highDeaths;
+      newState.waitlistDeaths += lowDeaths + highDeaths;
 
       // Xeno graft outcomes - Enhanced parameter sensitivity
       const xenoGraftFailures = newState.xenoTransplanted * this.params.xenoGraftFailureRate * dt;
@@ -234,7 +257,7 @@ export class SimulationEngine {
 
       newState.xenoTransplanted -= xenoGraftFailures + xenoPostTransplantDeaths;
       newState.highCPRAWaitlist += xenoRelistings;
-      newState.deaths += xenoPostTransplantDeaths;
+      newState.postTransplantDeaths += xenoPostTransplantDeaths;
       newState.relistings += xenoRelistings;
 
       // Human graft outcomes
@@ -244,7 +267,7 @@ export class SimulationEngine {
                                        BASELINE_PARAMS.humanPostTransplantDeathRate * dt;
 
       newState.relistings += humanGraftFailures * BASELINE_PARAMS.humanRelistingRate;
-      newState.deaths += humanPostTransplantDeaths;
+      newState.postTransplantDeaths += humanPostTransplantDeaths;
 
       currentState = newState;
       states.push({ ...currentState });

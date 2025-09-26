@@ -12,6 +12,8 @@ interface SimulationParams {
   postTransplantDeathRate: number;
   relistingRate: number;
   simulationHorizon: number;
+  xenoAvailabilityRate: number;
+  highCPRAThreshold: number;
 }
 
 interface SimulationControlsProps {
@@ -45,6 +47,58 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
+          {/* Number of Xeno Kidneys */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Number of Xeno Kidneys (Annual)</Label>
+              <span className="text-sm text-muted-foreground">{Math.round(params.xenoAvailabilityRate)}</span>
+            </div>
+            <Slider
+              value={[params.xenoAvailabilityRate]}
+              onValueChange={(value) => updateParam('xenoAvailabilityRate', value[0])}
+              max={1000}
+              min={100}
+              step={50}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground">
+              Total xeno kidneys available per year
+            </p>
+          </div>
+
+          {/* High CPRA Definition */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">High CPRA Definition</Label>
+              <span className="text-sm text-muted-foreground">{params.highCPRAThreshold}%+</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => updateParam('highCPRAThreshold', 85)}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  params.highCPRAThreshold === 85 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                85%+
+              </button>
+              <button
+                onClick={() => updateParam('highCPRAThreshold', 95)}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  params.highCPRAThreshold === 95 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                95%+
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              CPRA threshold for xeno kidney eligibility
+            </p>
+          </div>
+
           {/* Xeno Acceptance Rate */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
