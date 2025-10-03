@@ -31,8 +31,16 @@ interface PopulationState {
 const getBaselineParams = (highCPRAThreshold: number) => {
   // Adjust population based on CPRA threshold
   // Higher threshold means fewer high-CPRA patients
-  const highCPRAMultiplier = highCPRAThreshold === 95 ? 0.6 : 1.0; // ~40% fewer patients at 95% vs 85%
-  const lowCPRAMultiplier = highCPRAThreshold === 95 ? 1.4 : 1.0; // More patients in low CPRA group at 95%
+  let highCPRAMultiplier = 1.0;
+  let lowCPRAMultiplier = 1.0;
+  
+  if (highCPRAThreshold === 95) {
+    highCPRAMultiplier = 0.6; // ~40% fewer patients at 95% vs 85%
+    lowCPRAMultiplier = 1.4; // More patients in low CPRA group at 95%
+  } else if (highCPRAThreshold === 99) {
+    highCPRAMultiplier = 0.3; // ~70% fewer patients at 99% vs 85% (very rare)
+    lowCPRAMultiplier = 1.7; // Much more patients in low CPRA group at 99%
+  }
   
   return {
     initialLowCPRA: Math.round(4000 * lowCPRAMultiplier),

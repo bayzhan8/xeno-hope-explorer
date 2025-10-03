@@ -93,6 +93,16 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
               >
                 95%+
               </button>
+              <button
+                onClick={() => updateParam('highCPRAThreshold', 99)}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  params.highCPRAThreshold === 99 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                99%+
+              </button>
             </div>
             <p className="text-xs text-muted-foreground">
               CPRA threshold for xeno kidney eligibility
