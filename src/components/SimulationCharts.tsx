@@ -15,9 +15,10 @@ interface SimulationData {
 
 interface SimulationChartsProps {
   data: SimulationData;
+  highCPRAThreshold: number;
 }
 
-const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
+const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThreshold }) => {
   const COLORS = {
     primary: 'hsl(var(--chart-primary))',
     secondary: 'hsl(var(--chart-secondary))',
@@ -99,7 +100,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 dataKey="lowCPRA" 
                 stroke={COLORS.secondary} 
                 strokeWidth={2}
-                name="Low CPRA (0-85%)"
+                name={`Low CPRA (0-${highCPRAThreshold}%)`}
                 dot={{ fill: COLORS.secondary, strokeWidth: 2, r: 3 }}
               />
               <Line 
@@ -107,7 +108,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 dataKey="highCPRA" 
                 stroke={COLORS.tertiary} 
                 strokeWidth={2}
-                name="High CPRA (85-100%)"
+                name={`High CPRA (${highCPRAThreshold}-100%)`}
                 dot={{ fill: COLORS.tertiary, strokeWidth: 2, r: 3 }}
               />
             </LineChart>
@@ -324,7 +325,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
       {/* High CPRA Penetration */}
       <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
         <CardHeader className="border-b border-medical-border bg-medical-surface">
-          <CardTitle className="text-lg font-semibold text-primary">High CPRA Transplant Penetration</CardTitle>
+          <CardTitle className="text-lg font-semibold text-primary">{`High CPRA (${highCPRAThreshold}%+) Transplant Penetration`}</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={250}>
@@ -341,7 +342,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 tick={{ fontSize: 12 }}
                 domain={[0, 1]}
                 tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
-                label={{ value: 'Penetration Rate (%)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                label={{ value: 'High CPRA Treated (%)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <Tooltip content={<PercentageTooltip />} />
               <Legend 
@@ -352,7 +353,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data }) => {
                 dataKey="proportion" 
                 stroke={COLORS.quaternary} 
                 strokeWidth={3}
-                name="High CPRA Transplant Rate"
+                name={`High CPRA (${highCPRAThreshold}%+) Transplant Rate`}
                 dot={{ fill: COLORS.quaternary, strokeWidth: 2, r: 4 }}
               />
             </LineChart>

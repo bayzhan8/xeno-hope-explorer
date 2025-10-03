@@ -4,6 +4,7 @@ import { Activity, Beaker } from 'lucide-react';
 import SimulationControls from '@/components/SimulationControls';
 import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
+import MarkovChainVisualization from '@/components/MarkovChainVisualization';
 import { SimulationEngine } from '@/utils/simulationEngine';
 
 interface SimulationParams {
@@ -49,7 +50,7 @@ const Index = () => {
               <div>
                 <h1 className="text-2xl font-bold text-primary">NYU Xeno Kidney Impact Simulator</h1>
                 <p className="text-sm text-muted-foreground">
-                  Exploring xenotransplantation outcomes for high-CPRA patients
+                  Exploring xenotransplantation outcomes for high-CPRA ({params.highCPRAThreshold}%+) patients
                 </p>
               </div>
             </div>
@@ -99,7 +100,20 @@ const Index = () => {
                   Live visualization of waitlist trends, transplant volumes, and mortality impacts
                 </p>
               </div>
-              <SimulationCharts data={simulationResults.data} />
+              <SimulationCharts data={simulationResults.data} highCPRAThreshold={params.highCPRAThreshold} />
+            </div>
+
+            {/* Markov Chain Visualization */}
+            <div>
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold text-primary mb-2">
+                  Model Structure
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Patient states and transition pathways in the xenotransplantation model
+                </p>
+              </div>
+              <MarkovChainVisualization highCPRAThreshold={params.highCPRAThreshold} />
             </div>
 
             {/* Model Assumptions */}
@@ -113,8 +127,8 @@ const Index = () => {
                     <h4 className="font-medium text-foreground mb-2">Population Parameters</h4>
                     <ul className="space-y-1 text-muted-foreground">
                       <li>• Initial Low CPRA waitlist: 5,000 patients</li>
-                      <li>• Initial High CPRA waitlist: 1,500 patients</li>
-                      <li>• Annual arrivals: 1,200 low, 400 high CPRA</li>
+                      <li>• Initial High CPRA ({params.highCPRAThreshold}%+) waitlist: 1,500 patients</li>
+                      <li>• Annual arrivals: 1,200 low CPRA, 400 high CPRA ({params.highCPRAThreshold}%+)</li>
                       <li>• Baseline waitlist mortality: 8%/year</li>
                     </ul>
                   </div>
@@ -122,7 +136,7 @@ const Index = () => {
                     <h4 className="font-medium text-foreground mb-2">Transplant Parameters</h4>
                     <ul className="space-y-1 text-muted-foreground">
                       <li>• Human transplant rate: 30%/year (low CPRA)</li>
-                      <li>• Human transplant rate: 9%/year (high CPRA)</li>
+                      <li>• Human transplant rate: 9%/year (high CPRA {params.highCPRAThreshold}%+)</li>
                       <li>• Xeno kidneys available: 200/year</li>
                       <li>• Human graft failure: 5%/year</li>
                     </ul>
