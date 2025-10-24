@@ -13,7 +13,7 @@ interface SimulationParams {
   postTransplantDeathRate: number;
   relistingRate: number;
   simulationHorizon: number;
-  xenoAvailabilityRate: number;
+  xeno_proportion: number;
   highCPRAThreshold: number;
 }
 
@@ -24,7 +24,7 @@ const Index = () => {
     postTransplantDeathRate: 0.05,
     relistingRate: 0.15,
     simulationHorizon: 5,
-    xenoAvailabilityRate: 400,
+    xeno_proportion: 1,
     highCPRAThreshold: 85,
   });
 
@@ -137,7 +137,7 @@ const Index = () => {
                     <ul className="space-y-1 text-muted-foreground">
                       <li>• Human transplant rate: 30%/year (low CPRA)</li>
                       <li>• Human transplant rate: 9%/year (high CPRA {params.highCPRAThreshold}%+)</li>
-                      <li>• Xeno kidneys available: 200/year</li>
+                      <li>• Xeno kidneys available: {Math.round(400 * params.xeno_proportion)}/year ({params.xeno_proportion}x baseline)</li>
                       <li>• Human graft failure: 5%/year</li>
                     </ul>
                   </div>

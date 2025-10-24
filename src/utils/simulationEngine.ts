@@ -7,7 +7,7 @@ interface SimulationParams {
   postTransplantDeathRate: number;
   relistingRate: number;
   simulationHorizon: number;
-  xenoAvailabilityRate: number;
+  xeno_proportion: number;
   highCPRAThreshold: number;
 }
 
@@ -60,11 +60,21 @@ export class SimulationEngine {
   private params: SimulationParams;
   private timeSteps: number;
   private baselineParams: ReturnType<typeof getBaselineParams>;
+  private xenoAvailabilityRate: number;
+  
+  // Fixed xeno parameters - ignore user input for these
+  private readonly fixedXenoAcceptanceRate = 0.6;
+  private readonly fixedXenoGraftFailureRate = 0.12;
+  private readonly fixedPostTransplantDeathRate = 0.0001128364690248253;
+  private readonly fixedRelistingRate = 0.00015338345481403357;
 
   constructor(params: SimulationParams) {
     this.params = params;
     this.timeSteps = params.simulationHorizon * 4; // Quarterly time steps
     this.baselineParams = getBaselineParams(params.highCPRAThreshold);
+    // Convert xeno_proportion to actual availability rate
+    // Assuming baseline of 400 kidneys per year, proportion scales this
+    this.xenoAvailabilityRate = 400 * params.xeno_proportion;
   }
 
   runSimulation() {
@@ -147,7 +157,7 @@ export class SimulationEngine {
       // Waiting time calculation
       const totalWaitlist = (xenoResults.states[xenoIndex]?.lowCPRAWaitlist || 0) + (xenoResults.states[xenoIndex]?.highCPRAWaitlist || 0);
       const totalArrivals = this.baselineParams.arrivalRateLow + this.baselineParams.arrivalRateHigh;
-      const totalTransplantRate = this.baselineParams.humanTransplantRate + (this.params.xenoAvailabilityRate / 1000); // Convert to rate
+      const totalTransplantRate = this.baselineParams.humanTransplantRate + (this.xenoAvailabilityRate / 1000); // Convert to rate
       const avgWaitingTime = totalWaitlist > 0 ? totalWaitlist / (totalArrivals * totalTransplantRate) : 0;
 
       results.waitingTimeData.push({
@@ -277,9 +287,9 @@ export class SimulationEngine {
       newState.highCPRAWaitlist += this.baselineParams.arrivalRateHigh * dt;
 
       // Xeno transplants (only for high-CPRA) - Use dynamic availability
-      const xenoOffered = this.params.xenoAvailabilityRate * dt;
+      const xenoOffered = this.xenoAvailabilityRate * dt;
       const xenoAccepted = Math.min(
-        xenoOffered * this.params.xenoAcceptanceRate,
+        xenoOffered * this.fixedXenoAcceptanceRate,
         newState.highCPRAWaitlist
       );
 
@@ -315,9 +325,9 @@ export class SimulationEngine {
       newState.waitlistDeaths += lowDeaths + highDeaths;
 
       // Xeno graft outcomes - Enhanced parameter sensitivity
-      const xenoGraftFailures = newState.xenoTransplanted * this.params.xenoGraftFailureRate * dt;
-      const xenoPostTransplantDeaths = newState.xenoTransplanted * this.params.postTransplantDeathRate * dt;
-      const xenoRelistings = xenoGraftFailures * this.params.relistingRate;
+      const xenoGraftFailures = newState.xenoTransplanted * this.fixedXenoGraftFailureRate * dt;
+      const xenoPostTransplantDeaths = newState.xenoTransplanted * this.fixedPostTransplantDeathRate * dt;
+      const xenoRelistings = xenoGraftFailures * this.fixedRelistingRate;
 
       newState.xenoTransplanted -= xenoGraftFailures + xenoPostTransplantDeaths;
       newState.highCPRAWaitlist += xenoRelistings;
@@ -361,7 +371,7 @@ export class SimulationEngine {
       totalTransplants: finalTransplants.human + finalTransplants.xeno,
       xenoTransplants: finalTransplants.xeno,
       penetrationRate: finalPenetration.proportion,
-      relistingImpact: finalTransplants.xeno * this.params.relistingRate * this.params.xenoGraftFailureRate, // More accurate impact calculation
+      relistingImpact: finalTransplants.xeno * this.fixedRelistingRate * this.fixedXenoGraftFailureRate, // More accurate impact calculation
     };
   }
 }

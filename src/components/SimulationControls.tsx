@@ -12,7 +12,7 @@ interface SimulationParams {
   postTransplantDeathRate: number;
   relistingRate: number;
   simulationHorizon: number;
-  xenoAvailabilityRate: number;
+  xeno_proportion: number;
   highCPRAThreshold: number;
 }
 
@@ -47,22 +47,32 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
-          {/* Number of Xeno Kidneys */}
+          {/* Xeno Proportion */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Number of Xeno Kidneys (Annual)</Label>
-              <span className="text-sm text-muted-foreground">{Math.round(params.xenoAvailabilityRate)}</span>
+              <Label className="text-sm font-medium">Xeno Proportion</Label>
+              <span className="text-sm text-muted-foreground">{params.xeno_proportion}x</span>
             </div>
             <Slider
-              value={[params.xenoAvailabilityRate]}
-              onValueChange={(value) => updateParam('xenoAvailabilityRate', value[0])}
-              max={1000}
-              min={100}
-              step={50}
+              value={[params.xeno_proportion]}
+              onValueChange={(value) => updateParam('xeno_proportion', value[0])}
+              max={2}
+              min={0}
+              step={0.1}
               className="w-full"
             />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>0x</span>
+              <span>0.1x</span>
+              <span>0.2x</span>
+              <span>0.5x</span>
+              <span>0.7x</span>
+              <span>1x</span>
+              <span>1.5x</span>
+              <span>2x</span>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Total xeno kidneys available per year
+              Scaling factor for xeno kidney availability (baseline: 400/year)
             </p>
           </div>
 
