@@ -11,7 +11,6 @@ interface SimulationParams {
   xenoAcceptanceRate: number;
   xenoGraftFailureRate: number;
   postTransplantDeathRate: number;
-  relistingRate: number;
   simulationHorizon: number;
   xeno_proportion: number;
   highCPRAThreshold: number;
@@ -19,11 +18,10 @@ interface SimulationParams {
 
 const Index = () => {
   const [params, setParams] = useState<SimulationParams>({
-    xenoAcceptanceRate: 0.6,
-    xenoGraftFailureRate: 0.12,
-    postTransplantDeathRate: 0.05,
-    relistingRate: 0.15,
-    simulationHorizon: 5,
+    xenoAcceptanceRate: 1,
+    xenoGraftFailureRate: 1,
+    postTransplantDeathRate: 1,
+    simulationHorizon: 10,
     xeno_proportion: 1,
     highCPRAThreshold: 85,
   });

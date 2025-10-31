@@ -10,7 +10,6 @@ interface SimulationParams {
   xenoAcceptanceRate: number;
   xenoGraftFailureRate: number;
   postTransplantDeathRate: number;
-  relistingRate: number;
   simulationHorizon: number;
   xeno_proportion: number;
   highCPRAThreshold: number;
@@ -24,6 +23,13 @@ interface SimulationControlsProps {
 const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParamsChange }) => {
   const updateParam = (key: keyof SimulationParams, value: number) => {
     onParamsChange({ ...params, [key]: value });
+  };
+
+  const snapTo = (value: number, allowedValues: number[]) => {
+    return allowedValues.reduce(
+      (prev, curr) => (Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev),
+      allowedValues[0]
+    );
   };
 
   const toggleHorizon = () => {
@@ -47,34 +53,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
-          {/* Xeno Proportion */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Xeno Proportion</Label>
-              <span className="text-sm text-muted-foreground">{params.xeno_proportion}x</span>
-            </div>
-            <Slider
-              value={[params.xeno_proportion]}
-              onValueChange={(value) => updateParam('xeno_proportion', value[0])}
-              max={2}
-              min={0}
-              step={0.1}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>0x</span>
-              <span>0.1x</span>
-              <span>0.2x</span>
-              <span>0.5x</span>
-              <span>0.7x</span>
-              <span>1x</span>
-              <span>1.5x</span>
-              <span>2x</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Scaling factor for xeno kidney availability (baseline: 400/year)
-            </p>
-          </div>
+
 
           {/* High CPRA Definition */}
           <div className="space-y-3">
@@ -119,79 +98,105 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </p>
           </div>
 
-          {/* Xeno Acceptance Rate */}
+
+
+          {/* Xeno Proportion */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Xeno Acceptance Rate</Label>
-              <span className="text-sm text-muted-foreground">{(params.xenoAcceptanceRate * 100).toFixed(0)}%</span>
+              <Label className="text-sm font-medium">Xeno Proportion</Label>
+              <span className="text-sm text-muted-foreground">{params.xeno_proportion}x</span>
             </div>
             <Slider
-              value={[params.xenoAcceptanceRate]}
-              onValueChange={(value) => updateParam('xenoAcceptanceRate', value[0])}
-              max={1}
+              value={[params.xeno_proportion]}
+              onValueChange={(value) => updateParam('xeno_proportion', snapTo(value[0], [0, 0.5, 1, 1.5, 2]))}
+              max={2}
               min={0}
-              step={0.05}
+              step={0.5}
               className="w-full"
             />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>0x</span>
+              <span>0.5x</span>
+              <span>1x</span>
+              <span>1.5x</span>
+              <span>2x</span>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Fraction of offered xeno kidneys accepted by high-CPRA candidates
+              Scaling factor for xeno kidney availability (baseline: 400/year)
             </p>
           </div>
 
-          {/* Xeno Graft Failure Rate */}
+          
+          
+
+          {/* Xeno Graft Failure Rate (Relisting) */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Xeno Graft Failure Rate</Label>
-              <span className="text-sm text-muted-foreground">{(params.xenoGraftFailureRate * 100).toFixed(1)}%/year</span>
+              <Label className="text-sm font-medium">Xeno Graft Failure Rate (Relisting)</Label>
+              <span className="text-sm text-muted-foreground">{params.xenoGraftFailureRate.toFixed(2)}x</span>
             </div>
             <Slider
               value={[params.xenoGraftFailureRate]}
-              onValueChange={(value) => updateParam('xenoGraftFailureRate', value[0])}
-              max={0.5}
-              min={0.02}
-              step={0.01}
+              onValueChange={(value) => updateParam('xenoGraftFailureRate', snapTo(value[0], [0, 0.5, 1, 1.5, 2]))}
+              max={2}
+              min={0}
+              step={0.5}
               className="w-full"
             />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>0x</span>
+              <span>0.5x</span>
+              <span>1x</span>
+              <span>1.5x</span>
+              <span>2x</span>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Annual hazard of xeno graft loss
+              Discrete multiplier for xeno graft failure (for UI only)
             </p>
           </div>
 
-          {/* Post-Transplant Death Rate */}
+          {/* Xeno Post-Transplant Death Rate */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Post-Transplant Death Rate</Label>
-              <span className="text-sm text-muted-foreground">{(params.postTransplantDeathRate * 100).toFixed(1)}%/year</span>
+              <Label className="text-sm font-medium">Xeno Post-Transplant Death Rate</Label>
+              <span className="text-sm text-muted-foreground">{params.postTransplantDeathRate.toFixed(2)}x</span>
             </div>
             <Slider
               value={[params.postTransplantDeathRate]}
-              onValueChange={(value) => updateParam('postTransplantDeathRate', value[0])}
-              max={0.2}
-              min={0.01}
-              step={0.005}
+              onValueChange={(value) => updateParam('postTransplantDeathRate', snapTo(value[0], [0, 0.5, 1, 1.5, 2]))}
+              max={2}
+              min={0}
+              step={0.5}
               className="w-full"
             />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>0x</span>
+              <span>0.5x</span>
+              <span>1x</span>
+              <span>1.5x</span>
+              <span>2x</span>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Annual hazard of death with functioning xeno graft
+              Discrete multiplier for xeno post-transplant death (for UI only)
             </p>
           </div>
 
-          {/* Relisting Rate */}
-          <div className="space-y-3">
+          {/* Xeno Acceptance Rate (Locked) */}
+          <div className="space-y-3 opacity-60">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Relisting Rate</Label>
-              <span className="text-sm text-muted-foreground">{(params.relistingRate * 100).toFixed(1)}%/year</span>
+              <Label className="text-sm font-medium">Xeno Acceptance Rate</Label>
+              <span className="text-sm text-muted-foreground">100%</span>
             </div>
             <Slider
-              value={[params.relistingRate]}
-              onValueChange={(value) => updateParam('relistingRate', value[0])}
-              max={0.3}
-              min={0.05}
-              step={0.005}
+              value={[100]}
+              max={100}
+              min={0}
+              step={20}
               className="w-full"
+              disabled
             />
             <p className="text-xs text-muted-foreground">
-              Annual hazard of returning to waitlist after xeno graft failure
+              Not available yet. Will be configurable in a future update.
             </p>
           </div>
 

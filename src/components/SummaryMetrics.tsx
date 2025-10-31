@@ -8,7 +8,6 @@ interface MetricSummary {
   totalTransplants: number;
   xenoTransplants: number;
   penetrationRate: number;
-  relistingImpact: number;
 }
 
 interface SummaryMetricsProps {
@@ -71,14 +70,6 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
       trend: getTrendIcon(metrics.penetrationRate),
       subtitle: 'High-CPRA treated',
       color: 'text-chart-tertiary'
-    },
-    {
-      title: 'Relisting Impact',
-      value: formatNumber(Math.abs(metrics.relistingImpact)),
-      icon: <Users className="w-5 h-5 text-warning" />,
-      trend: getTrendIcon(-metrics.relistingImpact),
-      subtitle: 'Return to waitlist',
-      color: 'text-warning'
     }
   ];
 

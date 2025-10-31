@@ -5,7 +5,6 @@ interface SimulationParams {
   xenoAcceptanceRate: number;
   xenoGraftFailureRate: number;
   postTransplantDeathRate: number;
-  relistingRate: number;
   simulationHorizon: number;
   xeno_proportion: number;
   highCPRAThreshold: number;
@@ -21,7 +20,6 @@ interface PopulationState {
   postTransplantDeaths: number;
   xenoPostTransplantDeaths: number;
   humanPostTransplantDeaths: number;
-  relistings: number;
   totalWaitingTime: number;
   xenoGraftFailures: number;
   humanGraftFailures: number;
@@ -62,11 +60,12 @@ export class SimulationEngine {
   private baselineParams: ReturnType<typeof getBaselineParams>;
   private xenoAvailabilityRate: number;
   
-  // Fixed xeno parameters - ignore user input for these
+  // Xeno parameters
+  // Acceptance remains fixed for now (UI locked)
   private readonly fixedXenoAcceptanceRate = 0.6;
-  private readonly fixedXenoGraftFailureRate = 0.12;
-  private readonly fixedPostTransplantDeathRate = 0.0001128364690248253;
-  private readonly fixedRelistingRate = 0.00015338345481403357;
+  // Baseline hazards (per year); UI sliders provide multipliers (e.g., 0, 0.5, 1, 1.5, 2)
+  private readonly baselineXenoGraftFailureRate = 0.00015338345481403357;
+  private readonly baselinePostTransplantDeathRate = 0.0001128364690248253;
 
   constructor(params: SimulationParams) {
     this.params = params;
@@ -199,7 +198,6 @@ export class SimulationEngine {
       postTransplantDeaths: 0,
       xenoPostTransplantDeaths: 0,
       humanPostTransplantDeaths: 0,
-      relistings: 0,
       totalWaitingTime: 0,
       xenoGraftFailures: 0,
       humanGraftFailures: 0,
@@ -245,7 +243,6 @@ export class SimulationEngine {
       const humanPostTransplantDeaths = (newState.lowCPRATransplanted + newState.highCPRATransplanted) * 
                                   this.baselineParams.humanPostTransplantDeathRate * dt;
 
-      newState.relistings += humanGraftFailures * this.baselineParams.humanRelistingRate;
       newState.postTransplantDeaths += humanPostTransplantDeaths;
       newState.humanPostTransplantDeaths += humanPostTransplantDeaths;
       newState.humanGraftFailures += humanGraftFailures;
@@ -269,7 +266,6 @@ export class SimulationEngine {
       postTransplantDeaths: 0,
       xenoPostTransplantDeaths: 0,
       humanPostTransplantDeaths: 0,
-      relistings: 0,
       totalWaitingTime: 0,
       xenoGraftFailures: 0,
       humanGraftFailures: 0,
@@ -324,17 +320,14 @@ export class SimulationEngine {
       newState.highCPRAWaitlist -= highDeaths;
       newState.waitlistDeaths += lowDeaths + highDeaths;
 
-      // Xeno graft outcomes - Enhanced parameter sensitivity
-      const xenoGraftFailures = newState.xenoTransplanted * this.fixedXenoGraftFailureRate * dt;
-      const xenoPostTransplantDeaths = newState.xenoTransplanted * this.fixedPostTransplantDeathRate * dt;
-      const xenoRelistings = xenoGraftFailures * this.fixedRelistingRate;
+      // Xeno graft outcomes - sliders are multipliers of baseline hazards
+      const xenoGraftFailures = newState.xenoTransplanted * (this.baselineXenoGraftFailureRate * this.params.xenoGraftFailureRate) * dt;
+      const xenoPostTransplantDeaths = newState.xenoTransplanted * (this.baselinePostTransplantDeathRate * this.params.postTransplantDeathRate) * dt;
 
       newState.xenoTransplanted -= xenoGraftFailures + xenoPostTransplantDeaths;
-      newState.highCPRAWaitlist += xenoRelistings;
       newState.postTransplantDeaths += xenoPostTransplantDeaths;
       newState.xenoPostTransplantDeaths += xenoPostTransplantDeaths;
       newState.xenoGraftFailures += xenoGraftFailures;
-      newState.relistings += xenoRelistings;
 
       // Human graft outcomes
       const humanGraftFailures = (newState.lowCPRATransplanted + newState.highCPRATransplanted) * 
@@ -342,7 +335,6 @@ export class SimulationEngine {
       const humanPostTransplantDeaths = (newState.lowCPRATransplanted + newState.highCPRATransplanted) * 
                                        this.baselineParams.humanPostTransplantDeathRate * dt;
 
-      newState.relistings += humanGraftFailures * this.baselineParams.humanRelistingRate;
       newState.postTransplantDeaths += humanPostTransplantDeaths;
       newState.humanPostTransplantDeaths += humanPostTransplantDeaths;
       newState.humanGraftFailures += humanGraftFailures;
@@ -371,7 +363,6 @@ export class SimulationEngine {
       totalTransplants: finalTransplants.human + finalTransplants.xeno,
       xenoTransplants: finalTransplants.xeno,
       penetrationRate: finalPenetration.proportion,
-      relistingImpact: finalTransplants.xeno * this.fixedRelistingRate * this.fixedXenoGraftFailureRate, // More accurate impact calculation
     };
   }
 }
