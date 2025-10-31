@@ -17,9 +17,13 @@ interface PopulationState {
   highCPRATransplanted: number;
   xenoTransplanted: number;
   waitlistDeaths: number;
+  lowWaitlistDeaths: number;
+  highWaitlistDeaths: number;
   postTransplantDeaths: number;
   xenoPostTransplantDeaths: number;
   humanPostTransplantDeaths: number;
+  humanPostTransplantDeathsLow: number;
+  humanPostTransplantDeathsHigh: number;
   totalWaitingTime: number;
   xenoGraftFailures: number;
   humanGraftFailures: number;
@@ -86,6 +90,11 @@ export class SimulationEngine {
       transplantsData: [] as Array<{ year: number; human: number; xeno: number }>,
       penetrationData: [] as Array<{ year: number; proportion: number }>,
       waitingTimeData: [] as Array<{ year: number; averageWaitingTime: number }>,
+      recipientsData: [] as Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number }>,
+      cumulativeDeathsData: [] as Array<{ year: number; lowWaitlist: number; highWaitlist: number; lowPostTx: number; highPostTx: number; total: number }>,
+      deathsPerYearData: [] as Array<{ year: number; low: number; high: number; total: number }>,
+      deathsPerDayData: [] as Array<{ year: number; low: number; high: number; total: number }>,
+      netDeathsPreventedPerYearData: [] as Array<{ year: number; low: number; high: number; total: number }>,
     };
 
     // Run baseline simulation (no xeno)
@@ -172,6 +181,65 @@ export class SimulationEngine {
         xeno: xenoResults.states[xenoIndex]?.xenoTransplanted || 0,
       });
 
+      // Recipients over time (stocks)
+      results.recipientsData.push({
+        year,
+        lowHuman: xenoResults.states[xenoIndex]?.lowCPRATransplanted || 0,
+        highHuman: xenoResults.states[xenoIndex]?.highCPRATransplanted || 0,
+        highXeno: xenoResults.states[xenoIndex]?.xenoTransplanted || 0,
+      });
+
+      // Cumulative deaths by group
+      const lowWaitlistCum = xenoResults.states[xenoIndex]?.lowWaitlistDeaths || 0;
+      const highWaitlistCum = xenoResults.states[xenoIndex]?.highWaitlistDeaths || 0;
+      const lowPostTxCum = xenoResults.states[xenoIndex]?.humanPostTransplantDeathsLow || 0;
+      const highPostTxCum = (xenoResults.states[xenoIndex]?.humanPostTransplantDeathsHigh || 0) + (xenoResults.states[xenoIndex]?.xenoPostTransplantDeaths || 0);
+      const totalCumDeaths = lowWaitlistCum + highWaitlistCum + lowPostTxCum + highPostTxCum;
+      results.cumulativeDeathsData.push({
+        year,
+        lowWaitlist: lowWaitlistCum,
+        highWaitlist: highWaitlistCum,
+        lowPostTx: lowPostTxCum,
+        highPostTx: highPostTxCum,
+        total: totalCumDeaths,
+      });
+
+      // Deaths per year and per day
+      if (i > 0) {
+        const prevIndex = (i - 1) * 4;
+        const lowYear = (xenoResults.states[xenoIndex]?.lowWaitlistDeaths || 0) - (xenoResults.states[prevIndex]?.lowWaitlistDeaths || 0)
+                      + (xenoResults.states[xenoIndex]?.humanPostTransplantDeathsLow || 0) - (xenoResults.states[prevIndex]?.humanPostTransplantDeathsLow || 0);
+        const highYear = (xenoResults.states[xenoIndex]?.highWaitlistDeaths || 0) - (xenoResults.states[prevIndex]?.highWaitlistDeaths || 0)
+                       + ((xenoResults.states[xenoIndex]?.humanPostTransplantDeathsHigh || 0) - (xenoResults.states[prevIndex]?.humanPostTransplantDeathsHigh || 0))
+                       + ((xenoResults.states[xenoIndex]?.xenoPostTransplantDeaths || 0) - (xenoResults.states[prevIndex]?.xenoPostTransplantDeaths || 0));
+        const totalYear = lowYear + highYear;
+        results.deathsPerYearData.push({ year, low: lowYear, high: highYear, total: totalYear });
+        results.deathsPerDayData.push({ year, low: lowYear / 365, high: highYear / 365, total: totalYear / 365 });
+      } else {
+        results.deathsPerYearData.push({ year, low: 0, high: 0, total: 0 });
+        results.deathsPerDayData.push({ year, low: 0, high: 0, total: 0 });
+      }
+
+      // Net deaths prevented per year (vs baseline), by group
+      if (i > 0) {
+        const prevIndex = (i - 1) * 4;
+        const baseLowYear = (baselineResults.states[xenoIndex]?.lowWaitlistDeaths || 0) - (baselineResults.states[prevIndex]?.lowWaitlistDeaths || 0)
+                          + (baselineResults.states[xenoIndex]?.humanPostTransplantDeathsLow || 0) - (baselineResults.states[prevIndex]?.humanPostTransplantDeathsLow || 0);
+        const baseHighYear = (baselineResults.states[xenoIndex]?.highWaitlistDeaths || 0) - (baselineResults.states[prevIndex]?.highWaitlistDeaths || 0)
+                           + (baselineResults.states[xenoIndex]?.humanPostTransplantDeathsHigh || 0) - (baselineResults.states[prevIndex]?.humanPostTransplantDeathsHigh || 0);
+        const xenoLowYear = (xenoResults.states[xenoIndex]?.lowWaitlistDeaths || 0) - (xenoResults.states[prevIndex]?.lowWaitlistDeaths || 0)
+                          + (xenoResults.states[xenoIndex]?.humanPostTransplantDeathsLow || 0) - (xenoResults.states[prevIndex]?.humanPostTransplantDeathsLow || 0);
+        const xenoHighYear = (xenoResults.states[xenoIndex]?.highWaitlistDeaths || 0) - (xenoResults.states[prevIndex]?.highWaitlistDeaths || 0)
+                           + (xenoResults.states[xenoIndex]?.humanPostTransplantDeathsHigh || 0) - (xenoResults.states[prevIndex]?.humanPostTransplantDeathsHigh || 0)
+                           + ((xenoResults.states[xenoIndex]?.xenoPostTransplantDeaths || 0) - (xenoResults.states[prevIndex]?.xenoPostTransplantDeaths || 0));
+        const lowSaved = Math.max(0, baseLowYear - xenoLowYear);
+        const highSaved = Math.max(0, baseHighYear - xenoHighYear);
+        const totalSaved = lowSaved + highSaved;
+        results.netDeathsPreventedPerYearData.push({ year, low: lowSaved, high: highSaved, total: totalSaved });
+      } else {
+        results.netDeathsPreventedPerYearData.push({ year, low: 0, high: 0, total: 0 });
+      }
+
       // Penetration rate
       const totalHighCPRAEligible = this.baselineParams.initialHighCPRA + (this.baselineParams.arrivalRateHigh * year);
       const highCPRATreated = (xenoResults.states[xenoIndex]?.highCPRATransplanted || 0) + 
@@ -195,9 +263,13 @@ export class SimulationEngine {
       highCPRATransplanted: 0,
       xenoTransplanted: 0,
       waitlistDeaths: 0,
+      lowWaitlistDeaths: 0,
+      highWaitlistDeaths: 0,
       postTransplantDeaths: 0,
       xenoPostTransplantDeaths: 0,
       humanPostTransplantDeaths: 0,
+      humanPostTransplantDeathsLow: 0,
+      humanPostTransplantDeathsHigh: 0,
       totalWaitingTime: 0,
       xenoGraftFailures: 0,
       humanGraftFailures: 0,
@@ -236,15 +308,27 @@ export class SimulationEngine {
       newState.lowCPRAWaitlist -= lowDeaths;
       newState.highCPRAWaitlist -= highDeaths;
       newState.waitlistDeaths += lowDeaths + highDeaths;
+      newState.lowWaitlistDeaths += lowDeaths;
+      newState.highWaitlistDeaths += highDeaths;
 
       // Post-transplant outcomes
-      const humanGraftFailures = (newState.lowCPRATransplanted + newState.highCPRATransplanted) * 
-                           this.baselineParams.humanGraftFailureRate * dt;
-      const humanPostTransplantDeaths = (newState.lowCPRATransplanted + newState.highCPRATransplanted) * 
-                                  this.baselineParams.humanPostTransplantDeathRate * dt;
+      const totalHumanRecipients = Math.max(1e-9, newState.lowCPRATransplanted + newState.highCPRATransplanted);
+      const humanGraftFailures = totalHumanRecipients * this.baselineParams.humanGraftFailureRate * dt;
+      const humanPostTransplantDeaths = totalHumanRecipients * this.baselineParams.humanPostTransplantDeathRate * dt;
+      const shareLow = newState.lowCPRATransplanted / totalHumanRecipients;
+      const shareHigh = newState.highCPRATransplanted / totalHumanRecipients;
+      const humanFailuresLow = humanGraftFailures * shareLow;
+      const humanFailuresHigh = humanGraftFailures * shareHigh;
+      const humanDeathsLow = humanPostTransplantDeaths * shareLow;
+      const humanDeathsHigh = humanPostTransplantDeaths * shareHigh;
+
+      newState.lowCPRATransplanted = Math.max(0, newState.lowCPRATransplanted - humanFailuresLow - humanDeathsLow);
+      newState.highCPRATransplanted = Math.max(0, newState.highCPRATransplanted - humanFailuresHigh - humanDeathsHigh);
 
       newState.postTransplantDeaths += humanPostTransplantDeaths;
       newState.humanPostTransplantDeaths += humanPostTransplantDeaths;
+      newState.humanPostTransplantDeathsLow += humanDeathsLow;
+      newState.humanPostTransplantDeathsHigh += humanDeathsHigh;
       newState.humanGraftFailures += humanGraftFailures;
 
       currentState = newState;
@@ -263,9 +347,13 @@ export class SimulationEngine {
       highCPRATransplanted: 0,
       xenoTransplanted: 0,
       waitlistDeaths: 0,
+      lowWaitlistDeaths: 0,
+      highWaitlistDeaths: 0,
       postTransplantDeaths: 0,
       xenoPostTransplantDeaths: 0,
       humanPostTransplantDeaths: 0,
+      humanPostTransplantDeathsLow: 0,
+      humanPostTransplantDeathsHigh: 0,
       totalWaitingTime: 0,
       xenoGraftFailures: 0,
       humanGraftFailures: 0,
@@ -319,24 +407,36 @@ export class SimulationEngine {
       newState.lowCPRAWaitlist -= lowDeaths;
       newState.highCPRAWaitlist -= highDeaths;
       newState.waitlistDeaths += lowDeaths + highDeaths;
+      newState.lowWaitlistDeaths += lowDeaths;
+      newState.highWaitlistDeaths += highDeaths;
 
       // Xeno graft outcomes - sliders are multipliers of baseline hazards
       const xenoGraftFailures = newState.xenoTransplanted * (this.baselineXenoGraftFailureRate * this.params.xenoGraftFailureRate) * dt;
       const xenoPostTransplantDeaths = newState.xenoTransplanted * (this.baselinePostTransplantDeathRate * this.params.postTransplantDeathRate) * dt;
 
-      newState.xenoTransplanted -= xenoGraftFailures + xenoPostTransplantDeaths;
+      newState.xenoTransplanted = Math.max(0, newState.xenoTransplanted - xenoGraftFailures + 0 - xenoPostTransplantDeaths);
       newState.postTransplantDeaths += xenoPostTransplantDeaths;
       newState.xenoPostTransplantDeaths += xenoPostTransplantDeaths;
       newState.xenoGraftFailures += xenoGraftFailures;
 
       // Human graft outcomes
-      const humanGraftFailures = (newState.lowCPRATransplanted + newState.highCPRATransplanted) * 
-                                this.baselineParams.humanGraftFailureRate * dt;
-      const humanPostTransplantDeaths = (newState.lowCPRATransplanted + newState.highCPRATransplanted) * 
-                                       this.baselineParams.humanPostTransplantDeathRate * dt;
+      const totalHumanRecipientsX = Math.max(1e-9, newState.lowCPRATransplanted + newState.highCPRATransplanted);
+      const humanGraftFailures = totalHumanRecipientsX * this.baselineParams.humanGraftFailureRate * dt;
+      const humanPostTransplantDeaths = totalHumanRecipientsX * this.baselineParams.humanPostTransplantDeathRate * dt;
+      const shareLowX = newState.lowCPRATransplanted / totalHumanRecipientsX;
+      const shareHighX = newState.highCPRATransplanted / totalHumanRecipientsX;
+      const humanFailuresLowX = humanGraftFailures * shareLowX;
+      const humanFailuresHighX = humanGraftFailures * shareHighX;
+      const humanDeathsLowX = humanPostTransplantDeaths * shareLowX;
+      const humanDeathsHighX = humanPostTransplantDeaths * shareHighX;
+
+      newState.lowCPRATransplanted = Math.max(0, newState.lowCPRATransplanted - humanFailuresLowX - humanDeathsLowX);
+      newState.highCPRATransplanted = Math.max(0, newState.highCPRATransplanted - humanFailuresHighX - humanDeathsHighX);
 
       newState.postTransplantDeaths += humanPostTransplantDeaths;
       newState.humanPostTransplantDeaths += humanPostTransplantDeaths;
+      newState.humanPostTransplantDeathsLow += humanDeathsLowX;
+      newState.humanPostTransplantDeathsHigh += humanDeathsHighX;
       newState.humanGraftFailures += humanGraftFailures;
 
       currentState = newState;
