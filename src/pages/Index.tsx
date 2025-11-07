@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Activity, Beaker } from 'lucide-react';
+import { Activity, Beaker, Loader2 } from 'lucide-react';
 import SimulationControls from '@/components/SimulationControls';
 import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
 import MarkovChainVisualization from '@/components/MarkovChainVisualization';
-import { SimulationEngine } from '@/utils/simulationEngine';
+import { findConfigName, loadVisualizationData } from '@/utils/configFinder';
+import { transformVizDataToSimulationData, calculateSummaryMetrics } from '@/utils/dataTransformer';
 
 interface SimulationParams {
-  xenoAcceptanceRate: number;
   xenoGraftFailureRate: number;
   postTransplantDeathRate: number;
   simulationHorizon: number;
@@ -16,9 +16,24 @@ interface SimulationParams {
   highCPRAThreshold: number;
 }
 
+interface SimulationData {
+  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number }>;
+  waitlistDeathsData: Array<{ year: number; waitlistDeaths: number }>;
+  postTransplantDeathsData: Array<{ year: number; xenoPostTransplantDeaths: number; humanPostTransplantDeaths: number }>;
+  netDeathsPreventedData: Array<{ year: number; netDeathsPrevented: number }>;
+  graftFailuresData: Array<{ year: number; xenoGraftFailures: number; humanGraftFailures: number }>;
+  transplantsData: Array<{ year: number; human: number; xeno: number }>;
+  penetrationData: Array<{ year: number; proportion: number }>;
+  waitingTimeData: Array<{ year: number; averageWaitingTime: number }>;
+  recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number }>;
+  cumulativeDeathsData: Array<{ year: number; lowWaitlist: number; highWaitlist: number; lowPostTx: number; highPostTx: number; total: number }>;
+  deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
+  deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
+  netDeathsPreventedPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
+}
+
 const Index = () => {
   const [params, setParams] = useState<SimulationParams>({
-    xenoAcceptanceRate: 1,
     xenoGraftFailureRate: 1,
     postTransplantDeathRate: 1,
     simulationHorizon: 10,
@@ -26,14 +41,50 @@ const Index = () => {
     highCPRAThreshold: 85,
   });
 
-  // Create simulation engine and run simulation whenever parameters change
-  const simulationResults = useMemo(() => {
-    const engine = new SimulationEngine(params);
-    return {
-      data: engine.runSimulation(),
-      metrics: engine.calculateSummaryMetrics(),
-    };
-  }, [params]);
+  const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
+  const [metrics, setMetrics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load visualization data whenever parameters change
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        // Find config name from user inputs
+        const configName = await findConfigName({
+          xeno_proportion: params.xeno_proportion,
+          xenoGraftFailureRate: params.xenoGraftFailureRate,
+          postTransplantDeathRate: params.postTransplantDeathRate,
+        });
+
+        if (!configName) {
+          throw new Error('Configuration not found. This combination of parameters may not exist in the database.');
+        }
+
+        // Load visualization data
+        const vizData = await loadVisualizationData(configName);
+
+        // Transform to simulation data format
+        const transformed = transformVizDataToSimulationData({
+          ...vizData,
+          highCPRAThreshold: params.highCPRAThreshold,
+        });
+
+        setSimulationData(transformed);
+        setMetrics(calculateSummaryMetrics(transformed, params.simulationHorizon));
+      } catch (err) {
+        console.error('Error loading visualization data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load visualization data');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadData();
+  }, [params.xeno_proportion, params.xenoGraftFailureRate, params.postTransplantDeathRate, params.simulationHorizon, params.highCPRAThreshold]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -54,7 +105,7 @@ const Index = () => {
             </div>
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               <Activity className="w-4 h-4" />
-              <span>Real-time simulation</span>
+              <span>Pre-computed simulation data</span>
             </div>
           </div>
         </div>
@@ -72,34 +123,54 @@ const Index = () => {
 
           {/* Charts and Metrics */}
           <div className="xl:col-span-3 space-y-8">
-            {/* Summary Metrics */}
-            <div>
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-primary mb-2">
-                  Key Outcomes Summary
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Impact metrics over {params.simulationHorizon}-year simulation horizon
-                </p>
+            {loading && (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="ml-3 text-muted-foreground">Loading visualization data...</span>
               </div>
-              <SummaryMetrics 
-                metrics={simulationResults.metrics} 
-                horizon={params.simulationHorizon} 
-              />
-            </div>
+            )}
 
-            {/* Charts */}
-            <div>
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-primary mb-2">
-                  Population Dynamics & Outcomes
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Live visualization of waitlist trends, transplant volumes, and mortality impacts
-                </p>
-              </div>
-              <SimulationCharts data={simulationResults.data} highCPRAThreshold={params.highCPRAThreshold} />
-            </div>
+            {error && (
+              <Card className="bg-destructive/10 border-destructive">
+                <CardContent className="p-6">
+                  <p className="text-destructive font-medium">Error loading data</p>
+                  <p className="text-sm text-muted-foreground mt-2">{error}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {!loading && !error && simulationData && metrics && (
+              <>
+                {/* Summary Metrics */}
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold text-primary mb-2">
+                      Key Outcomes Summary
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Impact metrics over {params.simulationHorizon}-year simulation horizon
+                    </p>
+                  </div>
+                  <SummaryMetrics 
+                    metrics={metrics} 
+                    horizon={params.simulationHorizon} 
+                  />
+                </div>
+
+                {/* Charts */}
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold text-primary mb-2">
+                      Population Dynamics & Outcomes
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Visualization of waitlist trends, transplant volumes, and mortality impacts
+                    </p>
+                  </div>
+                  <SimulationCharts data={simulationData} highCPRAThreshold={params.highCPRAThreshold} />
+                </div>
+              </>
+            )}
 
             {/* Markov Chain Visualization */}
             <div>

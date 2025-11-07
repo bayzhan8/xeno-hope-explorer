@@ -1,0 +1,286 @@
+{
+  "name_to_config": {
+    "base_case_85": {
+      "rates_cpra": {
+        "0-85": {
+          "C_start": 77406,
+          "H_start": 229727,
+          "wl_removal": 0.0002721411438431126,
+          "returned after removal": 0,
+          "relisting": 2.1923193403554697e-05,
+          "death with tx": 0.00012645653972841005,
+          "arrival": 88.46301369863014,
+          "transplant": 61.63013698630137,
+          "waitlist death": 0.00013868799389249342
+        },
+        "85-100": {
+          "C_start": 10900,
+          "H_start": 23402,
+          "wl_removal": 0.0002835907220782278,
+          "returned after removal": 0,
+          "relisting": 0.00015338345481403357,
+          "death with tx": 0.0001128364690248253,
+          "arrival": 6.6219178082191785,
+          "transplant": 8.035616438356165,
+          "waitlist death": 0.0001239570098340096
+        }
+      },
+      "xeno_rates_base": {
+        "relisting_xeno": 0,
+        "death with tx_xeno": 0
+      },
+      "xeno_proportion": 0,
+      "low_key": "0-85",
+      "high_key": "85-100",
+      "T": 3650
+    },
+    "xeno_1_85": {
+      "rates_cpra": {
+        "0-85": {
+          "C_start": 77406,
+          "H_start": 229727,
+          "wl_removal": 0.0002721411438431126,
+          "returned after removal": 0,
+          "relisting": 2.1923193403554697e-05,
+          "death with tx": 0.00012645653972841005,
+          "arrival": 88.46301369863014,
+          "transplant": 61.63013698630137,
+          "waitlist death": 0.00013868799389249342
+        },
+        "85-100": {
+          "C_start": 10900,
+          "H_start": 23402,
+          "wl_removal": 0.0002835907220782278,
+          "returned after removal": 0,
+          "relisting": 0.00015338345481403357,
+          "death with tx": 0.0001128364690248253,
+          "arrival": 6.6219178082191785,
+          "transplant": 8.035616438356165,
+          "waitlist death": 0.0001239570098340096
+        }
+      },
+      "xeno_rates_base": {
+        "relisting_xeno": 0.00015338345481403357,
+        "death with tx_xeno": 0.0001128364690248253
+      },
+      "xeno_proportion": 1,
+      "low_key": "0-85",
+      "high_key": "85-100",
+      "T": 3650
+    },
+    "xeno_2_85": {
+      "rates_cpra": {
+        "0-85": {
+          "C_start": 77406,
+          "H_start": 229727,
+          "wl_removal": 0.0002721411438431126,
+          "returned after removal": 0,
+          "relisting": 2.1923193403554697e-05,
+          "death with tx": 0.00012645653972841005,
+          "arrival": 88.46301369863014,
+          "transplant": 61.63013698630137,
+          "waitlist death": 0.00013868799389249342
+        },
+        "85-100": {
+          "C_start": 10900,
+          "H_start": 23402,
+          "wl_removal": 0.0002835907220782278,
+          "returned after removal": 0,
+          "relisting": 0.00015338345481403357,
+          "death with tx": 0.0001128364690248253,
+          "arrival": 6.6219178082191785,
+          "transplant": 8.035616438356165,
+          "waitlist death": 0.0001239570098340096
+        }
+      },
+      "xeno_rates_base": {
+        "relisting_xeno": 0.00015338345481403357,
+        "death with tx_xeno": 0.0001128364690248253
+      },
+      "xeno_proportion": 2,
+      "low_key": "0-85",
+      "high_key": "85-100",
+      "T": 3650
+    },
+    "xeno_05_85": {
+      "rates_cpra": {
+        "0-85": {
+          "C_start": 77406,
+          "H_start": 229727,
+          "wl_removal": 0.0002721411438431126,
+          "returned after removal": 0,
+          "relisting": 2.1923193403554697e-05,
+          "death with tx": 0.00012645653972841005,
+          "arrival": 88.46301369863014,
+          "transplant": 61.63013698630137,
+          "waitlist death": 0.00013868799389249342
+        },
+        "85-100": {
+          "C_start": 10900,
+          "H_start": 23402,
+          "wl_removal": 0.0002835907220782278,
+          "returned after removal": 0,
+          "relisting": 0.00015338345481403357,
+          "death with tx": 0.0001128364690248253,
+          "arrival": 6.6219178082191785,
+          "transplant": 8.035616438356165,
+          "waitlist death": 0.0001239570098340096
+        }
+      },
+      "xeno_rates_base": {
+        "relisting_xeno": 0.00015338345481403357,
+        "death with tx_xeno": 0.0001128364690248253
+      },
+      "xeno_proportion": 0.5,
+      "low_key": "0-85",
+      "high_key": "85-100",
+      "T": 3650
+    },
+    "xeno_02_85": {
+      "rates_cpra": {
+        "0-85": {
+          "C_start": 77406,
+          "H_start": 229727,
+          "wl_removal": 0.0002721411438431126,
+          "returned after removal": 0,
+          "relisting": 2.1923193403554697e-05,
+          "death with tx": 0.00012645653972841005,
+          "arrival": 88.46301369863014,
+          "transplant": 61.63013698630137,
+          "waitlist death": 0.00013868799389249342
+        },
+        "85-100": {
+          "C_start": 10900,
+          "H_start": 23402,
+          "wl_removal": 0.0002835907220782278,
+          "returned after removal": 0,
+          "relisting": 0.00015338345481403357,
+          "death with tx": 0.0001128364690248253,
+          "arrival": 6.6219178082191785,
+          "transplant": 8.035616438356165,
+          "waitlist death": 0.0001239570098340096
+        }
+      },
+      "xeno_rates_base": {
+        "relisting_xeno": 0.00015338345481403357,
+        "death with tx_xeno": 0.0001128364690248253
+      },
+      "xeno_proportion": 0.2,
+      "low_key": "0-85",
+      "high_key": "85-100",
+      "T": 3650
+    },
+    "xeno_15_85": {
+      "rates_cpra": {
+        "0-85": {
+          "C_start": 77406,
+          "H_start": 229727,
+          "wl_removal": 0.0002721411438431126,
+          "returned after removal": 0,
+          "relisting": 2.1923193403554697e-05,
+          "death with tx": 0.00012645653972841005,
+          "arrival": 88.46301369863014,
+          "transplant": 61.63013698630137,
+          "waitlist death": 0.00013868799389249342
+        },
+        "85-100": {
+          "C_start": 10900,
+          "H_start": 23402,
+          "wl_removal": 0.0002835907220782278,
+          "returned after removal": 0,
+          "relisting": 0.00015338345481403357,
+          "death with tx": 0.0001128364690248253,
+          "arrival": 6.6219178082191785,
+          "transplant": 8.035616438356165,
+          "waitlist death": 0.0001239570098340096
+        }
+      },
+      "xeno_rates_base": {
+        "relisting_xeno": 0.00015338345481403357,
+        "death with tx_xeno": 0.0001128364690248253
+      },
+      "xeno_proportion": 1.5,
+      "low_key": "0-85",
+      "high_key": "85-100",
+      "T": 3650
+    },
+    "xeno_07_85": {
+      "rates_cpra": {
+        "0-85": {
+          "C_start": 77406,
+          "H_start": 229727,
+          "wl_removal": 0.0002721411438431126,
+          "returned after removal": 0,
+          "relisting": 2.1923193403554697e-05,
+          "death with tx": 0.00012645653972841005,
+          "arrival": 88.46301369863014,
+          "transplant": 61.63013698630137,
+          "waitlist death": 0.00013868799389249342
+        },
+        "85-100": {
+          "C_start": 10900,
+          "H_start": 23402,
+          "wl_removal": 0.0002835907220782278,
+          "returned after removal": 0,
+          "relisting": 0.00015338345481403357,
+          "death with tx": 0.0001128364690248253,
+          "arrival": 6.6219178082191785,
+          "transplant": 8.035616438356165,
+          "waitlist death": 0.0001239570098340096
+        }
+      },
+      "xeno_rates_base": {
+        "relisting_xeno": 0.00015338345481403357,
+        "death with tx_xeno": 0.0001128364690248253
+      },
+      "xeno_proportion": 0.7,
+      "low_key": "0-85",
+      "high_key": "85-100",
+      "T": 3650
+    },
+    "unreal": {
+      "rates_cpra": {
+        "0-85": {
+          "C_start": 77406,
+          "H_start": 229727,
+          "wl_removal": 0.0002721411438431126,
+          "returned after removal": 0,
+          "relisting": 2.1923193403554697e-05,
+          "death with tx": 0.00012645653972841005,
+          "arrival": 88.46301369863014,
+          "transplant": 61.63013698630137,
+          "waitlist death": 0.00013868799389249342
+        },
+        "85-100": {
+          "C_start": 10900,
+          "H_start": 23402,
+          "wl_removal": 0.0002835907220782278,
+          "returned after removal": 0,
+          "relisting": 0.00015338345481403357,
+          "death with tx": 0.0001128364690248253,
+          "arrival": 6.6219178082191785,
+          "transplant": 8.035616438356165,
+          "waitlist death": 0.0001239570098340096
+        }
+      },
+      "xeno_rates_base": {
+        "relisting_xeno": 0.0,
+        "death with tx_xeno": 0.0
+      },
+      "xeno_proportion": 2,
+      "low_key": "0-85",
+      "high_key": "85-100",
+      "T": 3650
+    }
+  },
+  "config_to_name": {
+    "8e2feeecd82cb2b90e7e40958316530f": "base_case_85",
+    "266692f03a9170f34691ff6482054b5a": "xeno_1_85",
+    "d1675b673c6caa7bce5c160583da1b4e": "xeno_2_85",
+    "43a09ebf4efdb0bffb013d0940d08d3b": "xeno_05_85",
+    "436f218c970f2fe88e54fceea381fa86": "xeno_02_85",
+    "4fadf9895517ea4f7982f73fb141a34e": "xeno_15_85",
+    "73697165af9393815192a0456e3f8698": "xeno_07_85",
+    "8acf6fb9c76943e7a724fcaa5415a20b": "unreal"
+  }
+}

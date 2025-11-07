@@ -7,7 +7,6 @@ import { Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SimulationParams {
-  xenoAcceptanceRate: number;
   xenoGraftFailureRate: number;
   postTransplantDeathRate: number;
   simulationHorizon: number;
@@ -178,25 +177,6 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
             <p className="text-xs text-muted-foreground">
               Discrete multiplier for xeno post-transplant death (for UI only)
-            </p>
-          </div>
-
-          {/* Xeno Acceptance Rate (Locked) */}
-          <div className="space-y-3 opacity-60">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Xeno Acceptance Rate</Label>
-              <span className="text-sm text-muted-foreground">100%</span>
-            </div>
-            <Slider
-              value={[100]}
-              max={100}
-              min={0}
-              step={20}
-              className="w-full"
-              disabled
-            />
-            <p className="text-xs text-muted-foreground">
-              Not available yet. Will be configurable in a future update.
             </p>
           </div>
 
