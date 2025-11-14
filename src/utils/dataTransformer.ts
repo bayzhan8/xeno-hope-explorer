@@ -2,6 +2,7 @@
 
 interface VizData {
   config_name: string;
+  total_days?: number;
   waitlist_sizes?: {
     x: number[];
     series: Array<{ label: string; y: number[]; color?: string; linestyle?: string }>;
@@ -29,6 +30,7 @@ interface VizData {
     average_net_deaths_prevented?: number;
   };
   has_comparison?: boolean;
+  base_config_name?: string;
   highCPRAThreshold: number;
 }
 
@@ -46,6 +48,7 @@ interface SimulationData {
   deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
   netDeathsPreventedPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
+  waitlistDeathsPerYearData: Array<{ year: number; waitlistDeaths: number; baseWaitlistDeaths?: number }>;
 }
 
 // Convert days to years (assuming 365 days per year)
@@ -103,7 +106,15 @@ function findSeries(series: Array<{ label: string; y: number[] }>, patterns: str
   return null;
 }
 
-export function transformVizDataToSimulationData(vizData: VizData): SimulationData {
+// Find first index in array where predicate returns true
+function findFirstIndex<T>(array: T[], predicate: (item: T) => boolean): number {
+  for (let i = 0; i < array.length; i++) {
+    if (predicate(array[i])) return i;
+  }
+  return array.length;
+}
+
+export function transformVizDataToSimulationData(vizData: VizData, baseVizData: VizData | null = null): SimulationData {
   const result: SimulationData = {
     waitlistData: [],
     waitlistDeathsData: [],
@@ -118,6 +129,7 @@ export function transformVizDataToSimulationData(vizData: VizData): SimulationDa
     deathsPerYearData: [],
     deathsPerDayData: [],
     netDeathsPreventedPerYearData: [],
+    waitlistDeathsPerYearData: [],
   };
 
   // 1. Waitlist sizes
@@ -212,6 +224,135 @@ export function transformVizDataToSimulationData(vizData: VizData): SimulationDa
         total: tot,
       });
     }
+
+    // Calculate waitlist deaths per year (for scatter plot)
+    // Following Python logic: monthly downsampling, then aggregate to yearly periods
+    if (lowWaitlist && highWaitlist && vizData.cumulative_deaths.x.length > 0) {
+      const monthDays = 30;
+      const maxTime = Math.max(...vizData.cumulative_deaths.x);
+      const numMonths = Math.floor(maxTime / monthDays) + 1;
+      
+      // Create monthly time points
+      const monthlyTimes: number[] = [];
+      for (let i = 0; i <= numMonths; i++) {
+        monthlyTimes.push(i * monthDays);
+      }
+      
+      // Interpolate cumulative waitlist deaths to monthly intervals
+      const interpolate = (x: number[], y: number[], xNew: number[]): number[] => {
+        const result: number[] = [];
+        for (const xVal of xNew) {
+          if (xVal <= x[0]) {
+            result.push(y[0]);
+          } else if (xVal >= x[x.length - 1]) {
+            result.push(y[y.length - 1]);
+          } else {
+            // Linear interpolation
+            let idx = 0;
+            while (idx < x.length - 1 && x[idx + 1] < xVal) idx++;
+            const x0 = x[idx];
+            const x1 = x[idx + 1];
+            const y0 = y[idx];
+            const y1 = y[idx + 1];
+            const interpolated = y0 + ((y1 - y0) * (xVal - x0)) / (x1 - x0);
+            result.push(interpolated);
+          }
+        }
+        return result;
+      };
+      
+      const monthlyWaitlistDeathsLow = interpolate(
+        vizData.cumulative_deaths.x,
+        lowWaitlist,
+        monthlyTimes
+      );
+      const monthlyWaitlistDeathsHigh = interpolate(
+        vizData.cumulative_deaths.x,
+        highWaitlist,
+        monthlyTimes
+      );
+      
+      // Calculate monthly waitlist deaths (difference between consecutive months)
+      const monthlyWaitlistDeaths: number[] = [];
+      for (let i = 1; i < monthlyWaitlistDeathsLow.length; i++) {
+        const monthLow = monthlyWaitlistDeathsLow[i] - monthlyWaitlistDeathsLow[i - 1];
+        const monthHigh = monthlyWaitlistDeathsHigh[i] - monthlyWaitlistDeathsHigh[i - 1];
+        monthlyWaitlistDeaths.push(Math.max(0, monthLow + monthHigh));
+      }
+      
+      // Aggregate into yearly periods (12 months per year)
+      const monthsPerYear = 12;
+      const numCompleteYears = Math.floor(monthlyWaitlistDeaths.length / monthsPerYear);
+      
+      // Calculate base case waitlist deaths per year if available
+      let baseYearWaitlistDeaths: number[] = [];
+      let baseNumCompleteYears = 0;
+      
+      if (baseVizData && baseVizData.cumulative_deaths) {
+        const baseLowWaitlist = findSeries(baseVizData.cumulative_deaths.series, ['low cpra waitlist deaths']);
+        const baseHighWaitlist = findSeries(baseVizData.cumulative_deaths.series, ['high cpra waitlist deaths']);
+        
+        if (baseLowWaitlist && baseHighWaitlist && baseVizData.cumulative_deaths.x.length > 0) {
+          const baseMaxTime = Math.max(...baseVizData.cumulative_deaths.x);
+          const baseNumMonths = Math.floor(baseMaxTime / monthDays) + 1;
+          
+          const baseMonthlyTimes: number[] = [];
+          for (let i = 0; i <= baseNumMonths; i++) {
+            baseMonthlyTimes.push(i * monthDays);
+          }
+          
+          const baseMonthlyWaitlistDeathsLow = interpolate(
+            baseVizData.cumulative_deaths.x,
+            baseLowWaitlist,
+            baseMonthlyTimes
+          );
+          const baseMonthlyWaitlistDeathsHigh = interpolate(
+            baseVizData.cumulative_deaths.x,
+            baseHighWaitlist,
+            baseMonthlyTimes
+          );
+          
+          const baseMonthlyWaitlistDeaths: number[] = [];
+          for (let i = 1; i < baseMonthlyWaitlistDeathsLow.length; i++) {
+            const monthLow = baseMonthlyWaitlistDeathsLow[i] - baseMonthlyWaitlistDeathsLow[i - 1];
+            const monthHigh = baseMonthlyWaitlistDeathsHigh[i] - baseMonthlyWaitlistDeathsHigh[i - 1];
+            baseMonthlyWaitlistDeaths.push(Math.max(0, monthLow + monthHigh));
+          }
+          
+          baseNumCompleteYears = Math.floor(baseMonthlyWaitlistDeaths.length / monthsPerYear);
+          
+          for (let year = 0; year < baseNumCompleteYears; year++) {
+            const startMonthIdx = year * monthsPerYear;
+            const endMonthIdx = (year + 1) * monthsPerYear;
+            const yearWaitlistDeaths = baseMonthlyWaitlistDeaths
+              .slice(startMonthIdx, endMonthIdx)
+              .reduce((sum, val) => sum + val, 0);
+            baseYearWaitlistDeaths.push(yearWaitlistDeaths);
+          }
+        }
+      }
+      
+      // Use minimum number of complete years to ensure fair comparison
+      const finalNumCompleteYears = baseVizData && baseYearWaitlistDeaths.length > 0
+        ? Math.min(numCompleteYears, baseNumCompleteYears)
+        : numCompleteYears;
+      
+      for (let year = 0; year < finalNumCompleteYears; year++) {
+        const startMonthIdx = year * monthsPerYear;
+        const endMonthIdx = (year + 1) * monthsPerYear;
+        const yearWaitlistDeaths = monthlyWaitlistDeaths
+          .slice(startMonthIdx, endMonthIdx)
+          .reduce((sum, val) => sum + val, 0);
+        
+        result.waitlistDeathsPerYearData.push({
+          year: year * 1.0,
+          waitlistDeaths: yearWaitlistDeaths,
+          baseWaitlistDeaths: baseVizData && baseYearWaitlistDeaths.length > year 
+            ? baseYearWaitlistDeaths[year] 
+            : undefined,
+        });
+      }
+    }
   }
 
   // 4. Deaths per day
@@ -262,12 +403,126 @@ export function transformVizDataToSimulationData(vizData: VizData): SimulationDa
     }
   }
 
-  // 6. Net deaths prevented per year
-  if (vizData.net_deaths_prevented && vizData.has_comparison) {
+  // 6. Net deaths prevented per year (calculated from cumulative waitlist deaths)
+  if (baseVizData && vizData.cumulative_deaths && baseVizData.cumulative_deaths && vizData.has_comparison) {
+    const yearDays = 365;
+    
+    // Get total days for comparison
+    const xenoMaxTime = vizData.total_days || Math.max(...vizData.cumulative_deaths.x);
+    const baseMaxTime = baseVizData.total_days || Math.max(...baseVizData.cumulative_deaths.x);
+    const comparisonMaxTime = Math.min(xenoMaxTime, baseMaxTime);
+    const numYears = Math.floor(comparisonMaxTime / yearDays);
+    
+    // Get cumulative waitlist deaths arrays from xeno data
+    const xenoWaitlistDeathsLow = findSeries(vizData.cumulative_deaths.series, ['low cpra waitlist deaths']);
+    const xenoWaitlistDeathsHigh = findSeries(vizData.cumulative_deaths.series, ['high cpra waitlist deaths']);
+    const xenoTimes = vizData.cumulative_deaths.x;
+    
+    // Get cumulative waitlist deaths arrays from base data
+    const baseWaitlistDeathsLow = findSeries(baseVizData.cumulative_deaths.series, ['low cpra waitlist deaths']);
+    const baseWaitlistDeathsHigh = findSeries(baseVizData.cumulative_deaths.series, ['high cpra waitlist deaths']);
+    const baseTimes = baseVizData.cumulative_deaths.x;
+    
+    if (xenoWaitlistDeathsLow && xenoWaitlistDeathsHigh && baseWaitlistDeathsLow && baseWaitlistDeathsHigh) {
+      // Calculate xeno waitlist deaths per year
+      const xenoWaitlistDeathsPerYearLow: number[] = [];
+      const xenoWaitlistDeathsPerYearHigh: number[] = [];
+      const xenoWaitlistDeathsPerYearTotal: number[] = [];
+      
+      for (let i = 0; i < numYears; i++) {
+        const startTime = i * yearDays;
+        const endTime = Math.min((i + 1) * yearDays, comparisonMaxTime);
+        
+        const startIdx = findFirstIndex(xenoTimes, t => t >= startTime);
+        const endIdx = findFirstIndex(xenoTimes, t => t >= endTime);
+        
+        if (startIdx < xenoTimes.length && endIdx > startIdx) {
+          const actualEndIdx = endIdx - 1;
+          if (actualEndIdx >= startIdx) {
+            const waitlistDeathsLow = xenoWaitlistDeathsLow[actualEndIdx] - xenoWaitlistDeathsLow[startIdx];
+            const waitlistDeathsHigh = xenoWaitlistDeathsHigh[actualEndIdx] - xenoWaitlistDeathsHigh[startIdx];
+            const waitlistDeathsTotal = waitlistDeathsLow + waitlistDeathsHigh;
+            xenoWaitlistDeathsPerYearLow.push(Math.max(0, waitlistDeathsLow));
+            xenoWaitlistDeathsPerYearHigh.push(Math.max(0, waitlistDeathsHigh));
+            xenoWaitlistDeathsPerYearTotal.push(Math.max(0, waitlistDeathsTotal));
+          } else {
+            xenoWaitlistDeathsPerYearLow.push(0);
+            xenoWaitlistDeathsPerYearHigh.push(0);
+            xenoWaitlistDeathsPerYearTotal.push(0);
+          }
+        } else {
+          xenoWaitlistDeathsPerYearLow.push(0);
+          xenoWaitlistDeathsPerYearHigh.push(0);
+          xenoWaitlistDeathsPerYearTotal.push(0);
+        }
+      }
+      
+      // Calculate base waitlist deaths per year
+      const baseWaitlistDeathsPerYearLow: number[] = [];
+      const baseWaitlistDeathsPerYearHigh: number[] = [];
+      const baseWaitlistDeathsPerYearTotal: number[] = [];
+      
+      for (let i = 0; i < numYears; i++) {
+        const startTime = i * yearDays;
+        const endTime = Math.min((i + 1) * yearDays, comparisonMaxTime);
+        
+        const startIdx = findFirstIndex(baseTimes, t => t >= startTime);
+        const endIdx = findFirstIndex(baseTimes, t => t >= endTime);
+        
+        if (startIdx < baseTimes.length && endIdx > startIdx) {
+          const actualEndIdx = endIdx - 1;
+          if (actualEndIdx >= startIdx) {
+            const waitlistDeathsLow = baseWaitlistDeathsLow[actualEndIdx] - baseWaitlistDeathsLow[startIdx];
+            const waitlistDeathsHigh = baseWaitlistDeathsHigh[actualEndIdx] - baseWaitlistDeathsHigh[startIdx];
+            const waitlistDeathsTotal = waitlistDeathsLow + waitlistDeathsHigh;
+            baseWaitlistDeathsPerYearLow.push(Math.max(0, waitlistDeathsLow));
+            baseWaitlistDeathsPerYearHigh.push(Math.max(0, waitlistDeathsHigh));
+            baseWaitlistDeathsPerYearTotal.push(Math.max(0, waitlistDeathsTotal));
+          } else {
+            baseWaitlistDeathsPerYearLow.push(0);
+            baseWaitlistDeathsPerYearHigh.push(0);
+            baseWaitlistDeathsPerYearTotal.push(0);
+          }
+        } else {
+          baseWaitlistDeathsPerYearLow.push(0);
+          baseWaitlistDeathsPerYearHigh.push(0);
+          baseWaitlistDeathsPerYearTotal.push(0);
+        }
+      }
+      
+      // Ensure same length
+      const minLength = Math.min(
+        xenoWaitlistDeathsPerYearTotal.length,
+        baseWaitlistDeathsPerYearTotal.length
+      );
+      const xenoTrimmedLow = xenoWaitlistDeathsPerYearLow.slice(0, minLength);
+      const xenoTrimmedHigh = xenoWaitlistDeathsPerYearHigh.slice(0, minLength);
+      const xenoTrimmedTotal = xenoWaitlistDeathsPerYearTotal.slice(0, minLength);
+      const baseTrimmedLow = baseWaitlistDeathsPerYearLow.slice(0, minLength);
+      const baseTrimmedHigh = baseWaitlistDeathsPerYearHigh.slice(0, minLength);
+      const baseTrimmedTotal = baseWaitlistDeathsPerYearTotal.slice(0, minLength);
+      
+      // Calculate net deaths prevented (base - xeno)
+      const netDeathsPreventedLow = baseTrimmedLow.map((base, i) => base - xenoTrimmedLow[i]);
+      const netDeathsPreventedHigh = baseTrimmedHigh.map((base, i) => base - xenoTrimmedHigh[i]);
+      const netDeathsPreventedTotal = baseTrimmedTotal.map((base, i) => base - xenoTrimmedTotal[i]);
+      
+      // Populate result
+      for (let i = 0; i < minLength; i++) {
+        result.netDeathsPreventedPerYearData.push({
+          year: i + 1,
+          low: netDeathsPreventedLow[i] || 0,
+          high: netDeathsPreventedHigh[i] || 0,
+          total: netDeathsPreventedTotal[i] || 0,
+        });
+      }
+    }
+  } else if (vizData.net_deaths_prevented && vizData.has_comparison) {
+    // Fallback to JSON data if base case not available
     const { year_labels, series } = vizData.net_deaths_prevented;
-    const lowSeries = series.find(s => s.label.toLowerCase().includes('low cpra net deaths prevented'));
-    const highSeries = series.find(s => s.label.toLowerCase().includes('high cpra net deaths prevented'));
-    const totalSeries = series.find(s => s.label.toLowerCase().includes('total net deaths prevented'));
+    const lowSeries = series.find(s => s.label.toLowerCase().includes('low cpra net waitlist deaths prevented') || s.label.toLowerCase().includes('low cpra net deaths prevented'));
+    const highSeries = series.find(s => s.label.toLowerCase().includes('high cpra net waitlist deaths prevented') || s.label.toLowerCase().includes('high cpra net deaths prevented'));
+    const totalSeries = series.find(s => s.label.toLowerCase().includes('total net waitlist deaths prevented') || s.label.toLowerCase().includes('total net deaths prevented'));
     
     for (let i = 0; i < year_labels.length; i++) {
       const year = parseInt(year_labels[i].replace('Y', '')) || i + 1;

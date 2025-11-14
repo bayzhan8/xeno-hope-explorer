@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip, ScatterChart, Scatter } from 'recharts';
 
 interface SimulationData {
   waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number }>;
@@ -16,6 +16,7 @@ interface SimulationData {
   deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
   netDeathsPreventedPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
+  waitlistDeathsPerYearData: Array<{ year: number; waitlistDeaths: number; baseWaitlistDeaths?: number }>;
 }
 
 interface SimulationChartsProps {
@@ -165,31 +166,74 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardContent>
       </Card>
 
-      {/* 4. Deaths per Day */}
+      {/* 4. Waitlist Deaths per Year (Scatter Plot) */}
       <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
         <CardHeader className="border-b border-medical-border bg-medical-surface">
-          <CardTitle className="text-lg font-semibold text-primary">Deaths per Day</CardTitle>
+          <CardTitle className="text-lg font-semibold text-primary">Waitlist Deaths per Year</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={data.deathsPerDayData}>
+            <ScatterChart
+              margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
-                dataKey="year" 
+                type="number"
+                dataKey="x" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
+                domain={[0, 'dataMax']}
+                ticks={data.waitlistDeathsPerYearData.length > 0 
+                  ? Array.from({ length: Math.min(11, Math.floor(Math.max(...data.waitlistDeathsPerYearData.map(d => d.year))) + 1) }, (_, i) => i)
+                  : []}
+                label={{ value: 'Time (years)', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <YAxis 
+                type="number"
+                dataKey="y"
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                label={{ value: 'Deaths per day', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                domain={[0, 6000]}
+                label={{ value: 'Waitlist Deaths per Year', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip 
+                cursor={{ strokeDasharray: '3 3' }}
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const point = payload[0].payload;
+                    return (
+                      <div className="bg-card border border-medical-border rounded-lg p-3 shadow-[var(--shadow-medium)]">
+                        <p className="text-sm font-medium text-foreground mb-1">{`Year: ${point.year?.toFixed(1) || point.x?.toFixed(1) || 'N/A'}`}</p>
+                        <p className="text-sm" style={{ color: payload[0].color }}>
+                          {`Waitlist Deaths: ${typeof point.y === 'number' ? point.y.toLocaleString(undefined, { maximumFractionDigits: 0 }) : point.waitlistDeaths?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 'N/A'}`}
+                        </p>
+                        {(point.baseWaitlistDeaths !== undefined || (payload.length > 1 && payload[1]?.payload?.y !== undefined)) && (
+                          <p className="text-sm" style={{ color: '#3b82f6' }}>
+                            {`Base Case: ${point.baseWaitlistDeaths?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || (payload.length > 1 ? payload[1].payload.y?.toLocaleString(undefined, { maximumFractionDigits: 0 }) : 'N/A')}`}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
-              <Line type="monotone" dataKey="low" stroke={COLORS.secondary} name="Low cPRA" strokeWidth={2} dot={{ r: 0.5 }} />
-              <Line type="monotone" dataKey="high" stroke={COLORS.primary} name="High cPRA" strokeWidth={2} dot={{ r: 0.5 }} />
-              <Line type="monotone" dataKey="total" stroke={COLORS.quaternary} name="Total" strokeWidth={3} dot={{ r: 1.5 }} />
-            </LineChart>
+              <Scatter 
+                data={data.waitlistDeathsPerYearData.map(d => ({ x: d.year, y: d.waitlistDeaths, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
+                fill="#8b0000"
+                name="Waitlist Deaths/Year (Xeno)"
+                shape="circle"
+              />
+              <Scatter 
+                data={data.waitlistDeathsPerYearData
+                  .filter(d => d.baseWaitlistDeaths !== undefined)
+                  .map(d => ({ x: d.year, y: d.baseWaitlistDeaths!, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
+                fill="#3b82f6"
+                name="Waitlist Deaths/Year (Base Case)"
+                shape="circle"
+              />
+            </ScatterChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
@@ -223,10 +267,11 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardContent>
       </Card>
 
-      {/* 6. Net Deaths Prevented per Year (xeno only) */}
+      {/* 6. Net Waitlist Deaths Prevented per Year */}
       <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
         <CardHeader className="border-b border-medical-border bg-medical-surface">
-          <CardTitle className="text-lg font-semibold text-primary">Net Deaths Prevented</CardTitle>
+          <CardTitle className="text-lg font-semibold text-primary">Net Waitlist Deaths Prevented per Year</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">(Base Case - Xenotransplantation)</p>
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={250}>
@@ -236,18 +281,18 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                label={{ value: 'Year Period', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                label={{ value: 'Net deaths prevented (vs base)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                label={{ value: 'Net Waitlist Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
-              <Bar dataKey="low" fill={COLORS.secondary} name="Low cPRA" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="high" fill={COLORS.primary} name="High cPRA" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="total" fill={COLORS.quaternary} name="Total" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="low" fill="#86efac" name="Low cPRA Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="high" fill="#22c55e" name="High cPRA Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="total" fill="#15803d" name="Total Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>

@@ -30,6 +30,7 @@ interface SimulationData {
   deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
   netDeathsPreventedPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
+  waitlistDeathsPerYearData: Array<{ year: number; waitlistDeaths: number; baseWaitlistDeaths?: number }>;
 }
 
 const Index = () => {
@@ -58,6 +59,7 @@ const Index = () => {
           xeno_proportion: params.xeno_proportion,
           xenoGraftFailureRate: params.xenoGraftFailureRate,
           postTransplantDeathRate: params.postTransplantDeathRate,
+          highCPRAThreshold: params.highCPRAThreshold,
         });
 
         if (!configName) {
@@ -67,11 +69,21 @@ const Index = () => {
         // Load visualization data
         const vizData = await loadVisualizationData(configName);
 
+        // Load base case data if comparison is available
+        let baseVizData = null;
+        if (vizData.has_comparison && vizData.base_config_name) {
+          try {
+            baseVizData = await loadVisualizationData(vizData.base_config_name);
+          } catch (err) {
+            console.warn('Could not load base case data for comparison:', err);
+          }
+        }
+
         // Transform to simulation data format
         const transformed = transformVizDataToSimulationData({
           ...vizData,
           highCPRAThreshold: params.highCPRAThreshold,
-        });
+        }, baseVizData);
 
         setSimulationData(transformed);
         setMetrics(calculateSummaryMetrics(transformed, params.simulationHorizon));
