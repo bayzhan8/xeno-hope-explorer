@@ -633,19 +633,18 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     .filter(d => d.year <= horizon)
     .reduce((sum, d) => sum + d.total, 0);
   
-  // Sum transplants up to horizon
-  const totalTransplants = data.transplantsData
-    .filter(d => d.year <= horizon)
-    .reduce((sum, d) => sum + d.human + d.xeno, 0);
-  
-  const xenoTransplants = data.transplantsData
-    .filter(d => d.year <= horizon)
-    .reduce((sum, d) => sum + d.xeno, 0);
-  
-  // Calculate penetration rate (proportion of high CPRA patients who received xeno)
+  // Get final cumulative recipients at horizon (recipientsData contains cumulative values)
   const finalRecipients = data.recipientsData
     .filter(d => d.year <= horizon)
     .slice(-1)[0];
+  
+  // Total Transplants = final cumulative total recipients
+  const totalTransplants = (finalRecipients?.lowHuman || 0) + (finalRecipients?.highHuman || 0) + (finalRecipients?.highXeno || 0);
+  
+  // Xeno Transplants = final cumulative xeno recipients
+  const xenoTransplants = finalRecipients?.highXeno || 0;
+  
+  // Calculate penetration rate (proportion of high CPRA patients who received xeno)
   const highCPRATotal = (finalRecipients?.highHuman || 0) + (finalRecipients?.highXeno || 0);
   const penetrationRate = highCPRATotal > 0 
     ? (finalRecipients?.highXeno || 0) / highCPRATotal 

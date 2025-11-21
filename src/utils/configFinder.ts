@@ -73,14 +73,17 @@ interface ExperimentConfigs {
 
 
 
+// Supabase Storage base URL
+const SUPABASE_STORAGE_URL = 'https://bkgpfnhbmkxzwtixiwnh.supabase.co/storage/v1/object/public/viz-data';
+
 // Find config name from user inputs
 // According to documentation: Match on MULTIPLIERS directly, not calculated rates
 export async function findConfigName(userInputs: UserInputs): Promise<string | null> {
   try {
-    // Load experiment_configs.json
-    const response = await fetch('/experiment_configs.json');
+    // Load experiment_configs.json from Supabase Storage
+    const response = await fetch(`${SUPABASE_STORAGE_URL}/experiment_configs.json`);
     if (!response.ok) {
-      throw new Error('Failed to load experiment_configs.json');
+      throw new Error('Failed to load experiment_configs.json from Supabase Storage');
     }
     const experimentConfigs: ExperimentConfigs = await response.json();
     
@@ -201,12 +204,12 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
 }
 
 
-// Load visualization data
+// Load visualization data from Supabase Storage
 export async function loadVisualizationData(configName: string) {
   try {
-    const response = await fetch(`/viz_data/${configName}.json`);
+    const response = await fetch(`${SUPABASE_STORAGE_URL}/viz_data/${configName}.json`);
     if (!response.ok) {
-      throw new Error(`Failed to load visualization data for ${configName}`);
+      throw new Error(`Failed to load visualization data for ${configName} from Supabase Storage`);
     }
     return await response.json();
   } catch (error) {

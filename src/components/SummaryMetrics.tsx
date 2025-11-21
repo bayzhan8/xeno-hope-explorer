@@ -64,11 +64,11 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
       color: 'text-chart-quaternary'
     },
     {
-      title: 'High CPRA Treated',
+      title: 'High CPRA Transplanted',
       value: formatPercentage(metrics.penetrationRate),
       icon: <TrendingUp className="w-5 h-5 text-chart-tertiary" />,
       trend: getTrendIcon(metrics.penetrationRate),
-      subtitle: 'High-CPRA treated',
+      subtitle: 'High-CPRA transplanted',
       color: 'text-chart-tertiary'
     }
   ];
