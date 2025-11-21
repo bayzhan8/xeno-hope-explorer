@@ -3,3 +3,7 @@ package.json !filter !diff !merge text
 package-lock.json !filter !diff !merge text
 tsconfig*.json !filter !diff !merge text
 components.json !filter !diff !merge text
+eslint.config.js !filter !diff !merge text
+postcss.config.js !filter !diff !merge text
+tailwind.config.ts !filter !diff !merge text
+vite.config.ts !filter !diff !merge text
