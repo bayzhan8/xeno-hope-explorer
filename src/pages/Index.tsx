@@ -179,7 +179,7 @@ const Index = () => {
                       Visualization of waitlist trends, transplant volumes, and mortality impacts
                     </p>
                   </div>
-                  <SimulationCharts data={simulationData} highCPRAThreshold={params.highCPRAThreshold} />
+                  <SimulationCharts data={simulationData} highCPRAThreshold={params.highCPRAThreshold} simulationHorizon={params.simulationHorizon} />
                 </div>
               </>
             )}

@@ -22,9 +22,36 @@ interface SimulationData {
 interface SimulationChartsProps {
   data: SimulationData;
   highCPRAThreshold: number;
+  simulationHorizon: number;
 }
 
-const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThreshold }) => {
+const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThreshold, simulationHorizon }) => {
+  // Filter data to only include years up to simulationHorizon
+  const filterByYear = <T extends { year: number }>(arr: T[]): T[] => {
+    return arr.filter(item => item.year <= simulationHorizon);
+  };
+
+  // Prepare filtered data
+  const filteredData = {
+    waitlistData: filterByYear(data.waitlistData),
+    waitlistDeathsData: filterByYear(data.waitlistDeathsData),
+    postTransplantDeathsData: filterByYear(data.postTransplantDeathsData),
+    netDeathsPreventedData: filterByYear(data.netDeathsPreventedData),
+    graftFailuresData: filterByYear(data.graftFailuresData),
+    transplantsData: filterByYear(data.transplantsData),
+    penetrationData: filterByYear(data.penetrationData),
+    waitingTimeData: filterByYear(data.waitingTimeData),
+    recipientsData: filterByYear(data.recipientsData),
+    cumulativeDeathsData: filterByYear(data.cumulativeDeathsData),
+    deathsPerYearData: filterByYear(data.deathsPerYearData),
+    deathsPerDayData: filterByYear(data.deathsPerDayData),
+    netDeathsPreventedPerYearData: filterByYear(data.netDeathsPreventedPerYearData),
+    waitlistDeathsPerYearData: data.waitlistDeathsPerYearData.filter(d => d.year <= simulationHorizon),
+  };
+
+  // Dynamic x-axis configuration based on horizon
+  const xAxisDomain = [0.5, simulationHorizon + 0.5];
+  const xAxisTicks = Array.from({ length: simulationHorizon }, (_, i) => i + 1);
   const COLORS = {
     primary: 'hsl(var(--chart-primary))',
     secondary: 'hsl(var(--chart-secondary))',
@@ -75,15 +102,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data.waitlistData}>
+            <LineChart data={filteredData.waitlistData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                domain={[0.5, 10.5]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                domain={xAxisDomain}
+                ticks={xAxisTicks}
                 label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <YAxis 
@@ -132,15 +159,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={data.recipientsData}>
+            <LineChart data={filteredData.recipientsData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))" 
                 tick={{ fontSize: 12 }}
-                domain={[0.5, 10.5]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                domain={xAxisDomain}
+                ticks={xAxisTicks}
               />
               <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Recipients', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
               <Tooltip content={<CustomTooltip />} />
@@ -160,15 +187,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={data.cumulativeDeathsData}>
+            <LineChart data={filteredData.cumulativeDeathsData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))" 
                 tick={{ fontSize: 12 }}
-                domain={[0.5, 10.5]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                domain={xAxisDomain}
+                ticks={xAxisTicks}
               />
               <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Cumulative Deaths', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
               <Tooltip content={<CustomTooltip />} />
@@ -199,8 +226,8 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 dataKey="x" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                domain={[0.5, 10.5]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                domain={xAxisDomain}
+                ticks={xAxisTicks}
                 label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <YAxis 
@@ -235,7 +262,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
               <Scatter 
-                data={data.waitlistDeathsPerYearData.map(d => ({ x: d.year, y: d.waitlistDeaths, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
+                data={filteredData.waitlistDeathsPerYearData.map(d => ({ x: d.year, y: d.waitlistDeaths, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
                 fill="#8b0000"
                 name="Waitlist Deaths/Year (Xeno)"
                 shape={(props: any) => {
@@ -244,7 +271,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 }}
               />
               <Scatter 
-                data={data.waitlistDeathsPerYearData
+                data={filteredData.waitlistDeathsPerYearData
                   .filter(d => d.baseWaitlistDeaths !== undefined)
                   .map(d => ({ x: d.year, y: d.baseWaitlistDeaths!, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
                 fill="#3b82f6"
@@ -266,15 +293,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={data.deathsPerYearData}>
+            <BarChart data={filteredData.deathsPerYearData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                domain={[0.5, 10.5]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                domain={xAxisDomain}
+                ticks={xAxisTicks}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
@@ -299,15 +326,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={data.netDeathsPreventedPerYearData}>
+            <BarChart data={filteredData.netDeathsPreventedPerYearData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                domain={[0.5, 10.5]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                domain={xAxisDomain}
+                ticks={xAxisTicks}
                 label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <YAxis 
@@ -332,15 +359,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-6">
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={data.waitingTimeData}>
+            <LineChart data={filteredData.waitingTimeData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
                 dataKey="year" 
                 stroke="hsl(var(--muted-foreground))" 
                 tick={{ fontSize: 12 }}
-                domain={[0.5, 10.5]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                domain={xAxisDomain}
+                ticks={xAxisTicks}
               />
               <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Years on waitlist', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
               <Tooltip content={<CustomTooltip />} />
