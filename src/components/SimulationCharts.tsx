@@ -94,15 +94,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* 1. Waitlist Sizes Over Time */}
       <Card className="col-span-1 lg:col-span-2 bg-card shadow-[var(--shadow-medium)] border-medical-border">
         <CardHeader className="border-b border-medical-border bg-medical-surface">
           <CardTitle className="text-lg font-semibold text-primary">Waitlist Size Over Time</CardTitle>
         </CardHeader>
-        <CardContent className="p-6">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={filteredData.waitlistData}>
+        <CardContent className="p-4">
+          <ResponsiveContainer width="100%" height={390}>
+            <LineChart data={filteredData.waitlistData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
@@ -116,7 +116,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                label={{ value: 'Patients on Waitlist', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend 
@@ -157,9 +157,9 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardHeader className="border-b border-medical-border bg-medical-surface">
           <CardTitle className="text-lg font-semibold text-primary">Transplant Recipients Over Time</CardTitle>
         </CardHeader>
-        <CardContent className="p-6">
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={filteredData.recipientsData}>
+        <CardContent className="p-4">
+          <ResponsiveContainer width="100%" height={325}>
+            <LineChart data={filteredData.recipientsData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
@@ -169,7 +169,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 domain={xAxisDomain}
                 ticks={xAxisTicks}
               />
-              <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Recipients', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+              <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
               <Line type="monotone" dataKey="lowHuman" stroke={COLORS.secondary} name="Low cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
@@ -185,9 +185,9 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardHeader className="border-b border-medical-border bg-medical-surface">
           <CardTitle className="text-lg font-semibold text-primary">Cumulative Deaths Over Time</CardTitle>
         </CardHeader>
-        <CardContent className="p-6">
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={filteredData.cumulativeDeathsData}>
+        <CardContent className="p-4">
+          <ResponsiveContainer width="100%" height={325}>
+            <LineChart data={filteredData.cumulativeDeathsData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
@@ -197,7 +197,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 domain={xAxisDomain}
                 ticks={xAxisTicks}
               />
-              <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Cumulative Deaths', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+              <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
               <Line type="monotone" dataKey="lowWaitlist" stroke={COLORS.secondary} name="Low cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
@@ -215,10 +215,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardHeader className="border-b border-medical-border bg-medical-surface">
           <CardTitle className="text-lg font-semibold text-primary">Waitlist Deaths per Year</CardTitle>
         </CardHeader>
-        <CardContent className="p-6">
-          <ResponsiveContainer width="100%" height={250}>
+        <CardContent className="p-4">
+          <ResponsiveContainer width="100%" height={325}>
             <ScatterChart
-              margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+              margin={{ top: 10, right: 10, bottom: 20, left: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
@@ -236,7 +236,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
                 domain={[0, 6000]}
-                label={{ value: 'Waitlist Deaths per Year', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <Tooltip 
                 cursor={{ strokeDasharray: '3 3' }}
@@ -291,9 +291,9 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardHeader className="border-b border-medical-border bg-medical-surface">
           <CardTitle className="text-lg font-semibold text-primary">Deaths per Year</CardTitle>
         </CardHeader>
-        <CardContent className="p-6">
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={filteredData.deathsPerYearData}>
+        <CardContent className="p-4">
+          <ResponsiveContainer width="100%" height={325}>
+            <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
@@ -306,7 +306,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                label={{ value: 'Deaths per year', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
@@ -324,9 +324,9 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <CardTitle className="text-lg font-semibold text-primary">Net Waitlist Deaths Prevented per Year</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">(Base Case - Xenotransplantation)</p>
         </CardHeader>
-        <CardContent className="p-6">
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={filteredData.netDeathsPreventedPerYearData}>
+        <CardContent className="p-4">
+          <ResponsiveContainer width="100%" height={325}>
+            <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
@@ -340,7 +340,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 12 }}
-                label={{ value: 'Net Waitlist Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                label={{ value: 'Deaths Prevented', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
@@ -357,9 +357,9 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardHeader className="border-b border-medical-border bg-medical-surface">
           <CardTitle className="text-lg font-semibold text-muted-foreground">Average Waiting Time (Coming Soon)</CardTitle>
         </CardHeader>
-        <CardContent className="p-6">
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={filteredData.waitingTimeData}>
+        <CardContent className="p-4">
+          <ResponsiveContainer width="100%" height={325}>
+            <LineChart data={filteredData.waitingTimeData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
               <XAxis 
                 type="number"
@@ -369,7 +369,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 domain={xAxisDomain}
                 ticks={xAxisTicks}
               />
-              <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Years on waitlist', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+              <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Years', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
               <Line type="monotone" dataKey="averageWaitingTime" stroke={COLORS.quaternary} strokeWidth={3} name="Average Wait Time" dot={{ r: 1.5 }} />

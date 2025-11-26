@@ -51,7 +51,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </Tooltip>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6 p-6">
+        <CardContent className="space-y-6 p-4">
 
 
           {/* High CPRA Definition */}

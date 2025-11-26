@@ -102,7 +102,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-medical-border bg-card shadow-[var(--shadow-soft)]">
-        <div className="container mx-auto px-6 py-4">
+        <div className="container mx-auto px-3 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-lg">
@@ -124,8 +124,8 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+      <main className="container mx-auto px-3 py-8">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
           {/* Controls Sidebar - Sticky */}
           <div className="xl:col-span-1">
             <div className="xl:sticky xl:top-8">
