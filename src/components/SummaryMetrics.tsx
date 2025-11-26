@@ -36,7 +36,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
       value: formatNumber(Math.abs(metrics.waitlistReduction)),
       icon: <Users className="w-5 h-5 text-primary" />,
       trend: getTrendIcon(-metrics.waitlistReduction),
-      subtitle: `${horizon}-year impact`,
+      subtitle: `Fewer patients waiting after ${horizon} years`,
       color: 'text-primary'
     },
     {
@@ -44,7 +44,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
       value: formatNumber(metrics.deathsPrevented),
       icon: <Heart className="w-5 h-5 text-success" />,
       trend: getTrendIcon(metrics.deathsPrevented),
-      subtitle: 'Deaths prevented',
+      subtitle: 'Waitlist deaths prevented vs. base case',
       color: 'text-success'
     },
     {
@@ -52,7 +52,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
       value: formatNumber(metrics.totalTransplants),
       icon: <Activity className="w-5 h-5 text-chart-secondary" />,
       trend: getTrendIcon(metrics.totalTransplants),
-      subtitle: `Over ${horizon} years`,
+      subtitle: `Cumulative transplants over ${horizon} years`,
       color: 'text-chart-secondary'
     },
     {
@@ -60,7 +60,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
       value: formatNumber(metrics.xenoTransplants),
       icon: <Activity className="w-5 h-5 text-chart-quaternary" />,
       trend: getTrendIcon(metrics.xenoTransplants),
-      subtitle: 'High-CPRA patients',
+      subtitle: 'Xenotransplants for high-CPRA patients',
       color: 'text-chart-quaternary'
     },
     {
@@ -68,7 +68,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
       value: formatPercentage(metrics.penetrationRate),
       icon: <TrendingUp className="w-5 h-5 text-chart-tertiary" />,
       trend: getTrendIcon(metrics.penetrationRate),
-      subtitle: 'High-CPRA transplanted',
+      subtitle: 'Proportion of high-CPRA patients transplanted',
       color: 'text-chart-tertiary'
     }
   ];

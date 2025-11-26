@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip, ScatterChart, Scatter } from 'recharts';
 
 interface SimulationData {
-  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number }>;
+  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number; baseHighCPRA?: number }>;
   waitlistDeathsData: Array<{ year: number; waitlistDeaths: number }>;
   postTransplantDeathsData: Array<{ year: number; xenoPostTransplantDeaths: number; humanPostTransplantDeaths: number }>;
   netDeathsPreventedData: Array<{ year: number; netDeathsPrevented: number }>;
@@ -96,7 +96,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* 1. Waitlist Sizes Over Time */}
-      <Card className="col-span-1 lg:col-span-2 bg-card shadow-[var(--shadow-medium)] border-medical-border">
+      <Card className="col-span-1 bg-card shadow-[var(--shadow-medium)] border-medical-border">
         <CardHeader className="border-b border-medical-border bg-medical-surface">
           <CardTitle className="text-lg font-semibold text-primary">Waitlist Size Over Time</CardTitle>
         </CardHeader>
@@ -151,6 +151,59 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {/* 1b. High CPRA Waitlist Comparison */}
+      {filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined) && (
+        <Card className="col-span-1 bg-card shadow-[var(--shadow-medium)] border-medical-border">
+          <CardHeader className="border-b border-medical-border bg-medical-surface">
+            <CardTitle className="text-lg font-semibold text-primary">High CPRA Waitlist Comparison</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">Xenotransplantation vs. Base Case</p>
+          </CardHeader>
+          <CardContent className="p-4">
+            <ResponsiveContainer width="100%" height={390}>
+              <LineChart data={filteredData.waitlistData.filter(d => d.baseHighCPRA !== undefined)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis 
+                  type="number"
+                  dataKey="year" 
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <YAxis 
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend 
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="line"
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="highCPRA" 
+                  stroke={COLORS.tertiary} 
+                  strokeWidth={3}
+                  name={`High CPRA (${highCPRAThreshold}-100%) - Xeno`}
+                  dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1.5 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="baseHighCPRA" 
+                  stroke="#3b82f6" 
+                  strokeWidth={3}
+                  name={`High CPRA (${highCPRAThreshold}-100%) - Base Case`}
+                  dot={{ fill: '#3b82f6', strokeWidth: 1, r: 1.5 }}
+                  strokeDasharray="5 5"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 2. Transplant Recipients Over Time */}
       <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">

@@ -35,7 +35,7 @@ interface VizData {
 }
 
 interface SimulationData {
-  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number }>;
+  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number; baseHighCPRA?: number }>;
   waitlistDeathsData: Array<{ year: number; waitlistDeaths: number }>;
   postTransplantDeathsData: Array<{ year: number; xenoPostTransplantDeaths: number; humanPostTransplantDeaths: number }>;
   netDeathsPreventedData: Array<{ year: number; netDeathsPrevented: number }>;
@@ -148,16 +148,52 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     const sampledTotal = totalSeries ? sampleData(totalSeries, targetPoints) : [];
     const years = sampledDays.map(daysToYears);
     
+    // Process base case waitlist data if available
+    let baseHighCPRASeries: number[] | null = null;
+    let baseYears: number[] = [];
+    
+    if (baseVizData && baseVizData.waitlist_sizes) {
+      const baseHighSeries = findSeries(baseVizData.waitlist_sizes.series, ['high cpra waitlist']);
+      if (baseHighSeries) {
+        const baseMaxDays = Math.max(...baseVizData.waitlist_sizes.x);
+        const baseMaxYears = daysToYears(baseMaxDays);
+        const baseTargetPoints = Math.ceil(baseMaxYears * 12);
+        const baseSampledDays = sampleData(baseVizData.waitlist_sizes.x, baseTargetPoints);
+        baseHighCPRASeries = baseHighSeries ? sampleData(baseHighSeries, baseTargetPoints) : [];
+        baseYears = baseSampledDays.map(daysToYears);
+      }
+    }
+    
     for (let i = 0; i < years.length; i++) {
       const low = sampledLow[i] || 0;
       const high = sampledHigh[i] || 0;
       const total = sampledTotal[i] || (low + high);
+      
+      // Find matching base case data point (closest year)
+      let baseHighCPRA: number | undefined = undefined;
+      if (baseHighCPRASeries && baseYears.length > 0) {
+        const currentYear = years[i];
+        let closestIdx = 0;
+        let minDiff = Math.abs(baseYears[0] - currentYear);
+        for (let j = 1; j < baseYears.length; j++) {
+          const diff = Math.abs(baseYears[j] - currentYear);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestIdx = j;
+          }
+        }
+        // Only use if within 0.1 years
+        if (minDiff < 0.1) {
+          baseHighCPRA = baseHighCPRASeries[closestIdx];
+        }
+      }
       
       result.waitlistData.push({
         year: Math.round(years[i] * 100) / 100,
         total,
         lowCPRA: low,
         highCPRA: high,
+        baseHighCPRA,
       });
     }
   }

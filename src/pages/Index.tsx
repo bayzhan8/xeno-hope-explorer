@@ -124,8 +124,8 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-3 py-8">
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+      <main className="container mx-auto px-0 py-8">
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
           {/* Controls Sidebar - Sticky */}
           <div className="xl:col-span-1">
             <div className="xl:sticky xl:top-8">
@@ -134,7 +134,7 @@ const Index = () => {
           </div>
 
           {/* Charts and Metrics */}
-          <div className="xl:col-span-3 space-y-8">
+          <div className="xl:col-span-4 space-y-8 px-2">
             {loading && (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -184,47 +184,48 @@ const Index = () => {
               </>
             )}
 
-            {/* Markov Chain Visualization */}
+            {/* Model Structure & Assumptions */}
             <div>
               <div className="mb-6">
                 <h2 className="text-xl font-semibold text-primary mb-2">
-                  Model Structure
+                  Model Structure & Assumptions
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Patient states and transition pathways in the xenotransplantation model
+                  Markov Chain model showing patient states and transition pathways
                 </p>
               </div>
               <MarkovChainVisualization highCPRAThreshold={params.highCPRAThreshold} />
+              <Card className="bg-medical-surface border-medical-border mt-6">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold text-primary">How the Model Works</CardTitle>
+                </CardHeader>
+                <CardContent className="prose prose-sm max-w-none">
+                  <div className="text-sm text-muted-foreground space-y-3">
+                    <p>
+                      This simulation uses a <strong className="text-foreground">Markov Chain model</strong> where each patient exists in one of four states:
+                    </p>
+                    <ul className="list-disc list-inside space-y-2 ml-4">
+                      <li><strong className="text-foreground">C</strong> - Candidate on the waiting list</li>
+                      <li><strong className="text-foreground">H</strong> - Human donor kidney recipient</li>
+                      <li><strong className="text-foreground">X</strong> - Xeno kidney recipient</li>
+                      <li><strong className="text-foreground">D</strong> - Deceased</li>
+                    </ul>
+                    <p>
+                      The model uses <strong className="text-foreground">transition rates</strong> based on 2022 data for annual transplant, listing, relisting, and death rates. 
+                      Xenotransplantation rates are varied based on assumptions about xeno kidney availability and efficacy.
+                    </p>
+                    <p>
+                      The simulation starts with initial state sizes matching the number of candidates and recipients from early 2022. 
+                      At each time point, events (like transplants or deaths) are generated with probabilities proportional to the corresponding rates. 
+                      When an event occurs, the state sizes update accordingly. For example, a human donor transplant decreases the candidate count (C) by one and increases the human recipient count (H) by one.
+                    </p>
+                    <p>
+                      The simulation continues until reaching the specified time horizon ({params.simulationHorizon} years).
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-
-            {/* Model Assumptions */}
-            <Card className="bg-medical-surface border-medical-border">
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-primary">Model Assumptions</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <h4 className="font-medium text-foreground mb-2">Population Parameters</h4>
-                    <ul className="space-y-1 text-muted-foreground">
-                      <li>• Initial Low CPRA waitlist: 5,000 patients</li>
-                      <li>• Initial High CPRA ({params.highCPRAThreshold}%+) waitlist: 1,500 patients</li>
-                      <li>• Annual arrivals: 1,200 low CPRA, 400 high CPRA ({params.highCPRAThreshold}%+)</li>
-                      <li>• Baseline waitlist mortality: 8%/year</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-foreground mb-2">Transplant Parameters</h4>
-                    <ul className="space-y-1 text-muted-foreground">
-                      <li>• Human transplant rate: 30%/year (low CPRA)</li>
-                      <li>• Human transplant rate: 9%/year (high CPRA {params.highCPRAThreshold}%+)</li>
-                      <li>• Xeno kidneys available: {Math.round(400 * params.xeno_proportion)}/year ({params.xeno_proportion}x baseline)</li>
-                      <li>• Human graft failure: 5%/year</li>
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </main>
