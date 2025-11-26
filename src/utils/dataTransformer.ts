@@ -440,7 +440,8 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
   }
 
   // 6. Net deaths prevented per year (calculated from cumulative waitlist deaths)
-  if (baseVizData && vizData.cumulative_deaths && baseVizData.cumulative_deaths && vizData.has_comparison) {
+  // Calculate if we have base case data, even if has_comparison is not explicitly set
+  if (baseVizData && vizData.cumulative_deaths && baseVizData.cumulative_deaths) {
     const yearDays = 365;
     
     // Get total days for comparison
@@ -553,7 +554,7 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
         });
       }
     }
-  } else if (vizData.net_deaths_prevented && vizData.has_comparison) {
+  } else if (vizData.net_deaths_prevented) {
     // Fallback to JSON data if base case not available
     const { year_labels, series } = vizData.net_deaths_prevented;
     const lowSeries = series.find(s => s.label.toLowerCase().includes('low cpra net waitlist deaths prevented') || s.label.toLowerCase().includes('low cpra net deaths prevented'));

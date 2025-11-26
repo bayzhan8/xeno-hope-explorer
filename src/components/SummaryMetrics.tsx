@@ -57,24 +57,16 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
     },
     {
       title: 'Xeno Transplants',
-      value: formatNumber(metrics.xenoTransplants),
+      value: `${formatNumber(Math.round(metrics.xenoTransplants / horizon))} / year`,
       icon: <Activity className="w-5 h-5 text-chart-quaternary" />,
       trend: getTrendIcon(metrics.xenoTransplants),
-      subtitle: 'Xenotransplants for high-CPRA patients',
+      subtitle: `Average per year over ${horizon} years`,
       color: 'text-chart-quaternary'
-    },
-    {
-      title: 'High CPRA Transplanted',
-      value: formatPercentage(metrics.penetrationRate),
-      icon: <TrendingUp className="w-5 h-5 text-chart-tertiary" />,
-      trend: getTrendIcon(metrics.penetrationRate),
-      subtitle: 'Proportion of high-CPRA patients transplanted',
-      color: 'text-chart-tertiary'
     }
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
       {metrics_data.map((metric, index) => (
         <Card key={index} className="bg-card shadow-[var(--shadow-soft)] border-medical-border hover:shadow-[var(--shadow-medium)] transition-shadow duration-200">
           <CardContent className="p-4">

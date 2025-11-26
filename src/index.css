@@ -8,7 +8,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* NYU Color Palette */
+    /* Color Palette */
     --background: 0 0% 99%;
     --foreground: 270 15% 15%;
 
@@ -18,7 +18,7 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 270 15% 15%;
 
-    /* NYU Violet Primary */
+    /* Violet Primary */
     --primary: 270 85% 28%;
     --primary-foreground: 0 0% 100%;
     --primary-glow: 270 75% 48%;
@@ -43,12 +43,12 @@ All colors MUST be HSL.
     --input: 270 15% 92%;
     --ring: 270 85% 28%;
 
-    /* Custom NYU Theme Variables */
+    /* Custom Theme Variables */
     --medical-surface: 270 20% 98%;
     --medical-border: 270 15% 85%;
     --chart-grid: 270 15% 90%;
     
-    /* Data Visualization Colors - NYU Palette */
+    /* Data Visualization Colors */
     --chart-primary: 270 85% 28%;
     --chart-secondary: 142 76% 36%;
     --chart-tertiary: 38 92% 55%;
