@@ -29,6 +29,37 @@ const FIXED_PARAMS_85 = {
   T: 3650
 };
 
+// Fixed parameters for 95% CPRA threshold
+const FIXED_PARAMS_95 = {
+  rates_cpra: {
+    '0-95': {
+      C_start: 80409,
+      H_start: 238118,
+      wl_removal: 0.0002720666007028558,
+      'returned after removal': 0,
+      relisting: 2.4513018943435112e-05,
+      'death with tx': 0.00012624769571973772,
+      arrival: 91.03835616438356,
+      transplant: 64.7013698630137,
+      'waitlist death': 0.00013855812207854242
+    },
+    '95-100': {
+      C_start: 7897,
+      H_start: 15011,
+      wl_removal: 0.00028860543641315886,
+      'returned after removal': 0,
+      relisting: 0.00018666108260153154,
+      'death with tx': 0.00010843080431823859,
+      arrival: 4.046575342465753,
+      transplant: 4.964383561643835,
+      'waitlist death': 0.0001198657931209164
+    }
+  },
+  low_key: '0-95',
+  high_key: '95-100',
+  T: 3650
+};
+
 // Fixed parameters for 99% CPRA threshold
 const FIXED_PARAMS_99 = {
   rates_cpra: {
@@ -64,7 +95,7 @@ interface UserInputs {
   xeno_proportion: number;
   xenoGraftFailureRate: number; // multiplier (0, 0.5, 1, 1.5, 2)
   postTransplantDeathRate: number; // multiplier (0, 0.5, 1, 1.5, 2)
-  highCPRAThreshold: number; // 85 or 99
+  highCPRAThreshold: number; // 85, 95, or 99
 }
 
 interface ExperimentConfigs {
@@ -88,8 +119,19 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
     const experimentConfigs: ExperimentConfigs = await response.json();
     
     // Determine keys based on CPRA threshold
-    const lowKey = userInputs.highCPRAThreshold === 99 ? '0-99' : '0-85';
-    const highKey = userInputs.highCPRAThreshold === 99 ? '99-100' : '85-100';
+    let lowKey: string;
+    let highKey: string;
+    if (userInputs.highCPRAThreshold === 99) {
+      lowKey = '0-99';
+      highKey = '99-100';
+    } else if (userInputs.highCPRAThreshold === 95) {
+      lowKey = '0-95';
+      highKey = '95-100';
+    } else {
+      // Default to 85
+      lowKey = '0-85';
+      highKey = '85-100';
+    }
     
     // Special rule: If xeno_proportion is 0, always search for multipliers = 0
     // (base case - no xenotransplantation, so rates don't matter)

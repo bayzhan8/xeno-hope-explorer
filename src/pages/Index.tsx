@@ -71,11 +71,21 @@ const Index = () => {
 
         // Load base case data if comparison is available
         let baseVizData = null;
-        if (vizData.has_comparison && vizData.base_config_name) {
+        let baseConfigName = vizData.base_config_name;
+        
+        // If base_config_name is not set, determine it automatically based on CPRA threshold
+        // Use consistent naming pattern: xeno_cpra{threshold}_prop0_relist0_death0
+        if (!baseConfigName) {
+          const cpraThreshold = params.highCPRAThreshold;
+          baseConfigName = `xeno_cpra${cpraThreshold}_prop0_relist0_death0`;
+        }
+        
+        // Try to load base case - always attempt if we have a config name
+        if (baseConfigName) {
           try {
-            baseVizData = await loadVisualizationData(vizData.base_config_name);
+            baseVizData = await loadVisualizationData(baseConfigName);
           } catch (err) {
-            console.warn('Could not load base case data for comparison:', err);
+            console.warn(`Could not load base case data (${baseConfigName}) for comparison:`, err);
           }
         }
 
