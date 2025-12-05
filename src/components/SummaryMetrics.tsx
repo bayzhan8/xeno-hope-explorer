@@ -32,6 +32,14 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
 
   const metrics_data = [
     {
+      title: 'Xeno Transplants',
+      value: `${formatNumber(Math.round(metrics.xenoTransplants / horizon))} / year`,
+      icon: <Activity className="w-5 h-5 text-chart-quaternary" />,
+      trend: getTrendIcon(metrics.xenoTransplants),
+      subtitle: `Average per year over ${horizon} years`,
+      color: 'text-chart-quaternary'
+    },
+    {
       title: 'Waitlist Reduction',
       value: formatNumber(Math.abs(metrics.waitlistReduction)),
       icon: <Users className="w-5 h-5 text-primary" />,
@@ -55,14 +63,6 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon }) => 
       subtitle: `Cumulative transplants over ${horizon} years`,
       color: 'text-chart-secondary'
     },
-    {
-      title: 'Xeno Transplants',
-      value: `${formatNumber(Math.round(metrics.xenoTransplants / horizon))} / year`,
-      icon: <Activity className="w-5 h-5 text-chart-quaternary" />,
-      trend: getTrendIcon(metrics.xenoTransplants),
-      subtitle: `Average per year over ${horizon} years`,
-      color: 'text-chart-quaternary'
-    }
   ];
 
   return (

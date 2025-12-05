@@ -151,9 +151,9 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
               <span>1.5x</span>
               <span>2x</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="space-y-1">
               <p className="text-xs text-muted-foreground">
-                Coefficient multiplied by high cPRA transplant rate
+                Additional xeno transplants as a fraction of high cPRA transplants (added on top)
               </p>
               <button
                 onClick={() => toggleSection('xenoProportion')}
@@ -165,15 +165,16 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
             {expandedSections.xenoProportion && (
               <div className="text-xs text-muted-foreground space-y-2 p-3 bg-muted rounded-md border border-medical-border">
-                <p className="font-medium text-foreground">High cPRA Transplants Per Year</p>
+                <p className="font-medium text-foreground">High cPRA Transplants Per Year (Base Rate)</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>85+ cPRA: 2,933 transplants/year</li>
                   <li>95+ cPRA: 1,812 transplants/year</li>
                   <li>99+ cPRA: 1,048 transplants/year</li>
                 </ul>
                 <p className="mt-2">
-                  The xeno proportion multiplies the number of high-cPRA transplants that become xenotransplants. 
-                  For example, with 1.0x, all high-cPRA transplants would be xenotransplants. With 0.5x, half would be xenotransplants.
+                  This multiplier determines how many additional xeno transplants occur per year, based on the base high-cPRA transplant rate above. 
+                  Standard transplants continue unchanged. For example, with 1.0x and 85+ cPRA, 2,933 additional xeno transplants are added per year. 
+                  With 0.5x, half that number (1,467) are added.
                 </p>
               </div>
             )}

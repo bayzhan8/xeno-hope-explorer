@@ -135,6 +135,18 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-0 py-8">
+        {/* Birds Eye Summary */}
+        <Card className="bg-medical-surface border-medical-border mb-6">
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              This simulator explores how xenotransplantation might impact kidney transplant outcomes for high-cPRA patients. 
+              Using a continuous-time Markov chain model based on 2022 SRTR data, it projects waitlist dynamics, transplant volumes, 
+              and mortality outcomes over a {params.simulationHorizon}-year horizon. Adjust the parameters below to explore different 
+              scenarios for xeno availability, graft failure rates, and post-transplant mortality.
+            </p>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
           {/* Controls Sidebar - Sticky */}
           <div className="xl:col-span-1">
@@ -237,9 +249,9 @@ const Index = () => {
                       </p>
                       <ul className="list-disc list-inside space-y-1 ml-4 mt-2">
                         <li><strong className="text-foreground">C<sub>L</sub></strong> and <strong className="text-foreground">C<sub>H</sub></strong> — Low and high-cPRA candidates waiting on the list</li>
-                        <li><strong className="text-foreground">H<sub>low</sub></strong> — Low-cPRA recipients with human donor kidneys</li>
-                        <li><strong className="text-foreground">H<sub>high</sub></strong> — High-cPRA recipients with standard human donor kidneys</li>
-                        <li><strong className="text-foreground">H<sub>xeno</sub></strong> — High-cPRA recipients with xenotransplanted kidneys</li>
+                        <li><strong className="text-foreground">H<sub>L</sub></strong> — Low-cPRA recipients with human donor kidneys</li>
+                        <li><strong className="text-foreground">H<sub>H_std</sub></strong> — High-cPRA recipients with standard human donor kidneys</li>
+                        <li><strong className="text-foreground">H<sub>H_xeno</sub></strong> — High-cPRA recipients with xenotransplanted kidneys</li>
                         <li><strong className="text-foreground">D</strong> — Deceased (an absorbing state, tracked cumulatively)</li>
                       </ul>
                       <p className="mt-2">
@@ -258,7 +270,7 @@ const Index = () => {
                       </p>
                       <ul className="list-disc list-inside space-y-1 ml-4 mt-1">
                         <li><strong className="text-foreground">Absolute rates</strong> (α<sub>L</sub>, α<sub>H</sub>, τ<sub>L</sub>, τ<sub>H</sub>) — These are fixed numbers, like "91 new patients join the high-cPRA waitlist per day," regardless of how many patients are currently waiting.</li>
-                        <li><strong className="text-foreground">Population-dependent rates</strong> (δ<sub>wl</sub>, δ<sub>h</sub>, δ<sub>x</sub>, ρ, ρ<sub>x</sub>, θ) — These scale with the current population. If 1,000 patients are waiting and the death rate is 0.1% per day, we expect 1 death. If 2,000 are waiting, we expect 2 deaths. For example, waitlist deaths scale as δ<sub>wl</sub> × C, post-transplant deaths as δ<sub>h</sub> × H<sub>high</sub> or δ<sub>x</sub> × H<sub>xeno</sub>, and relisting as ρ × H<sub>low</sub>, ρ × H<sub>high</sub>, or ρ<sub>x</sub> × H<sub>xeno</sub>.</li>
+                        <li><strong className="text-foreground">Population-dependent rates</strong> (δ<sub>wl</sub>, δ<sub>h</sub>, δ<sub>x</sub>, ρ, ρ<sub>x</sub>, θ) — These scale with the current population. If 1,000 patients are waiting and the death rate is 0.1% per day, we expect 1 death. If 2,000 are waiting, we expect 2 deaths.</li>
                       </ul>
                     </div>
 
