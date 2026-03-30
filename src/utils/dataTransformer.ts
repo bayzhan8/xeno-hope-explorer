@@ -824,10 +824,18 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
 
   // 9. Net deaths prevented per year (from backend)
   if (vizData.net_deaths_prevented_per_year && vizData.net_deaths_prevented_per_year.x && vizData.net_deaths_prevented_per_year.series && vizData.net_deaths_prevented_per_year.x.length > 0) {
+    console.log('[dataTransformer] Parsing net_deaths_prevented_per_year');
+    console.log('  x:', vizData.net_deaths_prevented_per_year.x);
+    console.log('  series count:', vizData.net_deaths_prevented_per_year.series.length);
+
     const lowSeries = aggregateAgeSeries(vizData.net_deaths_prevented_per_year.series, 'low cpra');
     const highSeries = aggregateAgeSeries(vizData.net_deaths_prevented_per_year.series, 'high cpra');
     const totalSeries = findSeries(vizData.net_deaths_prevented_per_year.series, ['total']);
     const xData = vizData.net_deaths_prevented_per_year.x; // Already in years
+
+    console.log('  lowSeries:', lowSeries ? 'found' : 'NOT FOUND');
+    console.log('  highSeries:', highSeries ? 'found' : 'NOT FOUND');
+    console.log('  totalSeries:', totalSeries ? 'found' : 'NOT FOUND');
 
     if ((lowSeries && lowSeries.length > 0) || (totalSeries && totalSeries.length > 0)) {
       // Clear existing data and use backend data
@@ -841,6 +849,10 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
           total: totalSeries ? totalSeries[i] || 0 : 0,
         });
       }
+      console.log('  Parsed netDeathsPreventedPerYearData:', result.netDeathsPreventedPerYearData.length, 'entries');
+      console.log('  Sample:', result.netDeathsPreventedPerYearData[0]);
+    } else {
+      console.log('  No valid series found for net deaths prevented');
     }
   }
 
