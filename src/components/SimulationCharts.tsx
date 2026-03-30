@@ -37,8 +37,30 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     baseHighCPRA: true,
   });
 
+  const [recipientsSeriesVisible, setRecipientsSeriesVisible] = useState<Record<string, boolean>>({
+    lowHuman: true,
+    highHuman: true,
+    highXeno: true,
+  });
+
+  const [deathsSeriesVisible, setDeathsSeriesVisible] = useState<Record<string, boolean>>({
+    lowWaitlist: true,
+    highWaitlist: true,
+    lowPostTx: true,
+    highPostTx: true,
+    total: true,
+  });
+
   const toggleWaitlistSeries = (key: string, visible: boolean) => {
     setWaitlistSeriesVisible(prev => ({ ...prev, [key]: visible }));
+  };
+
+  const toggleRecipientsSeries = (key: string, visible: boolean) => {
+    setRecipientsSeriesVisible(prev => ({ ...prev, [key]: visible }));
+  };
+
+  const toggleDeathsSeries = (key: string, visible: boolean) => {
+    setDeathsSeriesVisible(prev => ({ ...prev, [key]: visible }));
   };
 
   // Filter data to only include years up to simulationHorizon
@@ -117,24 +139,6 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <p className="text-xs text-muted-foreground mt-1.5">Total patients waiting, stratified by cPRA level</p>
         </CardHeader>
         <CardContent className="p-4">
-          <ChartSeriesToggle
-            series={[
-              { key: 'total', label: 'Total (Xeno)', color: COLORS.primary },
-              { key: 'lowCPRA', label: `Low CPRA (Xeno)`, color: COLORS.secondary },
-              { key: 'highCPRA', label: `High CPRA (Xeno)`, color: COLORS.tertiary },
-              ...(filteredData.waitlistData.some(d => d.baseTotal !== undefined)
-                ? [{ key: 'baseTotal', label: 'Total (Base)', color: COLORS.primary }]
-                : []),
-              ...(filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined)
-                ? [{ key: 'baseLowCPRA', label: 'Low CPRA (Base)', color: COLORS.secondary }]
-                : []),
-              ...(filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined)
-                ? [{ key: 'baseHighCPRA', label: 'High CPRA (Base)', color: COLORS.tertiary }]
-                : []),
-            ]}
-            visible={waitlistSeriesVisible}
-            onChange={toggleWaitlistSeries}
-          />
           <ResponsiveContainer width="100%" height={390}>
             <LineChart data={filteredData.waitlistData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
@@ -219,6 +223,24 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               )}
             </LineChart>
           </ResponsiveContainer>
+          <ChartSeriesToggle
+            series={[
+              { key: 'total', label: 'Total (Xeno)', color: COLORS.primary },
+              { key: 'lowCPRA', label: `Low CPRA (Xeno)`, color: COLORS.secondary },
+              { key: 'highCPRA', label: `High CPRA (Xeno)`, color: COLORS.tertiary },
+              ...(filteredData.waitlistData.some(d => d.baseTotal !== undefined)
+                ? [{ key: 'baseTotal', label: 'Total (Base)', color: COLORS.primary }]
+                : []),
+              ...(filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined)
+                ? [{ key: 'baseLowCPRA', label: 'Low CPRA (Base)', color: COLORS.secondary }]
+                : []),
+              ...(filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined)
+                ? [{ key: 'baseHighCPRA', label: 'High CPRA (Base)', color: COLORS.tertiary }]
+                : []),
+            ]}
+            visible={waitlistSeriesVisible}
+            onChange={toggleWaitlistSeries}
+          />
         </CardContent>
       </Card>
 
@@ -291,11 +313,26 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               />
               <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
               <Tooltip content={<CustomTooltip />} />
-              <Line type="monotone" dataKey="lowHuman" stroke={COLORS.secondary} name="Low cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
-              <Line type="monotone" dataKey="highHuman" stroke={COLORS.primary} name="High cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
-              <Line type="monotone" dataKey="highXeno" stroke={COLORS.quaternary} name="High cPRA (xeno)" strokeWidth={3} dot={{ r: 0.3 }} />
+              {recipientsSeriesVisible.lowHuman && (
+                <Line type="monotone" dataKey="lowHuman" stroke={COLORS.secondary} name="Low cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
+              )}
+              {recipientsSeriesVisible.highHuman && (
+                <Line type="monotone" dataKey="highHuman" stroke={COLORS.primary} name="High cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
+              )}
+              {recipientsSeriesVisible.highXeno && (
+                <Line type="monotone" dataKey="highXeno" stroke={COLORS.quaternary} name="High cPRA (xeno)" strokeWidth={3} dot={{ r: 0.3 }} />
+              )}
             </LineChart>
           </ResponsiveContainer>
+          <ChartSeriesToggle
+            series={[
+              { key: 'lowHuman', label: 'Low cPRA (human)', color: COLORS.secondary },
+              { key: 'highHuman', label: 'High cPRA (human)', color: COLORS.primary },
+              { key: 'highXeno', label: 'High cPRA (xeno)', color: COLORS.quaternary },
+            ]}
+            visible={recipientsSeriesVisible}
+            onChange={toggleRecipientsSeries}
+          />
         </CardContent>
       </Card>
 
@@ -319,13 +356,34 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               />
               <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
               <Tooltip content={<CustomTooltip />} />
-              <Line type="monotone" dataKey="lowWaitlist" stroke={COLORS.secondary} name="Low cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
-              <Line type="monotone" dataKey="highWaitlist" stroke={COLORS.primary} name="High cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
-              <Line type="monotone" dataKey="lowPostTx" stroke={COLORS.tertiary} name="Low cPRA post-tx" strokeWidth={2} dot={{ r: 0.15 }} />
-              <Line type="monotone" dataKey="highPostTx" stroke={COLORS.quaternary} name="High cPRA post-tx" strokeWidth={2} dot={{ r: 0.15 }} />
-              <Line type="monotone" dataKey="total" stroke={COLORS.primary} name="Total" strokeWidth={3} dot={{ r: 0.3 }} />
+              {deathsSeriesVisible.lowWaitlist && (
+                <Line type="monotone" dataKey="lowWaitlist" stroke={COLORS.secondary} name="Low cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
+              )}
+              {deathsSeriesVisible.highWaitlist && (
+                <Line type="monotone" dataKey="highWaitlist" stroke={COLORS.primary} name="High cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
+              )}
+              {deathsSeriesVisible.lowPostTx && (
+                <Line type="monotone" dataKey="lowPostTx" stroke={COLORS.tertiary} name="Low cPRA post-tx" strokeWidth={2} dot={{ r: 0.15 }} />
+              )}
+              {deathsSeriesVisible.highPostTx && (
+                <Line type="monotone" dataKey="highPostTx" stroke={COLORS.quaternary} name="High cPRA post-tx" strokeWidth={2} dot={{ r: 0.15 }} />
+              )}
+              {deathsSeriesVisible.total && (
+                <Line type="monotone" dataKey="total" stroke={COLORS.primary} name="Total" strokeWidth={3} dot={{ r: 0.3 }} />
+              )}
             </LineChart>
           </ResponsiveContainer>
+          <ChartSeriesToggle
+            series={[
+              { key: 'lowWaitlist', label: 'Low cPRA waitlist', color: COLORS.secondary },
+              { key: 'highWaitlist', label: 'High cPRA waitlist', color: COLORS.primary },
+              { key: 'lowPostTx', label: 'Low cPRA post-tx', color: COLORS.tertiary },
+              { key: 'highPostTx', label: 'High cPRA post-tx', color: COLORS.quaternary },
+              { key: 'total', label: 'Total', color: COLORS.primary },
+            ]}
+            visible={deathsSeriesVisible}
+            onChange={toggleDeathsSeries}
+          />
         </CardContent>
       </Card>
 
