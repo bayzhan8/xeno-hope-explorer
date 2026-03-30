@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip, ScatterChart, Scatter } from 'recharts';
 import { ChartSeriesToggle } from './ChartSeriesToggle';
+import { AgeGroupToggle, AGE_GROUPS } from './AgeGroupToggle';
 
 interface SimulationData {
   waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number; baseHighCPRA?: number; baseLowCPRA?: number; baseTotal?: number }>;
@@ -18,6 +19,9 @@ interface SimulationData {
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
   netDeathsPreventedPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   waitlistDeathsPerYearData: Array<{ year: number; waitlistDeaths: number; baseWaitlistDeaths?: number }>;
+  // Age-specific data (optional)
+  waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
+  netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
 }
 
 interface SimulationChartsProps {
@@ -56,6 +60,16 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     baseHighCPRA: true,
   });
 
+  // Age group visibility state
+  const [ageGroupsVisible, setAgeGroupsVisible] = useState<Record<string, boolean>>({
+    age0_18: true,
+    age18_45: true,
+    age45_60: true,
+    age60plus: true,
+  });
+
+  const [ageBreakdownExpanded, setAgeBreakdownExpanded] = useState(false);
+
   const toggleWaitlistSeries = (key: string, visible: boolean) => {
     setWaitlistSeriesVisible(prev => ({ ...prev, [key]: visible }));
   };
@@ -70,6 +84,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
 
   const toggleComparisonSeries = (key: string, visible: boolean) => {
     setComparisonSeriesVisible(prev => ({ ...prev, [key]: visible }));
+  };
+
+  const toggleAgeGroup = (key: string, visible: boolean) => {
+    setAgeGroupsVisible(prev => ({ ...prev, [key]: visible }));
   };
 
   // Filter data to only include years up to simulationHorizon
@@ -93,6 +111,9 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     deathsPerDayData: filterByYear(data.deathsPerDayData),
     netDeathsPreventedPerYearData: filterByYear(data.netDeathsPreventedPerYearData),
     waitlistDeathsPerYearData: data.waitlistDeathsPerYearData.filter(d => d.year <= simulationHorizon),
+    // Age-specific data (optional)
+    waitlistDataByAge: data.waitlistDataByAge ? filterByYear(data.waitlistDataByAge) : undefined,
+    netDeathsPreventedByAge: data.netDeathsPreventedByAge ? filterByYear(data.netDeathsPreventedByAge) : undefined,
   };
 
   // Dynamic x-axis configuration based on horizon

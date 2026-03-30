@@ -49,6 +49,9 @@ interface SimulationData {
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
   netDeathsPreventedPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   waitlistDeathsPerYearData: Array<{ year: number; waitlistDeaths: number; baseWaitlistDeaths?: number }>;
+  // Age-specific data (optional)
+  waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
+  netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
 }
 
 // Convert days to years (assuming 365 days per year)
@@ -106,6 +109,35 @@ function findSeries(series: Array<{ label: string; y: number[] }>, patterns: str
     if (found && found.y && Array.isArray(found.y)) return found.y;
   }
   return null;
+}
+
+// Extract individual age group series for a cPRA group
+// Returns object with age groups or null if no age data found
+function extractAgeGroupSeries(series: Array<{ label: string; y: number[] }>, cpraPattern: string): Record<string, number[]> | null {
+  if (!series || !Array.isArray(series)) return null;
+
+  const ageGroups: Record<string, number[]> = {};
+  const agePatterns = [
+    { key: 'age0_18', pattern: 'age 0-18' },
+    { key: 'age18_45', pattern: 'age 18-45' },
+    { key: 'age45_60', pattern: 'age 45-60' },
+    { key: 'age60plus', pattern: 'age 60+' }
+  ];
+
+  for (const { key, pattern } of agePatterns) {
+    const found = series.find(s => {
+      if (!s || !s.label || typeof s.label !== 'string') return false;
+      const label = s.label.toLowerCase();
+      return label.includes(cpraPattern.toLowerCase()) && label.includes(pattern);
+    });
+
+    if (found && found.y && Array.isArray(found.y)) {
+      ageGroups[key] = found.y;
+    }
+  }
+
+  // Return null if no age data found
+  return Object.keys(ageGroups).length > 0 ? ageGroups : null;
 }
 
 // Find and aggregate all age-stratified series for a cPRA group
@@ -266,6 +298,36 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
         baseLowCPRA,
         baseTotal,
       });
+    }
+
+    // Extract age-specific waitlist data (optional)
+    const lowAgeGroups = extractAgeGroupSeries(vizData.waitlist_sizes.series, 'low cpra');
+    const highAgeGroups = extractAgeGroupSeries(vizData.waitlist_sizes.series, 'high cpra');
+
+    if (lowAgeGroups || highAgeGroups) {
+      result.waitlistDataByAge = [];
+      for (let i = 0; i < years.length; i++) {
+        const lowCPRAByAge: Record<string, number> = {};
+        const highCPRAByAge: Record<string, number> = {};
+
+        if (lowAgeGroups) {
+          for (const [ageKey, ageData] of Object.entries(lowAgeGroups)) {
+            lowCPRAByAge[ageKey] = sampleData(ageData, targetPoints)[i] || 0;
+          }
+        }
+
+        if (highAgeGroups) {
+          for (const [ageKey, ageData] of Object.entries(highAgeGroups)) {
+            highCPRAByAge[ageKey] = sampleData(ageData, targetPoints)[i] || 0;
+          }
+        }
+
+        result.waitlistDataByAge.push({
+          year: Math.round(years[i] * 100) / 100,
+          lowCPRA: lowCPRAByAge,
+          highCPRA: highCPRAByAge,
+        });
+      }
     }
   }
 
@@ -630,6 +692,46 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
       }
       console.log('  ✓✓✓ SUCCESS! Parsed', result.netDeathsPreventedPerYearData.length, 'years of data');
       console.log('  Sample data:', result.netDeathsPreventedPerYearData[0]);
+
+      // Extract age-specific net deaths prevented data (optional)
+      const lowAgeGroups = extractAgeGroupSeries(vizData.net_deaths_prevented_per_year.series, 'low cpra');
+      const highAgeGroups = extractAgeGroupSeries(vizData.net_deaths_prevented_per_year.series, 'high cpra');
+      const totalAgeGroups = extractAgeGroupSeries(vizData.net_deaths_prevented_per_year.series, 'total');
+
+      if (lowAgeGroups || highAgeGroups || totalAgeGroups) {
+        result.netDeathsPreventedByAge = [];
+        for (let i = 0; i < xData.length; i++) {
+          const lowByAge: Record<string, number> = {};
+          const highByAge: Record<string, number> = {};
+          const totalByAge: Record<string, number> = {};
+
+          if (lowAgeGroups) {
+            for (const [ageKey, ageData] of Object.entries(lowAgeGroups)) {
+              lowByAge[ageKey] = ageData[i] || 0;
+            }
+          }
+
+          if (highAgeGroups) {
+            for (const [ageKey, ageData] of Object.entries(highAgeGroups)) {
+              highByAge[ageKey] = ageData[i] || 0;
+            }
+          }
+
+          if (totalAgeGroups) {
+            for (const [ageKey, ageData] of Object.entries(totalAgeGroups)) {
+              totalByAge[ageKey] = ageData[i] || 0;
+            }
+          }
+
+          result.netDeathsPreventedByAge.push({
+            year: xData[i] + 1,
+            lowCPRA: lowByAge,
+            highCPRA: highByAge,
+            total: totalByAge,
+          });
+        }
+        console.log('  ✓ Age-specific data parsed:', result.netDeathsPreventedByAge.length, 'years');
+      }
     } else {
       console.log('  ✗✗✗ FAILED - totalSeries is empty or not found');
     }
