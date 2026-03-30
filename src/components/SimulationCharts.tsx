@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip, ScatterChart, Scatter } from 'recharts';
+import { ChartSeriesToggle } from './ChartSeriesToggle';
 
 interface SimulationData {
   waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number; baseHighCPRA?: number; baseLowCPRA?: number; baseTotal?: number }>;
@@ -26,6 +27,20 @@ interface SimulationChartsProps {
 }
 
 const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThreshold, simulationHorizon }) => {
+  // State for toggling chart series visibility
+  const [waitlistSeriesVisible, setWaitlistSeriesVisible] = useState<Record<string, boolean>>({
+    total: true,
+    lowCPRA: true,
+    highCPRA: true,
+    baseTotal: true,
+    baseLowCPRA: true,
+    baseHighCPRA: true,
+  });
+
+  const toggleWaitlistSeries = (key: string, visible: boolean) => {
+    setWaitlistSeriesVisible(prev => ({ ...prev, [key]: visible }));
+  };
+
   // Filter data to only include years up to simulationHorizon
   const filterByYear = <T extends { year: number }>(arr: T[]): T[] => {
     return arr.filter(item => item.year <= simulationHorizon);
@@ -101,6 +116,24 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <CardTitle className="text-lg font-semibold text-primary">Waitlist Size Over Time</CardTitle>
         </CardHeader>
         <CardContent className="p-4">
+          <ChartSeriesToggle
+            series={[
+              { key: 'total', label: 'Total (Xeno)', color: COLORS.primary },
+              { key: 'lowCPRA', label: `Low CPRA (Xeno)`, color: COLORS.secondary },
+              { key: 'highCPRA', label: `High CPRA (Xeno)`, color: COLORS.tertiary },
+              ...(filteredData.waitlistData.some(d => d.baseTotal !== undefined)
+                ? [{ key: 'baseTotal', label: 'Total (Base)', color: COLORS.primary }]
+                : []),
+              ...(filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined)
+                ? [{ key: 'baseLowCPRA', label: 'Low CPRA (Base)', color: COLORS.secondary }]
+                : []),
+              ...(filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined)
+                ? [{ key: 'baseHighCPRA', label: 'High CPRA (Base)', color: COLORS.tertiary }]
+                : []),
+            ]}
+            visible={waitlistSeriesVisible}
+            onChange={toggleWaitlistSeries}
+          />
           <ResponsiveContainer width="100%" height={390}>
             <LineChart data={filteredData.waitlistData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
@@ -123,32 +156,38 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 wrapperStyle={{ paddingTop: '20px' }}
                 iconType="line"
               />
-              <Line
-                type="monotone"
-                dataKey="total"
-                stroke={COLORS.primary}
-                strokeWidth={3}
-                name="Total Waitlist (Xeno)"
-                dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1.5 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="lowCPRA"
-                stroke={COLORS.secondary}
-                strokeWidth={2}
-                name={`Low CPRA (0-${highCPRAThreshold}%) - Xeno`}
-                dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 1 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="highCPRA"
-                stroke={COLORS.tertiary}
-                strokeWidth={2}
-                name={`High CPRA (${highCPRAThreshold}-100%) - Xeno`}
-                dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1 }}
-              />
+              {waitlistSeriesVisible.total && (
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  stroke={COLORS.primary}
+                  strokeWidth={3}
+                  name="Total Waitlist (Xeno)"
+                  dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1.5 }}
+                />
+              )}
+              {waitlistSeriesVisible.lowCPRA && (
+                <Line
+                  type="monotone"
+                  dataKey="lowCPRA"
+                  stroke={COLORS.secondary}
+                  strokeWidth={2}
+                  name={`Low CPRA (0-${highCPRAThreshold}%) - Xeno`}
+                  dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 1 }}
+                />
+              )}
+              {waitlistSeriesVisible.highCPRA && (
+                <Line
+                  type="monotone"
+                  dataKey="highCPRA"
+                  stroke={COLORS.tertiary}
+                  strokeWidth={2}
+                  name={`High CPRA (${highCPRAThreshold}-100%) - Xeno`}
+                  dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1 }}
+                />
+              )}
               {/* Base case comparison lines (dashed) */}
-              {filteredData.waitlistData.some(d => d.baseTotal !== undefined) && (
+              {waitlistSeriesVisible.baseTotal && filteredData.waitlistData.some(d => d.baseTotal !== undefined) && (
                 <Line
                   type="monotone"
                   dataKey="baseTotal"
@@ -159,7 +198,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1 }}
                 />
               )}
-              {filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined) && (
+              {waitlistSeriesVisible.baseLowCPRA && filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined) && (
                 <Line
                   type="monotone"
                   dataKey="baseLowCPRA"
@@ -170,7 +209,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 0.8 }}
                 />
               )}
-              {filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined) && (
+              {waitlistSeriesVisible.baseHighCPRA && filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined) && (
                 <Line
                   type="monotone"
                   dataKey="baseHighCPRA"
