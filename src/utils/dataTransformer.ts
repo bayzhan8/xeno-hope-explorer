@@ -496,10 +496,20 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
 
   // 4. Deaths per day
   if (vizData.deaths_per_day && vizData.deaths_per_day.series && vizData.deaths_per_day.x && vizData.deaths_per_day.x.length > 0) {
-    const lowSeries = findSeries(vizData.deaths_per_day.series, ['low cpra deaths/day', 'low cpra deaths']);
-    const highSeries = findSeries(vizData.deaths_per_day.series, ['high cpra deaths/day', 'high cpra deaths']);
-    const totalSeries = findSeries(vizData.deaths_per_day.series, ['total deaths/day', 'total deaths']);
-    
+    // Try age-aggregated first (for age-stratified data)
+    let lowSeries = aggregateAgeSeries(vizData.deaths_per_day.series, 'low cpra');
+    let highSeries = aggregateAgeSeries(vizData.deaths_per_day.series, 'high cpra');
+
+    // Fall back to non-age search if no age data
+    if (!lowSeries) {
+      lowSeries = findSeries(vizData.deaths_per_day.series, ['low cpra deaths/day', 'low cpra deaths']);
+    }
+    if (!highSeries) {
+      highSeries = findSeries(vizData.deaths_per_day.series, ['high cpra deaths/day', 'high cpra deaths']);
+    }
+
+    const totalSeries = findSeries(vizData.deaths_per_day.series, ['total deaths/day', 'total deaths', 'total']);
+
     // Sample to monthly resolution
     const maxDays = Math.max(...vizData.deaths_per_day.x);
     const maxYears = daysToYears(maxDays);
@@ -509,12 +519,12 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     const sampledHigh = highSeries ? sampleData(highSeries, targetPoints) : [];
     const sampledTotal = totalSeries ? sampleData(totalSeries, targetPoints) : [];
     const years = sampledDays.map(daysToYears);
-    
+
     for (let i = 0; i < years.length; i++) {
       const low = sampledLow[i] || 0;
       const high = sampledHigh[i] || 0;
       const total = sampledTotal[i] || (low + high);
-      
+
       result.deathsPerDayData.push({
         year: Math.round(years[i] * 100) / 100,
         low,
