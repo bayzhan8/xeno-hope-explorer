@@ -544,11 +544,12 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
       const totalSeries = findSeries(vizData.deaths_per_year.series, ['total']);
 
       const xData = vizData.deaths_per_year.x;
-      const years = xData.map(daysToYears);
+      // x is already in years (0, 1, 2, ...), not days
+      const years = xData;
 
       for (let i = 0; i < years.length; i++) {
         result.deathsPerYearData.push({
-          year: Math.round(years[i] * 100) / 100,
+          year: years[i],
           low: lowSeries ? lowSeries[i] || 0 : 0,
           high: highSeries ? highSeries[i] || 0 : 0,
           total: totalSeries ? totalSeries[i] || 0 : 0,
@@ -779,6 +780,54 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     // Waiting time
     if (!result.waitingTimeData.find(d => d.year === year)) {
       result.waitingTimeData.push({ year, averageWaitingTime: 0 });
+    }
+  }
+
+  // Parse new backend-generated fields (if available - overrides computed values)
+  // 8. Waitlist deaths per year (from backend)
+  if (vizData.waitlist_deaths_per_year && vizData.waitlist_deaths_per_year.x && vizData.waitlist_deaths_per_year.series && vizData.waitlist_deaths_per_year.x.length > 0) {
+    const totalSeries = findSeries(vizData.waitlist_deaths_per_year.series, ['total waitlist deaths']);
+    const xData = vizData.waitlist_deaths_per_year.x; // Already in years
+
+    if (totalSeries && totalSeries.length > 0) {
+      // Clear existing data and use backend data
+      result.waitlistDeathsPerYearData = [];
+
+      // Also get base case if available
+      let baseTotalSeries = null;
+      if (baseVizData && baseVizData.waitlist_deaths_per_year && baseVizData.waitlist_deaths_per_year.series) {
+        baseTotalSeries = findSeries(baseVizData.waitlist_deaths_per_year.series, ['total waitlist deaths']);
+      }
+
+      for (let i = 0; i < xData.length; i++) {
+        result.waitlistDeathsPerYearData.push({
+          year: xData[i] + 1, // Convert 0-based to 1-based
+          waitlistDeaths: totalSeries[i] || 0,
+          baseWaitlistDeaths: baseTotalSeries ? (baseTotalSeries[i] || 0) : undefined,
+        });
+      }
+    }
+  }
+
+  // 9. Net deaths prevented per year (from backend)
+  if (vizData.net_deaths_prevented_per_year && vizData.net_deaths_prevented_per_year.x && vizData.net_deaths_prevented_per_year.series && vizData.net_deaths_prevented_per_year.x.length > 0) {
+    const lowSeries = aggregateAgeSeries(vizData.net_deaths_prevented_per_year.series, 'low cpra');
+    const highSeries = aggregateAgeSeries(vizData.net_deaths_prevented_per_year.series, 'high cpra');
+    const totalSeries = findSeries(vizData.net_deaths_prevented_per_year.series, ['total']);
+    const xData = vizData.net_deaths_prevented_per_year.x; // Already in years
+
+    if ((lowSeries && lowSeries.length > 0) || (totalSeries && totalSeries.length > 0)) {
+      // Clear existing data and use backend data
+      result.netDeathsPreventedPerYearData = [];
+
+      for (let i = 0; i < xData.length; i++) {
+        result.netDeathsPreventedPerYearData.push({
+          year: xData[i] + 1, // Convert 0-based to 1-based
+          low: lowSeries ? lowSeries[i] || 0 : 0,
+          high: highSeries ? highSeries[i] || 0 : 0,
+          total: totalSeries ? totalSeries[i] || 0 : 0,
+        });
+      }
     }
   }
 
