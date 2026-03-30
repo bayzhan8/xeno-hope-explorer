@@ -90,6 +90,34 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     setAgeGroupsVisible(prev => ({ ...prev, [key]: visible }));
   };
 
+  // Helper: Prepare age-specific data for charts
+  const prepareAgeDataForChart = (ageData: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total?: Record<string, number> }> | undefined) => {
+    if (!ageData || ageData.length === 0) return [];
+
+    return ageData.map(yearData => {
+      const chartPoint: any = { year: yearData.year };
+
+      // Add low cPRA age groups with prefix
+      for (const [ageKey, value] of Object.entries(yearData.lowCPRA)) {
+        chartPoint[`lowCPRA_${ageKey}`] = value;
+      }
+
+      // Add high cPRA age groups with prefix
+      for (const [ageKey, value] of Object.entries(yearData.highCPRA)) {
+        chartPoint[`highCPRA_${ageKey}`] = value;
+      }
+
+      // Add total age groups if available
+      if (yearData.total) {
+        for (const [ageKey, value] of Object.entries(yearData.total)) {
+          chartPoint[`total_${ageKey}`] = value;
+        }
+      }
+
+      return chartPoint;
+    });
+  };
+
   // Filter data to only include years up to simulationHorizon
   const filterByYear = <T extends { year: number }>(arr: T[]): T[] => {
     return arr.filter(item => item.year <= simulationHorizon);
@@ -545,28 +573,71 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
-            <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-              <XAxis 
-                type="number"
-                dataKey="year" 
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12 }}
-                domain={xAxisDomain}
-                ticks={xAxisTicks}
-                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
-              />
-              <YAxis 
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12 }}
-                label={{ value: 'Deaths Prevented', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="low" fill="#86efac" name="Low cPRA Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="high" fill="#22c55e" name="High cPRA Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="total" fill="#15803d" name="Total Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
-            </BarChart>
+            {ageBreakdownExpanded && filteredData.netDeathsPreventedByAge ? (
+              <LineChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: 'Deaths Prevented', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                {/* High cPRA age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`highCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`highCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2}
+                    name={`High cPRA ${group.label}y`}
+                    dot={{ r: 3 }}
+                  />
+                ))}
+              </LineChart>
+            ) : (
+              <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: 'Deaths Prevented', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="low" fill="#86efac" name="Low cPRA Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="high" fill="#22c55e" name="High cPRA Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="total" fill="#15803d" name="Total Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            )}
           </ResponsiveContainer>
+
+          {/* Age Group Toggle */}
+          {filteredData.netDeathsPreventedByAge && (
+            <AgeGroupToggle
+              visible={ageGroupsVisible}
+              onChange={toggleAgeGroup}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
+            />
+          )}
         </CardContent>
       </Card>
 
