@@ -589,14 +589,35 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
 
   // 6. Net deaths prevented per year
   // PRIORITY: Use backend-generated data if available (age-stratified format)
+  console.log('[dataTransformer] Checking for net_deaths_prevented_per_year...');
+  console.log('  exists:', !!vizData.net_deaths_prevented_per_year);
+  if (vizData.net_deaths_prevented_per_year) {
+    console.log('  has x:', !!vizData.net_deaths_prevented_per_year.x);
+    console.log('  has series:', !!vizData.net_deaths_prevented_per_year.series);
+    console.log('  x length:', vizData.net_deaths_prevented_per_year.x?.length);
+    console.log('  series length:', vizData.net_deaths_prevented_per_year.series?.length);
+    if (vizData.net_deaths_prevented_per_year.series && vizData.net_deaths_prevented_per_year.series.length > 0) {
+      console.log('  First 3 series labels:');
+      vizData.net_deaths_prevented_per_year.series.slice(0, 3).forEach((s: any, i: number) => {
+        console.log(`    [${i}] ${s.label}`);
+      });
+      console.log('  Last series label:', vizData.net_deaths_prevented_per_year.series[vizData.net_deaths_prevented_per_year.series.length - 1].label);
+    }
+  }
+
   if (vizData.net_deaths_prevented_per_year && vizData.net_deaths_prevented_per_year.x && vizData.net_deaths_prevented_per_year.series && vizData.net_deaths_prevented_per_year.x.length > 0) {
-    console.log('[dataTransformer] Using backend-generated net_deaths_prevented_per_year');
+    console.log('[dataTransformer] ✓ Using backend-generated net_deaths_prevented_per_year');
     const lowSeries = aggregateAgeSeries(vizData.net_deaths_prevented_per_year.series, 'low cpra');
     const highSeries = aggregateAgeSeries(vizData.net_deaths_prevented_per_year.series, 'high cpra');
     const totalSeries = findSeries(vizData.net_deaths_prevented_per_year.series, ['total']);
     const xData = vizData.net_deaths_prevented_per_year.x;
 
-    console.log('  Series found - low:', !!lowSeries, 'high:', !!highSeries, 'total:', !!totalSeries);
+    console.log('  lowSeries:', lowSeries ? `found (length: ${lowSeries.length})` : 'NOT FOUND');
+    console.log('  highSeries:', highSeries ? `found (length: ${highSeries.length})` : 'NOT FOUND');
+    console.log('  totalSeries:', totalSeries ? `found (length: ${totalSeries.length})` : 'NOT FOUND');
+    if (totalSeries) {
+      console.log('  totalSeries sample values:', totalSeries.slice(0, 3));
+    }
 
     if (totalSeries && totalSeries.length > 0) {
       for (let i = 0; i < xData.length; i++) {
@@ -607,8 +628,13 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
           total: totalSeries[i] || 0,
         });
       }
-      console.log('  ✓ Parsed', result.netDeathsPreventedPerYearData.length, 'years of data');
+      console.log('  ✓✓✓ SUCCESS! Parsed', result.netDeathsPreventedPerYearData.length, 'years of data');
+      console.log('  Sample data:', result.netDeathsPreventedPerYearData[0]);
+    } else {
+      console.log('  ✗✗✗ FAILED - totalSeries is empty or not found');
     }
+  } else {
+    console.log('  ✗ net_deaths_prevented_per_year not available or incomplete');
   }
   // FALLBACK: Calculate from cumulative waitlist deaths (old non-age format)
   else if (baseVizData && vizData.cumulative_deaths && vizData.cumulative_deaths.series && baseVizData.cumulative_deaths && baseVizData.cumulative_deaths.series) {
