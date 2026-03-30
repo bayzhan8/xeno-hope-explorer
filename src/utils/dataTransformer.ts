@@ -633,11 +633,11 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     } else {
       console.log('  ✗✗✗ FAILED - totalSeries is empty or not found');
     }
-  } else {
-    console.log('  ✗ net_deaths_prevented_per_year not available or incomplete');
   }
   // FALLBACK: Calculate from cumulative waitlist deaths (old non-age format)
   else if (baseVizData && vizData.cumulative_deaths && vizData.cumulative_deaths.series && baseVizData.cumulative_deaths && baseVizData.cumulative_deaths.series) {
+    console.log('[dataTransformer] Using fallback calculation from cumulative_deaths');
+
     const yearDays = 365;
 
     // Get total days for comparison
