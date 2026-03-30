@@ -90,17 +90,20 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             <Label className="text-sm font-medium">High CPRA Definition</Label>
             <div className="flex gap-2">
               <button
+                type="button"
                 disabled
                 className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-muted text-muted-foreground cursor-not-allowed opacity-50"
               >
                 85%+
               </button>
               <button
+                type="button"
                 className="flex-1 px-3 py-2 text-sm font-medium rounded-md border-2 border-primary bg-primary text-primary-foreground"
               >
                 95%+
               </button>
               <button
+                type="button"
                 disabled
                 className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-muted text-muted-foreground cursor-not-allowed opacity-50"
               >
@@ -141,6 +144,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 Additional xeno transplants as a fraction of high cPRA transplants (added on top)
               </p>
               <button
+                type="button"
                 onClick={() => toggleSection('xenoProportion')}
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
@@ -194,6 +198,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 Coefficient multiplied by high cPRA graft failure rate
               </p>
               <button
+                type="button"
                 onClick={() => toggleSection('graftFailure')}
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
@@ -254,6 +259,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 Coefficient multiplied by high cPRA post-transplant death rate
               </p>
               <button
+                type="button"
                 onClick={() => toggleSection('postTxDeath')}
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
