@@ -85,15 +85,31 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
         <CardContent className="space-y-6 p-4 overflow-y-auto flex-1">
 
 
-          {/* High CPRA Definition - Fixed at 95% for age-stratified data */}
+          {/* High CPRA Definition - Currently fixed at 95% */}
           <div className="space-y-3 pb-4 border-b border-medical-border">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">High CPRA Definition</Label>
-              <span className="text-sm font-semibold text-primary">{params.highCPRAThreshold}%+</span>
+            <Label className="text-sm font-medium">High CPRA Definition</Label>
+            <div className="flex gap-2">
+              <button
+                disabled
+                className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+              >
+                85%+
+              </button>
+              <button
+                className="flex-1 px-3 py-2 text-sm font-medium rounded-md border-2 border-primary bg-primary text-primary-foreground"
+              >
+                95%+
+              </button>
+              <button
+                disabled
+                className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+              >
+                99%+
+              </button>
             </div>
             <div className="text-xs text-muted-foreground flex items-start gap-2">
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-              <span>Age-stratified data uses 95% cPRA threshold (fixed). Patients with cPRA ≥95% are considered highly sensitized.</span>
+              <span>Currently fixed at 95% for age-stratified data. 85% and 99% thresholds coming soon.</span>
             </div>
           </div>
 
