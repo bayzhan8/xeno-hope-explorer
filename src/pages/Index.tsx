@@ -122,23 +122,23 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-medical-border bg-card shadow-[var(--shadow-soft)]">
-        <div className="container mx-auto px-3 py-4">
+      <header className="sticky top-0 z-50 border-b border-medical-border bg-card/95 backdrop-blur-sm shadow-sm transition-shadow">
+        <div className="container mx-auto px-4 py-5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-lg">
-                <Beaker className="w-6 h-6 text-primary-foreground" />
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-primary to-primary/80 rounded-xl shadow-md">
+                <Beaker className="w-7 h-7 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-primary">Xeno Kidney Impact Simulator</h1>
-                <p className="text-sm text-muted-foreground">
-                  Exploring xenotransplantation outcomes for high-CPRA ({params.highCPRAThreshold}%+) patients
+                <h1 className="text-2xl font-bold text-primary tracking-tight">Xeno Kidney Impact Simulator</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Age-stratified analysis of xenotransplantation outcomes • cPRA {params.highCPRAThreshold}%+ threshold
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-              <Activity className="w-4 h-4" />
-              <span>Pre-computed simulation data</span>
+            <div className="hidden md:flex items-center space-x-2 px-3 py-2 bg-muted/50 rounded-lg border border-medical-border">
+              <Activity className="w-4 h-4 text-primary" />
+              <span className="text-xs font-medium text-muted-foreground">CTMC Simulation Data</span>
             </div>
           </div>
         </div>
@@ -147,14 +147,22 @@ const Index = () => {
       {/* Main Content */}
       <main className="container mx-auto px-0 py-8">
         {/* Birds Eye Summary */}
-        <Card className="bg-medical-surface border-medical-border mb-6">
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              This simulator explores how xenotransplantation might impact kidney transplant outcomes for high-cPRA patients. 
-              Using a continuous-time Markov chain model based on 2022 SRTR data, it projects waitlist dynamics, transplant volumes, 
-              and mortality outcomes over a {params.simulationHorizon}-year horizon. Adjust the parameters below to explore different 
-              scenarios for xeno availability, graft failure rates, and post-transplant mortality.
-            </p>
+        <Card className="bg-gradient-to-br from-medical-surface to-medical-surface/30 border-medical-border mb-8 shadow-md">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Activity className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-semibold text-foreground mb-2">About This Simulator</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  This simulator explores how xenotransplantation might impact kidney transplant outcomes for high-cPRA patients.
+                  Using a continuous-time Markov chain model based on 2022 SRTR data, it projects waitlist dynamics, transplant volumes,
+                  and mortality outcomes over a {params.simulationHorizon}-year horizon. Adjust the parameters below to explore different
+                  scenarios for xeno availability, graft failure rates, and post-transplant mortality.
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -169,17 +177,31 @@ const Index = () => {
           {/* Charts and Metrics */}
           <div className="xl:col-span-4 space-y-8 px-2">
             {loading && (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-3 text-muted-foreground">Loading visualization data...</span>
-              </div>
+              <Card className="shadow-lg border-medical-border">
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <div className="relative">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                    <div className="absolute inset-0 w-12 h-12 animate-ping rounded-full bg-primary/20"></div>
+                  </div>
+                  <p className="mt-6 text-base font-medium text-foreground">Loading Simulation Data</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Fetching visualization data from the database...</p>
+                </CardContent>
+              </Card>
             )}
 
             {error && (
-              <Card className="bg-destructive/10 border-destructive">
-                <CardContent className="p-6">
-                  <p className="text-destructive font-medium">Error loading data</p>
-                  <p className="text-sm text-muted-foreground mt-2">{error}</p>
+              <Card className="bg-destructive/10 border-destructive shadow-lg">
+                <CardContent className="p-8">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-destructive/20 flex items-center justify-center">
+                      <Activity className="w-6 h-6 text-destructive" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-lg font-semibold text-destructive">Error Loading Data</p>
+                      <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{error}</p>
+                      <p className="text-xs text-muted-foreground mt-4">Try adjusting the parameters or refreshing the page.</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -188,27 +210,27 @@ const Index = () => {
               <>
                 {/* Summary Metrics */}
                 <div>
-                  <div className="mb-6">
-                    <h2 className="text-xl font-semibold text-primary mb-2">
+                  <div className="mb-6 pb-4 border-b border-medical-border">
+                    <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
                       Key Outcomes Summary
                     </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       Impact metrics over {params.simulationHorizon}-year simulation horizon
                     </p>
                   </div>
-                  <SummaryMetrics 
-                    metrics={metrics} 
-                    horizon={params.simulationHorizon} 
+                  <SummaryMetrics
+                    metrics={metrics}
+                    horizon={params.simulationHorizon}
                   />
                 </div>
 
                 {/* Charts */}
                 <div>
-                  <div className="mb-6">
-                    <h2 className="text-xl font-semibold text-primary mb-2">
+                  <div className="mb-6 pb-4 border-b border-medical-border">
+                    <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
                       Population Dynamics & Outcomes
                     </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       Visualization of waitlist trends, transplant volumes, and mortality impacts
                     </p>
                   </div>
@@ -219,18 +241,19 @@ const Index = () => {
 
             {/* Model Structure & Assumptions */}
             <div>
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-primary mb-2">
+              <div className="mb-6 pb-4 border-b border-medical-border">
+                <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
                   Model Structure & Assumptions
                 </h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground leading-relaxed">
                   Markov Chain model showing patient states and transition pathways
                 </p>
               </div>
               <MarkovChainVisualization highCPRAThreshold={params.highCPRAThreshold} />
-              <Card className="bg-medical-surface border-medical-border mt-6">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-primary">How the Model Works</CardTitle>
+              <Card className="bg-gradient-to-br from-medical-surface to-medical-surface/30 border-medical-border mt-6 shadow-lg">
+                <CardHeader className="border-b border-medical-border pb-4">
+                  <CardTitle className="text-xl font-bold text-primary tracking-tight">How the Model Works</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-2">Understanding the continuous-time Markov chain simulation</p>
                 </CardHeader>
                 <CardContent className="prose prose-sm max-w-none">
                   <div className="text-sm text-muted-foreground space-y-5">

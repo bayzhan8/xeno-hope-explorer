@@ -109,11 +109,12 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* 1. Waitlist Sizes Over Time */}
-      <Card className="col-span-1 bg-card shadow-[var(--shadow-medium)] border-medical-border">
-        <CardHeader className="border-b border-medical-border bg-medical-surface">
+      <Card className="col-span-1 bg-card shadow-lg border-medical-border hover:shadow-xl transition-shadow duration-300">
+        <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
           <CardTitle className="text-lg font-semibold text-primary">Waitlist Size Over Time</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1.5">Total patients waiting, stratified by cPRA level</p>
         </CardHeader>
         <CardContent className="p-4">
           <ChartSeriesToggle
@@ -227,10 +228,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
 
       {/* 1b. High CPRA Waitlist Comparison */}
       {filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined) && (
-        <Card className="col-span-1 bg-card shadow-[var(--shadow-medium)] border-medical-border">
-          <CardHeader className="border-b border-medical-border bg-medical-surface">
+        <Card className="col-span-1 bg-card shadow-lg border-medical-border hover:shadow-xl transition-shadow duration-300">
+          <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
             <CardTitle className="text-lg font-semibold text-primary">High CPRA Waitlist Comparison</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">Xenotransplantation vs. Base Case</p>
+            <p className="text-xs text-muted-foreground mt-1.5">Xenotransplantation vs. Base Case</p>
           </CardHeader>
           <CardContent className="p-4">
             <ResponsiveContainer width="100%" height={390}>
@@ -279,9 +280,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
       )}
 
       {/* 2. Transplant Recipients Over Time */}
-      <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
-        <CardHeader className="border-b border-medical-border bg-medical-surface">
+      <Card className="bg-card shadow-lg border-medical-border hover:shadow-xl transition-shadow duration-300">
+        <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
           <CardTitle className="text-lg font-semibold text-primary">Transplant Recipients Over Time</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1.5">Living recipients with functioning grafts</p>
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
@@ -307,9 +309,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
       </Card>
 
       {/* 3. Cumulative Deaths Over Time */}
-      <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
-        <CardHeader className="border-b border-medical-border bg-medical-surface">
+      <Card className="bg-card shadow-lg border-medical-border hover:shadow-xl transition-shadow duration-300">
+        <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
           <CardTitle className="text-lg font-semibold text-primary">Cumulative Deaths Over Time</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1.5">Total deaths on waitlist and post-transplant</p>
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
@@ -337,9 +340,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
       </Card>
 
       {/* 4. Waitlist Deaths per Year (Scatter Plot) */}
-      <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
-        <CardHeader className="border-b border-medical-border bg-medical-surface">
+      <Card className="bg-card shadow-lg border-medical-border hover:shadow-xl transition-shadow duration-300">
+        <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
           <CardTitle className="text-lg font-semibold text-primary">Waitlist Deaths per Year</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1.5">Annual mortality while waiting for transplant</p>
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
@@ -413,9 +417,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
       </Card>
 
       {/* 5. Deaths per Year */}
-      <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
-        <CardHeader className="border-b border-medical-border bg-medical-surface">
+      <Card className="bg-card shadow-lg border-medical-border hover:shadow-xl transition-shadow duration-300">
+        <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
           <CardTitle className="text-lg font-semibold text-primary">Deaths per Year</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1.5">Total annual mortality (waitlist + post-transplant)</p>
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
@@ -445,10 +450,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
       </Card>
 
       {/* 6. Net Waitlist Deaths Prevented per Year */}
-      <Card className="bg-card shadow-[var(--shadow-medium)] border-medical-border">
-        <CardHeader className="border-b border-medical-border bg-medical-surface">
+      <Card className="bg-card shadow-lg border-medical-border hover:shadow-xl transition-shadow duration-300">
+        <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
           <CardTitle className="text-lg font-semibold text-primary">Net Waitlist Deaths Prevented per Year</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">(Base Case - Xenotransplantation)</p>
+          <p className="text-xs text-muted-foreground mt-1.5">Lives saved annually vs. base case (positive = fewer deaths)</p>
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
@@ -479,9 +484,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
       </Card>
 
       {/* Average Waiting Time (Coming Soon) */}
-      <Card className="bg-card border-medical-border opacity-60 grayscale">
-        <CardHeader className="border-b border-medical-border bg-medical-surface">
+      <Card className="bg-card border-medical-border opacity-60 grayscale shadow-md">
+        <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
           <CardTitle className="text-lg font-semibold text-muted-foreground">Average Waiting Time (Coming Soon)</CardTitle>
+          <p className="text-xs text-muted-foreground/70 mt-1.5">Mean time from listing to transplant</p>
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
