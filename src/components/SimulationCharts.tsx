@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip, ScatterChart, Scatter } from 'recharts';
 
 interface SimulationData {
-  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number; baseHighCPRA?: number }>;
+  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number; baseHighCPRA?: number; baseLowCPRA?: number; baseTotal?: number }>;
   waitlistDeathsData: Array<{ year: number; waitlistDeaths: number }>;
   postTransplantDeathsData: Array<{ year: number; xenoPostTransplantDeaths: number; humanPostTransplantDeaths: number }>;
   netDeathsPreventedData: Array<{ year: number; netDeathsPrevented: number }>;
@@ -123,30 +123,64 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 wrapperStyle={{ paddingTop: '20px' }}
                 iconType="line"
               />
-              <Line 
-                type="monotone" 
-                dataKey="total" 
-                stroke={COLORS.primary} 
+              <Line
+                type="monotone"
+                dataKey="total"
+                stroke={COLORS.primary}
                 strokeWidth={3}
-                name="Total Waitlist"
+                name="Total Waitlist (Xeno)"
                 dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1.5 }}
               />
-              <Line 
-                type="monotone" 
-                dataKey="lowCPRA" 
-                stroke={COLORS.secondary} 
+              <Line
+                type="monotone"
+                dataKey="lowCPRA"
+                stroke={COLORS.secondary}
                 strokeWidth={2}
-                name={`Low CPRA (0-${highCPRAThreshold}%)`}
+                name={`Low CPRA (0-${highCPRAThreshold}%) - Xeno`}
                 dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 1 }}
               />
-              <Line 
-                type="monotone" 
-                dataKey="highCPRA" 
-                stroke={COLORS.tertiary} 
+              <Line
+                type="monotone"
+                dataKey="highCPRA"
+                stroke={COLORS.tertiary}
                 strokeWidth={2}
-                name={`High CPRA (${highCPRAThreshold}-100%)`}
+                name={`High CPRA (${highCPRAThreshold}-100%) - Xeno`}
                 dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1 }}
               />
+              {/* Base case comparison lines (dashed) */}
+              {filteredData.waitlistData.some(d => d.baseTotal !== undefined) && (
+                <Line
+                  type="monotone"
+                  dataKey="baseTotal"
+                  stroke={COLORS.primary}
+                  strokeWidth={2.5}
+                  strokeDasharray="5 5"
+                  name="Total Waitlist (Base Case)"
+                  dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1 }}
+                />
+              )}
+              {filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined) && (
+                <Line
+                  type="monotone"
+                  dataKey="baseLowCPRA"
+                  stroke={COLORS.secondary}
+                  strokeWidth={1.5}
+                  strokeDasharray="5 5"
+                  name={`Low CPRA (0-${highCPRAThreshold}%) - Base`}
+                  dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 0.8 }}
+                />
+              )}
+              {filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined) && (
+                <Line
+                  type="monotone"
+                  dataKey="baseHighCPRA"
+                  stroke={COLORS.tertiary}
+                  strokeWidth={1.5}
+                  strokeDasharray="5 5"
+                  name={`High CPRA (${highCPRAThreshold}-100%) - Base`}
+                  dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 0.8 }}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </CardContent>

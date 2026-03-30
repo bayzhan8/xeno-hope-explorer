@@ -17,7 +17,7 @@ interface SimulationParams {
 }
 
 interface SimulationData {
-  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number }>;
+  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number; baseHighCPRA?: number; baseLowCPRA?: number; baseTotal?: number }>;
   waitlistDeathsData: Array<{ year: number; waitlistDeaths: number }>;
   postTransplantDeathsData: Array<{ year: number; xenoPostTransplantDeaths: number; humanPostTransplantDeaths: number }>;
   netDeathsPreventedData: Array<{ year: number; netDeathsPrevented: number }>;
@@ -39,7 +39,7 @@ const Index = () => {
     postTransplantDeathRate: 1,
     simulationHorizon: 10,
     xeno_proportion: 1,
-    highCPRAThreshold: 85,
+    highCPRAThreshold: 95, // Age-stratified data uses 95% threshold
   });
 
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
@@ -72,12 +72,10 @@ const Index = () => {
         // Load base case data if comparison is available
         let baseVizData = null;
         let baseConfigName = vizData.base_config_name;
-        
-        // If base_config_name is not set, determine it automatically based on CPRA threshold
-        // Use consistent naming pattern: xeno_cpra{threshold}_prop0_relist0_death0
+
+        // For age-stratified data, base case is simply xeno_age_prop0
         if (!baseConfigName) {
-          const cpraThreshold = params.highCPRAThreshold;
-          baseConfigName = `xeno_cpra${cpraThreshold}_prop0_relist0_death0`;
+          baseConfigName = 'xeno_age_prop0';
         }
         
         // Try to load base case - always attempt if we have a config name
@@ -90,15 +88,28 @@ const Index = () => {
         }
 
         // Transform to simulation data format
+        console.log('[Index] About to transform vizData:', {
+          hasWaitlistSizes: !!vizData.waitlist_sizes,
+          hasWaitlistSeries: !!vizData.waitlist_sizes?.series,
+          waitlistSeriesLength: vizData.waitlist_sizes?.series?.length,
+          hasWaitlistX: !!vizData.waitlist_sizes?.x,
+          waitlistXLength: vizData.waitlist_sizes?.x?.length,
+        });
+
         const transformed = transformVizDataToSimulationData({
           ...vizData,
           highCPRAThreshold: params.highCPRAThreshold,
         }, baseVizData);
 
+        console.log('[Index] Transformation successful');
         setSimulationData(transformed);
         setMetrics(calculateSummaryMetrics(transformed, params.simulationHorizon));
       } catch (err) {
         console.error('Error loading visualization data:', err);
+        console.error('Full error:', err);
+        if (err instanceof Error) {
+          console.error('Error stack:', err.stack);
+        }
         setError(err instanceof Error ? err.message : 'Failed to load visualization data');
       } finally {
         setLoading(false);

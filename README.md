@@ -1,4 +1,4 @@
-# NYU Xeno Kidney Impact Simulator
+# Xeno Kidney Impact Simulator
 
 ## Project info
 

@@ -108,136 +108,52 @@ interface ExperimentConfigs {
 const SUPABASE_STORAGE_URL = 'https://bkgpfnhbmkxzwtixiwnh.supabase.co/storage/v1/object/public/viz-data';
 
 // Find config name from user inputs
-// According to documentation: Match on MULTIPLIERS directly, not calculated rates
+// Age-stratified version: configs are simple (xeno_age_prop0, xeno_age_prop0p5, xeno_age_prop1, etc.)
 export async function findConfigName(userInputs: UserInputs): Promise<string | null> {
   try {
-    // Load experiment_configs.json from Supabase Storage
-    const response = await fetch(`${SUPABASE_STORAGE_URL}/experiment_configs.json`);
+    console.log('[Config Finder] Starting config lookup with inputs:', userInputs);
+
+    // Load experiment_configs_v2.json from Supabase Storage (age-stratified version)
+    const configUrl = `${SUPABASE_STORAGE_URL}/experiment_configs_v2.json`;
+    console.log('[Config Finder] Fetching from:', configUrl);
+    const response = await fetch(configUrl);
     if (!response.ok) {
-      throw new Error('Failed to load experiment_configs.json from Supabase Storage');
+      throw new Error('Failed to load experiment_configs_v2.json from Supabase Storage');
     }
     const experimentConfigs: ExperimentConfigs = await response.json();
-    
-    // Determine keys based on CPRA threshold
-    let lowKey: string;
-    let highKey: string;
-    if (userInputs.highCPRAThreshold === 99) {
-      lowKey = '0-99';
-      highKey = '99-100';
-    } else if (userInputs.highCPRAThreshold === 95) {
-      lowKey = '0-95';
-      highKey = '95-100';
-    } else {
-      // Default to 85
-      lowKey = '0-85';
-      highKey = '85-100';
-    }
-    
-    // Special rule: If xeno_proportion is 0, always search for multipliers = 0
-    // (base case - no xenotransplantation, so rates don't matter)
-    const effectiveRelistingMultiplier = userInputs.xeno_proportion === 0 ? 0 : userInputs.xenoGraftFailureRate;
-    const effectiveDeathMultiplier = userInputs.xeno_proportion === 0 ? 0 : userInputs.postTransplantDeathRate;
-    
-    // Debug: Log what we're searching for
+
+    // Age-stratified configs have simple naming: xeno_age_prop{value}
+    // where value is xeno_proportion with dots replaced by 'p'
+    // Examples: xeno_age_prop0, xeno_age_prop0p5, xeno_age_prop1, xeno_age_prop1p5, xeno_age_prop2
+
+    const propStr = userInputs.xeno_proportion.toString().replace('.', 'p');
+    const configName = `xeno_age_prop${propStr}`;
+
+    // Debug logging
     if (import.meta.env.DEV) {
       console.log('═══════════════════════════════════════════════════════════');
-      console.log('[Config Finder] 🔍 SEARCHING FOR CONFIG');
+      console.log('[Config Finder] 🔍 AGE-STRATIFIED CONFIG LOOKUP');
       console.log('═══════════════════════════════════════════════════════════');
       console.log('User Inputs:');
       console.log('  - xeno_proportion:', userInputs.xeno_proportion);
-      console.log('  - relisting_xeno_multiplier (xenoGraftFailureRate):', userInputs.xenoGraftFailureRate);
-      console.log('  - death with tx_xeno_multiplier (postTransplantDeathRate):', userInputs.postTransplantDeathRate);
-      console.log('  - highCPRAThreshold:', userInputs.highCPRAThreshold);
-      if (userInputs.xeno_proportion === 0) {
-        console.log('');
-        console.log('⚠️  SPECIAL RULE: xeno_proportion = 0');
-        console.log('   → Overriding multipliers to 0 (base case)');
-      }
-      console.log('');
-      console.log('Effective Search Values:');
-      console.log('  - xeno_proportion:', userInputs.xeno_proportion);
-      console.log('  - relisting_xeno_multiplier:', effectiveRelistingMultiplier);
-      console.log('  - death with tx_xeno_multiplier:', effectiveDeathMultiplier);
-      console.log('');
-      console.log('Expected Keys:');
-      console.log('  - low_key:', lowKey);
-      console.log('  - high_key:', highKey);
-      console.log('');
-      console.log('Matching Strategy: Direct multiplier matching');
+      console.log('  - Mapped to config:', configName);
       console.log('═══════════════════════════════════════════════════════════');
     }
-    
-    // Search through all configurations - match on multipliers directly
-    // The JSON already stores multipliers, so we just match them directly - NO CALCULATIONS!
-    let checkedCount = 0;
-    
-    for (const [name, config] of Object.entries(experimentConfigs.name_to_config)) {
-      checkedCount++;
-      
-      // Simple direct matching on multipliers - that's it!
-      if (
-        config.xeno_proportion === userInputs.xeno_proportion &&
-        config.xeno_rates_base?.relisting_xeno_multiplier === effectiveRelistingMultiplier &&
-        config.xeno_rates_base?.['death with tx_xeno_multiplier'] === effectiveDeathMultiplier &&
-        config.low_key === lowKey &&
-        config.high_key === highKey
-      ) {
-        if (import.meta.env.DEV) {
-          console.log('═══════════════════════════════════════════════════════════');
-          console.log('[Config Finder] ✅ FOUND MATCH:', name);
-          console.log('═══════════════════════════════════════════════════════════');
-        }
-        return name;
+
+    // Check if config exists
+    if (experimentConfigs.name_to_config[configName]) {
+      if (import.meta.env.DEV) {
+        console.log('[Config Finder] ✅ FOUND:', configName);
       }
+      return configName;
     }
-    
-    // No match found - log detailed debugging info
+
+    // No match found
     if (import.meta.env.DEV) {
-      console.warn('═══════════════════════════════════════════════════════════');
-      console.warn('[Config Finder] ❌ NO MATCH FOUND');
-      console.warn('═══════════════════════════════════════════════════════════');
-      console.warn('Search Summary:');
-      console.warn('  - Total configs checked:', checkedCount);
-      console.warn('');
-      console.warn('What we searched for:');
-      console.warn('  - xeno_proportion:', userInputs.xeno_proportion);
-      if (userInputs.xeno_proportion === 0) {
-        console.warn('  - relisting_xeno_multiplier:', effectiveRelistingMultiplier, '(overridden to 0 for base case)');
-        console.warn('  - death with tx_xeno_multiplier:', effectiveDeathMultiplier, '(overridden to 0 for base case)');
-      } else {
-        console.warn('  - relisting_xeno_multiplier:', effectiveRelistingMultiplier);
-        console.warn('  - death with tx_xeno_multiplier:', effectiveDeathMultiplier);
-      }
-      console.warn('  - low_key:', lowKey);
-      console.warn('  - high_key:', highKey);
-      console.warn('');
-      
-      // Find configs with matching proportion and CPRA threshold
-      const matchingProportionConfigs = Object.entries(experimentConfigs.name_to_config)
-        .filter(([name, config]) => {
-          const hasCorrectCPRA = config.low_key === lowKey && config.high_key === highKey;
-          const hasMatchingProportion = config.xeno_proportion === userInputs.xeno_proportion;
-          return hasCorrectCPRA && hasMatchingProportion;
-        })
-        .slice(0, 10);
-      
-      if (matchingProportionConfigs.length > 0) {
-        console.warn(`Found ${matchingProportionConfigs.length} config(s) with matching proportion (${userInputs.xeno_proportion}) and CPRA threshold:`);
-        matchingProportionConfigs.forEach(([name, config]) => {
-          console.warn(`  📋 ${name}:`);
-          console.warn('     relisting_xeno_multiplier:', config.xeno_rates_base?.relisting_xeno_multiplier, 
-            config.xeno_rates_base?.relisting_xeno_multiplier === effectiveRelistingMultiplier ? '✅ MATCH' : '❌');
-          console.warn('     death with tx_xeno_multiplier:', config.xeno_rates_base?.['death with tx_xeno_multiplier'],
-            config.xeno_rates_base?.['death with tx_xeno_multiplier'] === effectiveDeathMultiplier ? '✅ MATCH' : '❌');
-        });
-      } else {
-        console.warn('❌ No configs found with matching proportion and CPRA threshold!');
-        console.warn('   This suggests the config may not exist in the database.');
-      }
-      
-      console.warn('═══════════════════════════════════════════════════════════');
+      console.warn('[Config Finder] ❌ Config not found:', configName);
+      console.warn('Available configs:', Object.keys(experimentConfigs.name_to_config));
     }
-    
+
     return null;
   } catch (error) {
     console.error('Error finding config name:', error);
@@ -246,14 +162,18 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
 }
 
 
-// Load visualization data from Supabase Storage
+// Load visualization data from Supabase Storage (age-stratified version)
 export async function loadVisualizationData(configName: string) {
   try {
-    const response = await fetch(`${SUPABASE_STORAGE_URL}/viz_data/${configName}.json`);
+    const vizUrl = `${SUPABASE_STORAGE_URL}/viz_data_age/${configName}.json`;
+    console.log('[Config Finder] Loading viz data from:', vizUrl);
+    const response = await fetch(vizUrl);
     if (!response.ok) {
       throw new Error(`Failed to load visualization data for ${configName} from Supabase Storage`);
     }
-    return await response.json();
+    const data = await response.json();
+    console.log('[Config Finder] ✓ Successfully loaded viz data:', configName, 'Series count:', data.waitlist_sizes?.series?.length);
+    return data;
   } catch (error) {
     console.error('Error loading visualization data:', error);
     throw error;

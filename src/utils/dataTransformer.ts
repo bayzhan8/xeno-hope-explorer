@@ -35,7 +35,7 @@ interface VizData {
 }
 
 interface SimulationData {
-  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number; baseHighCPRA?: number }>;
+  waitlistData: Array<{ year: number; total: number; lowCPRA: number; highCPRA: number; baseHighCPRA?: number; baseLowCPRA?: number; baseTotal?: number }>;
   waitlistDeathsData: Array<{ year: number; waitlistDeaths: number }>;
   postTransplantDeathsData: Array<{ year: number; xenoPostTransplantDeaths: number; humanPostTransplantDeaths: number }>;
   netDeathsPreventedData: Array<{ year: number; netDeathsPrevented: number }>;
@@ -97,13 +97,51 @@ function convertTimeAxis(daysArray: number[], targetResolution: 'yearly' | 'mont
 
 // Find series by label pattern (case-insensitive)
 function findSeries(series: Array<{ label: string; y: number[] }>, patterns: string[]): number[] | null {
+  if (!series || !Array.isArray(series)) return null;
+
   for (const pattern of patterns) {
-    const found = series.find(s => 
-      s.label.toLowerCase().includes(pattern.toLowerCase())
+    const found = series.find(s =>
+      s && s.label && typeof s.label === 'string' && s.label.toLowerCase().includes(pattern.toLowerCase())
     );
-    if (found) return found.y;
+    if (found && found.y && Array.isArray(found.y)) return found.y;
   }
   return null;
+}
+
+// Find and aggregate all age-stratified series for a cPRA group
+// Returns null if no age-stratified data found (falls back to non-age)
+function aggregateAgeSeries(series: Array<{ label: string; y: number[] }>, cpraPattern: string): number[] | null {
+  if (!series || !Array.isArray(series)) return null;
+
+  // Look for age-stratified series (e.g., "Low cPRA - Age 0-18")
+  const ageSeries = series.filter(s => {
+    if (!s || !s.label || typeof s.label !== 'string') return false;
+    const label = s.label.toLowerCase();
+    return label.includes(cpraPattern.toLowerCase()) && label.includes('age');
+  });
+
+  if (ageSeries.length === 0) {
+    // No age-stratified data, return null to fall back to non-age search
+    return null;
+  }
+
+  // Check if first series has valid y data
+  if (!ageSeries[0] || !ageSeries[0].y || ageSeries[0].y.length === 0) {
+    return null;
+  }
+
+  // Sum across all age groups for each time point
+  const length = ageSeries[0].y.length;
+  const aggregated: number[] = new Array(length).fill(0);
+
+  for (const ageSeriesData of ageSeries) {
+    if (!ageSeriesData || !ageSeriesData.y || !Array.isArray(ageSeriesData.y)) continue;
+    for (let i = 0; i < length; i++) {
+      aggregated[i] += ageSeriesData.y[i] || 0;
+    }
+  }
+
+  return aggregated;
 }
 
 // Find first index in array where predicate returns true
@@ -133,11 +171,21 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
   };
 
   // 1. Waitlist sizes
-  if (vizData.waitlist_sizes) {
-    const lowSeries = findSeries(vizData.waitlist_sizes.series, ['low cpra waitlist']);
-    const highSeries = findSeries(vizData.waitlist_sizes.series, ['high cpra waitlist']);
-    const totalSeries = findSeries(vizData.waitlist_sizes.series, ['total waitlist']);
-    
+  if (vizData.waitlist_sizes && vizData.waitlist_sizes.series && vizData.waitlist_sizes.x && vizData.waitlist_sizes.x.length > 0) {
+    // Try to aggregate age-stratified data first
+    let lowSeries = aggregateAgeSeries(vizData.waitlist_sizes.series, 'low cpra');
+    let highSeries = aggregateAgeSeries(vizData.waitlist_sizes.series, 'high cpra');
+
+    // Fall back to non-age search if no age data found
+    if (!lowSeries) {
+      lowSeries = findSeries(vizData.waitlist_sizes.series, ['low cpra waitlist', 'low cpra']);
+    }
+    if (!highSeries) {
+      highSeries = findSeries(vizData.waitlist_sizes.series, ['high cpra waitlist', 'high cpra']);
+    }
+
+    const totalSeries = findSeries(vizData.waitlist_sizes.series, ['total waitlist', 'total']);
+
     // Sample data to monthly resolution
     const maxDays = Math.max(...vizData.waitlist_sizes.x);
     const maxYears = daysToYears(maxDays);
@@ -150,16 +198,32 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     
     // Process base case waitlist data if available
     let baseHighCPRASeries: number[] | null = null;
+    let baseLowCPRASeries: number[] | null = null;
+    let baseTotalSeries: number[] | null = null;
     let baseYears: number[] = [];
-    
-    if (baseVizData && baseVizData.waitlist_sizes) {
-      const baseHighSeries = findSeries(baseVizData.waitlist_sizes.series, ['high cpra waitlist']);
-      if (baseHighSeries) {
+
+    if (baseVizData && baseVizData.waitlist_sizes && baseVizData.waitlist_sizes.series && baseVizData.waitlist_sizes.x && baseVizData.waitlist_sizes.x.length > 0) {
+      // Get all base case series
+      let baseHighSeries = aggregateAgeSeries(baseVizData.waitlist_sizes.series, 'high cpra');
+      if (!baseHighSeries) {
+        baseHighSeries = findSeries(baseVizData.waitlist_sizes.series, ['high cpra waitlist', 'high cpra']);
+      }
+
+      let baseLowSeries = aggregateAgeSeries(baseVizData.waitlist_sizes.series, 'low cpra');
+      if (!baseLowSeries) {
+        baseLowSeries = findSeries(baseVizData.waitlist_sizes.series, ['low cpra waitlist', 'low cpra']);
+      }
+
+      const baseTotalSeriesData = findSeries(baseVizData.waitlist_sizes.series, ['total waitlist', 'total']);
+
+      if (baseHighSeries || baseLowSeries || baseTotalSeriesData) {
         const baseMaxDays = Math.max(...baseVizData.waitlist_sizes.x);
         const baseMaxYears = daysToYears(baseMaxDays);
         const baseTargetPoints = Math.ceil(baseMaxYears * 12);
         const baseSampledDays = sampleData(baseVizData.waitlist_sizes.x, baseTargetPoints);
-        baseHighCPRASeries = baseHighSeries ? sampleData(baseHighSeries, baseTargetPoints) : [];
+        baseHighCPRASeries = baseHighSeries ? sampleData(baseHighSeries, baseTargetPoints) : null;
+        baseLowCPRASeries = baseLowSeries ? sampleData(baseLowSeries, baseTargetPoints) : null;
+        baseTotalSeries = baseTotalSeriesData ? sampleData(baseTotalSeriesData, baseTargetPoints) : null;
         baseYears = baseSampledDays.map(daysToYears);
       }
     }
@@ -168,10 +232,13 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
       const low = sampledLow[i] || 0;
       const high = sampledHigh[i] || 0;
       const total = sampledTotal[i] || (low + high);
-      
-      // Find matching base case data point (closest year)
+
+      // Find matching base case data points (closest year)
       let baseHighCPRA: number | undefined = undefined;
-      if (baseHighCPRASeries && baseYears.length > 0) {
+      let baseLowCPRA: number | undefined = undefined;
+      let baseTotal: number | undefined = undefined;
+
+      if (baseYears.length > 0) {
         const currentYear = years[i];
         let closestIdx = 0;
         let minDiff = Math.abs(baseYears[0] - currentYear);
@@ -184,25 +251,39 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
         }
         // Only use if within 0.1 years
         if (minDiff < 0.1) {
-          baseHighCPRA = baseHighCPRASeries[closestIdx];
+          if (baseHighCPRASeries) baseHighCPRA = baseHighCPRASeries[closestIdx];
+          if (baseLowCPRASeries) baseLowCPRA = baseLowCPRASeries[closestIdx];
+          if (baseTotalSeries) baseTotal = baseTotalSeries[closestIdx];
         }
       }
-      
+
       result.waitlistData.push({
         year: Math.round(years[i] * 100) / 100,
         total,
         lowCPRA: low,
         highCPRA: high,
         baseHighCPRA,
+        baseLowCPRA,
+        baseTotal,
       });
     }
   }
 
   // 2. Recipients
-  if (vizData.recipients) {
-    const lowHuman = findSeries(vizData.recipients.series, ['low cpra recipients']);
-    const highHuman = findSeries(vizData.recipients.series, ['high cpra standard recipients']);
-    const highXeno = findSeries(vizData.recipients.series, ['high cpra xeno recipients']);
+  if (vizData.recipients && vizData.recipients.series && vizData.recipients.x && vizData.recipients.x.length > 0) {
+    // Try to aggregate age-stratified data first
+    let lowHuman = aggregateAgeSeries(vizData.recipients.series, 'low cpra');
+    // For high cPRA, we might have separate standard and xeno, so search more specifically
+    let highHuman = findSeries(vizData.recipients.series, ['high cpra standard', 'high cpra recipients']);
+    let highXeno = findSeries(vizData.recipients.series, ['high cpra xeno']);
+
+    // Fall back to non-age search if needed
+    if (!lowHuman) {
+      lowHuman = findSeries(vizData.recipients.series, ['low cpra recipients', 'low cpra']);
+    }
+    if (!highHuman) {
+      highHuman = findSeries(vizData.recipients.series, ['high cpra recipients']);
+    }
     
     // Sample to monthly resolution
     const maxDays = Math.max(...vizData.recipients.x);
@@ -225,12 +306,34 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
   }
 
   // 3. Cumulative deaths
-  if (vizData.cumulative_deaths) {
-    const lowWaitlist = findSeries(vizData.cumulative_deaths.series, ['low cpra waitlist deaths']);
-    const highWaitlist = findSeries(vizData.cumulative_deaths.series, ['high cpra waitlist deaths']);
-    const lowPostTx = findSeries(vizData.cumulative_deaths.series, ['low cpra post-tx deaths', 'low cpra post tx deaths']);
-    const highPostTx = findSeries(vizData.cumulative_deaths.series, ['high cpra post-tx deaths', 'high cpra post tx deaths']);
-    const total = findSeries(vizData.cumulative_deaths.series, ['total deaths']);
+  if (vizData.cumulative_deaths && vizData.cumulative_deaths.series && vizData.cumulative_deaths.x && vizData.cumulative_deaths.x.length > 0) {
+    // For age-stratified data, deaths are aggregated across ages (not separated by waitlist/post-tx in age version)
+    // Try to aggregate age-stratified data first
+    let lowWaitlist = null;
+    let highWaitlist = null;
+    let lowPostTx = null;
+    let highPostTx = null;
+
+    // Check if we have age-stratified death data (simpler format)
+    const lowAgeTotal = aggregateAgeSeries(vizData.cumulative_deaths.series, 'low cpra');
+    const highAgeTotal = aggregateAgeSeries(vizData.cumulative_deaths.series, 'high cpra');
+
+    if (lowAgeTotal && highAgeTotal) {
+      // Age-stratified data: use totals for both waitlist and post-tx
+      // (age version doesn't separate these in cumulative_deaths)
+      lowWaitlist = lowAgeTotal;
+      highWaitlist = highAgeTotal;
+      lowPostTx = new Array(lowAgeTotal.length).fill(0);
+      highPostTx = new Array(highAgeTotal.length).fill(0);
+    } else {
+      // Non-age data: search for specific waitlist/post-tx breakdowns
+      lowWaitlist = findSeries(vizData.cumulative_deaths.series, ['low cpra waitlist deaths']);
+      highWaitlist = findSeries(vizData.cumulative_deaths.series, ['high cpra waitlist deaths']);
+      lowPostTx = findSeries(vizData.cumulative_deaths.series, ['low cpra post-tx deaths', 'low cpra post tx deaths']);
+      highPostTx = findSeries(vizData.cumulative_deaths.series, ['high cpra post-tx deaths', 'high cpra post tx deaths']);
+    }
+
+    const total = findSeries(vizData.cumulative_deaths.series, ['total deaths', 'total']);
     
     // Sample to monthly resolution
     const maxDays = Math.max(...vizData.cumulative_deaths.x);
@@ -324,7 +427,7 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
       let baseYearWaitlistDeaths: number[] = [];
       let baseNumCompleteYears = 0;
       
-      if (baseVizData && baseVizData.cumulative_deaths) {
+      if (baseVizData && baseVizData.cumulative_deaths && baseVizData.cumulative_deaths.series && baseVizData.cumulative_deaths.x && baseVizData.cumulative_deaths.x.length > 0) {
         const baseLowWaitlist = findSeries(baseVizData.cumulative_deaths.series, ['low cpra waitlist deaths']);
         const baseHighWaitlist = findSeries(baseVizData.cumulative_deaths.series, ['high cpra waitlist deaths']);
         
@@ -392,7 +495,7 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
   }
 
   // 4. Deaths per day
-  if (vizData.deaths_per_day) {
+  if (vizData.deaths_per_day && vizData.deaths_per_day.series && vizData.deaths_per_day.x && vizData.deaths_per_day.x.length > 0) {
     const lowSeries = findSeries(vizData.deaths_per_day.series, ['low cpra deaths/day', 'low cpra deaths']);
     const highSeries = findSeries(vizData.deaths_per_day.series, ['high cpra deaths/day', 'high cpra deaths']);
     const totalSeries = findSeries(vizData.deaths_per_day.series, ['total deaths/day', 'total deaths']);
@@ -422,12 +525,12 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
   }
 
   // 5. Deaths per year
-  if (vizData.deaths_per_year) {
+  if (vizData.deaths_per_year && vizData.deaths_per_year.series && vizData.deaths_per_year.year_labels && vizData.deaths_per_year.year_labels.length > 0) {
     const { year_labels, series } = vizData.deaths_per_year;
     const lowSeries = series.find(s => s.label.toLowerCase().includes('low cpra deaths'));
     const highSeries = series.find(s => s.label.toLowerCase().includes('high cpra deaths'));
     const totalSeries = series.find(s => s.label.toLowerCase().includes('total deaths'));
-    
+
     for (let i = 0; i < year_labels.length; i++) {
       const year = parseInt(year_labels[i].replace('Y', '')) || i + 1;
       result.deathsPerYearData.push({
@@ -441,20 +544,20 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
 
   // 6. Net deaths prevented per year (calculated from cumulative waitlist deaths)
   // Calculate if we have base case data, even if has_comparison is not explicitly set
-  if (baseVizData && vizData.cumulative_deaths && baseVizData.cumulative_deaths) {
+  if (baseVizData && vizData.cumulative_deaths && vizData.cumulative_deaths.series && baseVizData.cumulative_deaths && baseVizData.cumulative_deaths.series) {
     const yearDays = 365;
-    
+
     // Get total days for comparison
     const xenoMaxTime = vizData.total_days || Math.max(...vizData.cumulative_deaths.x);
     const baseMaxTime = baseVizData.total_days || Math.max(...baseVizData.cumulative_deaths.x);
     const comparisonMaxTime = Math.min(xenoMaxTime, baseMaxTime);
     const numYears = Math.floor(comparisonMaxTime / yearDays);
-    
+
     // Get cumulative waitlist deaths arrays from xeno data
     const xenoWaitlistDeathsLow = findSeries(vizData.cumulative_deaths.series, ['low cpra waitlist deaths']);
     const xenoWaitlistDeathsHigh = findSeries(vizData.cumulative_deaths.series, ['high cpra waitlist deaths']);
     const xenoTimes = vizData.cumulative_deaths.x;
-    
+
     // Get cumulative waitlist deaths arrays from base data
     const baseWaitlistDeathsLow = findSeries(baseVizData.cumulative_deaths.series, ['low cpra waitlist deaths']);
     const baseWaitlistDeathsHigh = findSeries(baseVizData.cumulative_deaths.series, ['high cpra waitlist deaths']);
@@ -554,13 +657,13 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
         });
       }
     }
-  } else if (vizData.net_deaths_prevented) {
+  } else if (vizData.net_deaths_prevented && vizData.net_deaths_prevented.series && vizData.net_deaths_prevented.year_labels && vizData.net_deaths_prevented.year_labels.length > 0) {
     // Fallback to JSON data if base case not available
     const { year_labels, series } = vizData.net_deaths_prevented;
     const lowSeries = series.find(s => s.label.toLowerCase().includes('low cpra net waitlist deaths prevented') || s.label.toLowerCase().includes('low cpra net deaths prevented'));
     const highSeries = series.find(s => s.label.toLowerCase().includes('high cpra net waitlist deaths prevented') || s.label.toLowerCase().includes('high cpra net deaths prevented'));
     const totalSeries = series.find(s => s.label.toLowerCase().includes('total net waitlist deaths prevented') || s.label.toLowerCase().includes('total net deaths prevented'));
-    
+
     for (let i = 0; i < year_labels.length; i++) {
       const year = parseInt(year_labels[i].replace('Y', '')) || i + 1;
       result.netDeathsPreventedPerYearData.push({
