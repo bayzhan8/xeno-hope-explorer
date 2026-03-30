@@ -525,20 +525,41 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
   }
 
   // 5. Deaths per year
-  if (vizData.deaths_per_year && vizData.deaths_per_year.series && vizData.deaths_per_year.year_labels && vizData.deaths_per_year.year_labels.length > 0) {
-    const { year_labels, series } = vizData.deaths_per_year;
-    const lowSeries = series.find(s => s.label.toLowerCase().includes('low cpra deaths'));
-    const highSeries = series.find(s => s.label.toLowerCase().includes('high cpra deaths'));
-    const totalSeries = series.find(s => s.label.toLowerCase().includes('total deaths'));
+  if (vizData.deaths_per_year && vizData.deaths_per_year.series) {
+    // Age-stratified format uses x array, non-age uses year_labels
+    if (vizData.deaths_per_year.x && vizData.deaths_per_year.x.length > 0) {
+      // Age-stratified format: aggregate across age groups
+      const lowSeries = aggregateAgeSeries(vizData.deaths_per_year.series, 'low cpra');
+      const highSeries = aggregateAgeSeries(vizData.deaths_per_year.series, 'high cpra');
+      const totalSeries = findSeries(vizData.deaths_per_year.series, ['total']);
 
-    for (let i = 0; i < year_labels.length; i++) {
-      const year = parseInt(year_labels[i].replace('Y', '')) || i + 1;
-      result.deathsPerYearData.push({
-        year,
-        low: lowSeries ? lowSeries.values[i] || 0 : 0,
-        high: highSeries ? highSeries.values[i] || 0 : 0,
-        total: totalSeries ? totalSeries.values[i] || 0 : 0,
-      });
+      const xData = vizData.deaths_per_year.x;
+      const years = xData.map(daysToYears);
+
+      for (let i = 0; i < years.length; i++) {
+        result.deathsPerYearData.push({
+          year: Math.round(years[i] * 100) / 100,
+          low: lowSeries ? lowSeries[i] || 0 : 0,
+          high: highSeries ? highSeries[i] || 0 : 0,
+          total: totalSeries ? totalSeries[i] || 0 : 0,
+        });
+      }
+    } else if (vizData.deaths_per_year.year_labels && vizData.deaths_per_year.year_labels.length > 0) {
+      // Non-age format: use year_labels
+      const { year_labels, series } = vizData.deaths_per_year;
+      const lowSeries = series.find(s => s && s.label && s.label.toLowerCase().includes('low cpra deaths'));
+      const highSeries = series.find(s => s && s.label && s.label.toLowerCase().includes('high cpra deaths'));
+      const totalSeries = series.find(s => s && s.label && s.label.toLowerCase().includes('total deaths'));
+
+      for (let i = 0; i < year_labels.length; i++) {
+        const year = parseInt(year_labels[i].replace('Y', '')) || i + 1;
+        result.deathsPerYearData.push({
+          year,
+          low: lowSeries && lowSeries.values ? lowSeries.values[i] || 0 : 0,
+          high: highSeries && highSeries.values ? highSeries.values[i] || 0 : 0,
+          total: totalSeries && totalSeries.values ? totalSeries.values[i] || 0 : 0,
+        });
+      }
     }
   }
 
@@ -657,21 +678,24 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
         });
       }
     }
-  } else if (vizData.net_deaths_prevented && vizData.net_deaths_prevented.series && vizData.net_deaths_prevented.year_labels && vizData.net_deaths_prevented.year_labels.length > 0) {
+  } else if (vizData.net_deaths_prevented && vizData.net_deaths_prevented.series) {
     // Fallback to JSON data if base case not available
-    const { year_labels, series } = vizData.net_deaths_prevented;
-    const lowSeries = series.find(s => s.label.toLowerCase().includes('low cpra net waitlist deaths prevented') || s.label.toLowerCase().includes('low cpra net deaths prevented'));
-    const highSeries = series.find(s => s.label.toLowerCase().includes('high cpra net waitlist deaths prevented') || s.label.toLowerCase().includes('high cpra net deaths prevented'));
-    const totalSeries = series.find(s => s.label.toLowerCase().includes('total net waitlist deaths prevented') || s.label.toLowerCase().includes('total net deaths prevented'));
+    // Check for year_labels format (non-age only has this)
+    if (vizData.net_deaths_prevented.year_labels && vizData.net_deaths_prevented.year_labels.length > 0) {
+      const { year_labels, series } = vizData.net_deaths_prevented;
+      const lowSeries = series.find(s => s && s.label && (s.label.toLowerCase().includes('low cpra net waitlist deaths prevented') || s.label.toLowerCase().includes('low cpra net deaths prevented')));
+      const highSeries = series.find(s => s && s.label && (s.label.toLowerCase().includes('high cpra net waitlist deaths prevented') || s.label.toLowerCase().includes('high cpra net deaths prevented')));
+      const totalSeries = series.find(s => s && s.label && (s.label.toLowerCase().includes('total net waitlist deaths prevented') || s.label.toLowerCase().includes('total net deaths prevented')));
 
-    for (let i = 0; i < year_labels.length; i++) {
-      const year = parseInt(year_labels[i].replace('Y', '')) || i + 1;
-      result.netDeathsPreventedPerYearData.push({
-        year,
-        low: lowSeries ? lowSeries.values[i] || 0 : 0,
-        high: highSeries ? highSeries.values[i] || 0 : 0,
-        total: totalSeries ? totalSeries.values[i] || 0 : 0,
-      });
+      for (let i = 0; i < year_labels.length; i++) {
+        const year = parseInt(year_labels[i].replace('Y', '')) || i + 1;
+        result.netDeathsPreventedPerYearData.push({
+          year,
+          low: lowSeries && lowSeries.values ? lowSeries.values[i] || 0 : 0,
+          high: highSeries && highSeries.values ? highSeries.values[i] || 0 : 0,
+          total: totalSeries && totalSeries.values ? totalSeries.values[i] || 0 : 0,
+        });
+      }
     }
   }
 
