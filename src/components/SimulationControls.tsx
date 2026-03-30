@@ -85,47 +85,16 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
         <CardContent className="space-y-6 p-4 overflow-y-auto flex-1">
 
 
-          {/* High CPRA Definition */}
-          <div className="space-y-3">
+          {/* High CPRA Definition - Fixed at 95% for age-stratified data */}
+          <div className="space-y-3 pb-4 border-b border-medical-border">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">High CPRA Definition</Label>
-              <span className="text-sm text-muted-foreground">{params.highCPRAThreshold}%+</span>
+              <span className="text-sm font-semibold text-primary">{params.highCPRAThreshold}%+</span>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => updateParam('highCPRAThreshold', 85)}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  params.highCPRAThreshold === 85 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                85%+
-              </button>
-              <button
-                onClick={() => updateParam('highCPRAThreshold', 95)}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  params.highCPRAThreshold === 95 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                95%+
-              </button>
-              <button
-                onClick={() => updateParam('highCPRAThreshold', 99)}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  params.highCPRAThreshold === 99 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                99%+
-              </button>
+            <div className="text-xs text-muted-foreground flex items-start gap-2">
+              <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+              <span>Age-stratified data uses 95% cPRA threshold (fixed). Patients with cPRA ≥95% are considered highly sensitized.</span>
             </div>
-            <p className="text-xs text-muted-foreground">
-              CPRA threshold for xeno kidney eligibility
-            </p>
           </div>
 
 
