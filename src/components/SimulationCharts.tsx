@@ -22,6 +22,10 @@ interface SimulationData {
   // Age-specific data (optional)
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
+  recipientsDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
+  cumulativeDeathsDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
+  deathsPerYearDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
+  waitlistDeathsPerYearDataByAge?: Array<{ year: number; total: Record<string, number> }>;
 }
 
 interface SimulationChartsProps {
@@ -34,11 +38,11 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
   // State for toggling chart series visibility
   const [waitlistSeriesVisible, setWaitlistSeriesVisible] = useState<Record<string, boolean>>({
     total: true,
-    lowCPRA: true,
-    highCPRA: true,
-    baseTotal: true,
-    baseLowCPRA: true,
-    baseHighCPRA: true,
+    lowCPRA: false,  // Default OFF per user request
+    highCPRA: false, // Default OFF per user request
+    baseTotal: false,
+    baseLowCPRA: false,
+    baseHighCPRA: false,
   });
 
   const [recipientsSeriesVisible, setRecipientsSeriesVisible] = useState<Record<string, boolean>>({
@@ -58,6 +62,18 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
   const [comparisonSeriesVisible, setComparisonSeriesVisible] = useState<Record<string, boolean>>({
     highCPRA: true,
     baseHighCPRA: true,
+  });
+
+  const [netDeathsSeriesVisible, setNetDeathsSeriesVisible] = useState<Record<string, boolean>>({
+    low: true,
+    high: true,
+    total: true,
+  });
+
+  const [deathsPerYearSeriesVisible, setDeathsPerYearSeriesVisible] = useState<Record<string, boolean>>({
+    low: true,
+    high: true,
+    total: true,
   });
 
   // Age group visibility state
@@ -84,6 +100,14 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
 
   const toggleComparisonSeries = (key: string, visible: boolean) => {
     setComparisonSeriesVisible(prev => ({ ...prev, [key]: visible }));
+  };
+
+  const toggleNetDeathsSeries = (key: string, visible: boolean) => {
+    setNetDeathsSeriesVisible(prev => ({ ...prev, [key]: visible }));
+  };
+
+  const toggleDeathsPerYearSeries = (key: string, visible: boolean) => {
+    setDeathsPerYearSeriesVisible(prev => ({ ...prev, [key]: visible }));
   };
 
   const toggleAgeGroup = (key: string, visible: boolean) => {
@@ -142,6 +166,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     // Age-specific data (optional)
     waitlistDataByAge: data.waitlistDataByAge ? filterByYear(data.waitlistDataByAge) : undefined,
     netDeathsPreventedByAge: data.netDeathsPreventedByAge ? filterByYear(data.netDeathsPreventedByAge) : undefined,
+    recipientsDataByAge: data.recipientsDataByAge ? filterByYear(data.recipientsDataByAge) : undefined,
+    cumulativeDeathsDataByAge: data.cumulativeDeathsDataByAge ? filterByYear(data.cumulativeDeathsDataByAge) : undefined,
+    deathsPerYearDataByAge: data.deathsPerYearDataByAge ? filterByYear(data.deathsPerYearDataByAge) : undefined,
+    waitlistDeathsPerYearDataByAge: data.waitlistDeathsPerYearDataByAge ? filterByYear(data.waitlistDeathsPerYearDataByAge) : undefined,
   };
 
   // Dynamic x-axis configuration based on horizon
@@ -198,107 +226,167 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={390}>
-            <LineChart data={filteredData.waitlistData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-              <XAxis 
-                type="number"
-                dataKey="year" 
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12 }}
-                domain={xAxisDomain}
-                ticks={xAxisTicks}
-                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
-              />
-              <YAxis 
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12 }}
-                label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              {waitlistSeriesVisible.total && (
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke={COLORS.primary}
-                  strokeWidth={3}
-                  name="Total Waitlist (Xeno)"
-                  dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1.5 }}
+            {ageBreakdownExpanded && filteredData.waitlistDataByAge ? (
+              <LineChart data={prepareAgeDataForChart(filteredData.waitlistDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
-              )}
-              {waitlistSeriesVisible.lowCPRA && (
-                <Line
-                  type="monotone"
-                  dataKey="lowCPRA"
-                  stroke={COLORS.secondary}
-                  strokeWidth={2}
-                  name={`Low CPRA (0-${highCPRAThreshold}%) - Xeno`}
-                  dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 1 }}
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
-              )}
-              {waitlistSeriesVisible.highCPRA && (
-                <Line
-                  type="monotone"
-                  dataKey="highCPRA"
-                  stroke={COLORS.tertiary}
-                  strokeWidth={2}
-                  name={`High CPRA (${highCPRAThreshold}-100%) - Xeno`}
-                  dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1 }}
+                <Tooltip content={<CustomTooltip />} />
+                {/* Low cPRA age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`lowCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`lowCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    name={`Low cPRA ${group.label}y`}
+                    dot={{ r: 1 }}
+                  />
+                ))}
+                {/* High cPRA age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`highCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`highCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2.5}
+                    name={`High cPRA ${group.label}y`}
+                    dot={{ r: 1.5 }}
+                  />
+                ))}
+              </LineChart>
+            ) : (
+              <LineChart data={filteredData.waitlistData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
-              )}
-              {/* Base case comparison lines (dashed) */}
-              {waitlistSeriesVisible.baseTotal && filteredData.waitlistData.some(d => d.baseTotal !== undefined) && (
-                <Line
-                  type="monotone"
-                  dataKey="baseTotal"
-                  stroke={COLORS.primary}
-                  strokeWidth={2.5}
-                  strokeDasharray="5 5"
-                  name="Total Waitlist (Base Case)"
-                  dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1 }}
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
-              )}
-              {waitlistSeriesVisible.baseLowCPRA && filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined) && (
-                <Line
-                  type="monotone"
-                  dataKey="baseLowCPRA"
-                  stroke={COLORS.secondary}
-                  strokeWidth={1.5}
-                  strokeDasharray="5 5"
-                  name={`Low CPRA (0-${highCPRAThreshold}%) - Base`}
-                  dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 0.8 }}
-                />
-              )}
-              {waitlistSeriesVisible.baseHighCPRA && filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined) && (
-                <Line
-                  type="monotone"
-                  dataKey="baseHighCPRA"
-                  stroke={COLORS.tertiary}
-                  strokeWidth={1.5}
-                  strokeDasharray="5 5"
-                  name={`High CPRA (${highCPRAThreshold}-100%) - Base`}
-                  dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 0.8 }}
-                />
-              )}
-            </LineChart>
+                <Tooltip content={<CustomTooltip />} />
+                {waitlistSeriesVisible.total && (
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke={COLORS.primary}
+                    strokeWidth={3}
+                    name="Total Waitlist (Xeno)"
+                    dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1.5 }}
+                  />
+                )}
+                {waitlistSeriesVisible.lowCPRA && (
+                  <Line
+                    type="monotone"
+                    dataKey="lowCPRA"
+                    stroke={COLORS.secondary}
+                    strokeWidth={2}
+                    name={`Low CPRA (0-${highCPRAThreshold}%) - Xeno`}
+                    dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 1 }}
+                  />
+                )}
+                {waitlistSeriesVisible.highCPRA && (
+                  <Line
+                    type="monotone"
+                    dataKey="highCPRA"
+                    stroke={COLORS.tertiary}
+                    strokeWidth={2}
+                    name={`High CPRA (${highCPRAThreshold}-100%) - Xeno`}
+                    dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1 }}
+                  />
+                )}
+                {/* Base case comparison lines (dashed) */}
+                {waitlistSeriesVisible.baseTotal && filteredData.waitlistData.some(d => d.baseTotal !== undefined) && (
+                  <Line
+                    type="monotone"
+                    dataKey="baseTotal"
+                    stroke={COLORS.primary}
+                    strokeWidth={2.5}
+                    strokeDasharray="5 5"
+                    name="Total Waitlist (Base Case)"
+                    dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1 }}
+                  />
+                )}
+                {waitlistSeriesVisible.baseLowCPRA && filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined) && (
+                  <Line
+                    type="monotone"
+                    dataKey="baseLowCPRA"
+                    stroke={COLORS.secondary}
+                    strokeWidth={1.5}
+                    strokeDasharray="5 5"
+                    name={`Low CPRA (0-${highCPRAThreshold}%) - Base`}
+                    dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 0.8 }}
+                  />
+                )}
+                {waitlistSeriesVisible.baseHighCPRA && filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined) && (
+                  <Line
+                    type="monotone"
+                    dataKey="baseHighCPRA"
+                    stroke={COLORS.tertiary}
+                    strokeWidth={1.5}
+                    strokeDasharray="5 5"
+                    name={`High CPRA (${highCPRAThreshold}-100%) - Base`}
+                    dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 0.8 }}
+                  />
+                )}
+              </LineChart>
+            )}
           </ResponsiveContainer>
-          <ChartSeriesToggle
-            series={[
-              { key: 'total', label: 'Total (Xeno)', color: COLORS.primary },
-              { key: 'lowCPRA', label: `Low CPRA (Xeno)`, color: COLORS.secondary },
-              { key: 'highCPRA', label: `High CPRA (Xeno)`, color: COLORS.tertiary },
-              ...(filteredData.waitlistData.some(d => d.baseTotal !== undefined)
-                ? [{ key: 'baseTotal', label: 'Total (Base)', color: COLORS.primary }]
-                : []),
-              ...(filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined)
-                ? [{ key: 'baseLowCPRA', label: 'Low CPRA (Base)', color: COLORS.secondary }]
-                : []),
-              ...(filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined)
-                ? [{ key: 'baseHighCPRA', label: 'High CPRA (Base)', color: COLORS.tertiary }]
-                : []),
-            ]}
-            visible={waitlistSeriesVisible}
-            onChange={toggleWaitlistSeries}
-          />
+
+          {/* Series Toggle */}
+          {!ageBreakdownExpanded && (
+            <ChartSeriesToggle
+              series={[
+                { key: 'total', label: 'Total (Xeno)', color: COLORS.primary },
+                { key: 'lowCPRA', label: `Low CPRA (Xeno)`, color: COLORS.secondary },
+                { key: 'highCPRA', label: `High CPRA (Xeno)`, color: COLORS.tertiary },
+                ...(filteredData.waitlistData.some(d => d.baseTotal !== undefined)
+                  ? [{ key: 'baseTotal', label: 'Total (Base)', color: COLORS.primary }]
+                  : []),
+                ...(filteredData.waitlistData.some(d => d.baseLowCPRA !== undefined)
+                  ? [{ key: 'baseLowCPRA', label: 'Low CPRA (Base)', color: COLORS.secondary }]
+                  : []),
+                ...(filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined)
+                  ? [{ key: 'baseHighCPRA', label: 'High CPRA (Base)', color: COLORS.tertiary }]
+                  : []),
+              ]}
+              visible={waitlistSeriesVisible}
+              onChange={toggleWaitlistSeries}
+            />
+          )}
+
+          {/* Age Group Toggle */}
+          {filteredData.waitlistDataByAge && (
+            <AgeGroupToggle
+              visible={ageGroupsVisible}
+              onChange={toggleAgeGroup}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -371,38 +459,93 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
-            <LineChart data={filteredData.recipientsData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-              <XAxis 
-                type="number"
-                dataKey="year" 
-                stroke="hsl(var(--muted-foreground))" 
-                tick={{ fontSize: 12 }}
-                domain={xAxisDomain}
-                ticks={xAxisTicks}
-              />
-              <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
-              <Tooltip content={<CustomTooltip />} />
-              {recipientsSeriesVisible.lowHuman && (
-                <Line type="monotone" dataKey="lowHuman" stroke={COLORS.secondary} name="Low cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
-              )}
-              {recipientsSeriesVisible.highHuman && (
-                <Line type="monotone" dataKey="highHuman" stroke={COLORS.primary} name="High cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
-              )}
-              {recipientsSeriesVisible.highXeno && (
-                <Line type="monotone" dataKey="highXeno" stroke={COLORS.quaternary} name="High cPRA (xeno)" strokeWidth={3} dot={{ r: 0.3 }} />
-              )}
-            </LineChart>
+            {ageBreakdownExpanded && filteredData.recipientsDataByAge ? (
+              <LineChart data={prepareAgeDataForChart(filteredData.recipientsDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                />
+                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                <Tooltip content={<CustomTooltip />} />
+                {/* Low cPRA age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`lowCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`lowCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    name={`Low cPRA ${group.label}y`}
+                    dot={{ r: 0.2 }}
+                  />
+                ))}
+                {/* High cPRA age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`highCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`highCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2.5}
+                    name={`High cPRA ${group.label}y`}
+                    dot={{ r: 0.3 }}
+                  />
+                ))}
+              </LineChart>
+            ) : (
+              <LineChart data={filteredData.recipientsData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                />
+                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                <Tooltip content={<CustomTooltip />} />
+                {recipientsSeriesVisible.lowHuman && (
+                  <Line type="monotone" dataKey="lowHuman" stroke={COLORS.secondary} name="Low cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
+                )}
+                {recipientsSeriesVisible.highHuman && (
+                  <Line type="monotone" dataKey="highHuman" stroke={COLORS.primary} name="High cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
+                )}
+                {recipientsSeriesVisible.highXeno && (
+                  <Line type="monotone" dataKey="highXeno" stroke={COLORS.quaternary} name="High cPRA (xeno)" strokeWidth={3} dot={{ r: 0.3 }} />
+                )}
+              </LineChart>
+            )}
           </ResponsiveContainer>
-          <ChartSeriesToggle
-            series={[
-              { key: 'lowHuman', label: 'Low cPRA (human)', color: COLORS.secondary },
-              { key: 'highHuman', label: 'High cPRA (human)', color: COLORS.primary },
-              { key: 'highXeno', label: 'High cPRA (xeno)', color: COLORS.quaternary },
-            ]}
-            visible={recipientsSeriesVisible}
-            onChange={toggleRecipientsSeries}
-          />
+
+          {/* Series Toggle */}
+          {!ageBreakdownExpanded && (
+            <ChartSeriesToggle
+              series={[
+                { key: 'lowHuman', label: 'Low cPRA (human)', color: COLORS.secondary },
+                { key: 'highHuman', label: 'High cPRA (human)', color: COLORS.primary },
+                { key: 'highXeno', label: 'High cPRA (xeno)', color: COLORS.quaternary },
+              ]}
+              visible={recipientsSeriesVisible}
+              onChange={toggleRecipientsSeries}
+            />
+          )}
+
+          {/* Age Group Toggle */}
+          {filteredData.recipientsDataByAge && (
+            <AgeGroupToggle
+              visible={ageGroupsVisible}
+              onChange={toggleAgeGroup}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -414,46 +557,101 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
-            <LineChart data={filteredData.cumulativeDeathsData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-              <XAxis 
-                type="number"
-                dataKey="year" 
-                stroke="hsl(var(--muted-foreground))" 
-                tick={{ fontSize: 12 }}
-                domain={xAxisDomain}
-                ticks={xAxisTicks}
-              />
-              <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
-              <Tooltip content={<CustomTooltip />} />
-              {deathsSeriesVisible.lowWaitlist && (
-                <Line type="monotone" dataKey="lowWaitlist" stroke={COLORS.secondary} name="Low cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
-              )}
-              {deathsSeriesVisible.highWaitlist && (
-                <Line type="monotone" dataKey="highWaitlist" stroke={COLORS.primary} name="High cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
-              )}
-              {deathsSeriesVisible.lowPostTx && (
-                <Line type="monotone" dataKey="lowPostTx" stroke={COLORS.tertiary} name="Low cPRA post-tx" strokeWidth={2} dot={{ r: 0.15 }} />
-              )}
-              {deathsSeriesVisible.highPostTx && (
-                <Line type="monotone" dataKey="highPostTx" stroke={COLORS.quaternary} name="High cPRA post-tx" strokeWidth={2} dot={{ r: 0.15 }} />
-              )}
-              {deathsSeriesVisible.total && (
-                <Line type="monotone" dataKey="total" stroke={COLORS.primary} name="Total" strokeWidth={3} dot={{ r: 0.3 }} />
-              )}
-            </LineChart>
+            {ageBreakdownExpanded && filteredData.cumulativeDeathsDataByAge ? (
+              <LineChart data={prepareAgeDataForChart(filteredData.cumulativeDeathsDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                />
+                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                <Tooltip content={<CustomTooltip />} />
+                {/* Low cPRA age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`lowCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`lowCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    name={`Low cPRA ${group.label}y`}
+                    dot={{ r: 0.15 }}
+                  />
+                ))}
+                {/* High cPRA age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`highCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`highCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2.5}
+                    name={`High cPRA ${group.label}y`}
+                    dot={{ r: 0.3 }}
+                  />
+                ))}
+              </LineChart>
+            ) : (
+              <LineChart data={filteredData.cumulativeDeathsData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                />
+                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                <Tooltip content={<CustomTooltip />} />
+                {deathsSeriesVisible.lowWaitlist && (
+                  <Line type="monotone" dataKey="lowWaitlist" stroke={COLORS.secondary} name="Low cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
+                )}
+                {deathsSeriesVisible.highWaitlist && (
+                  <Line type="monotone" dataKey="highWaitlist" stroke={COLORS.primary} name="High cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
+                )}
+                {deathsSeriesVisible.lowPostTx && (
+                  <Line type="monotone" dataKey="lowPostTx" stroke={COLORS.tertiary} name="Low cPRA post-tx" strokeWidth={2} dot={{ r: 0.15 }} />
+                )}
+                {deathsSeriesVisible.highPostTx && (
+                  <Line type="monotone" dataKey="highPostTx" stroke={COLORS.quaternary} name="High cPRA post-tx" strokeWidth={2} dot={{ r: 0.15 }} />
+                )}
+                {deathsSeriesVisible.total && (
+                  <Line type="monotone" dataKey="total" stroke={COLORS.primary} name="Total" strokeWidth={3} dot={{ r: 0.3 }} />
+                )}
+              </LineChart>
+            )}
           </ResponsiveContainer>
-          <ChartSeriesToggle
-            series={[
-              { key: 'lowWaitlist', label: 'Low cPRA waitlist', color: COLORS.secondary },
-              { key: 'highWaitlist', label: 'High cPRA waitlist', color: COLORS.primary },
-              { key: 'lowPostTx', label: 'Low cPRA post-tx', color: COLORS.tertiary },
-              { key: 'highPostTx', label: 'High cPRA post-tx', color: COLORS.quaternary },
-              { key: 'total', label: 'Total', color: COLORS.primary },
-            ]}
-            visible={deathsSeriesVisible}
-            onChange={toggleDeathsSeries}
-          />
+
+          {/* Series Toggle */}
+          {!ageBreakdownExpanded && (
+            <ChartSeriesToggle
+              series={[
+                { key: 'lowWaitlist', label: 'Low cPRA waitlist', color: COLORS.secondary },
+                { key: 'highWaitlist', label: 'High cPRA waitlist', color: COLORS.primary },
+                { key: 'lowPostTx', label: 'Low cPRA post-tx', color: COLORS.tertiary },
+                { key: 'highPostTx', label: 'High cPRA post-tx', color: COLORS.quaternary },
+                { key: 'total', label: 'Total', color: COLORS.primary },
+              ]}
+              visible={deathsSeriesVisible}
+              onChange={toggleDeathsSeries}
+            />
+          )}
+
+          {/* Age Group Toggle */}
+          {filteredData.cumulativeDeathsDataByAge && (
+            <AgeGroupToggle
+              visible={ageGroupsVisible}
+              onChange={toggleAgeGroup}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -465,71 +663,114 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
-            <ScatterChart
-              margin={{ top: 10, right: 10, bottom: 20, left: 20 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-              <XAxis 
-                type="number"
-                dataKey="x" 
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12 }}
-                domain={xAxisDomain}
-                ticks={xAxisTicks}
-                label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
-              />
-              <YAxis 
-                type="number"
-                dataKey="y"
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12 }}
-                domain={[0, 6000]}
-                label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
-              />
-              <Tooltip 
-                cursor={{ strokeDasharray: '3 3' }}
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const point = payload[0].payload;
-                    return (
-                      <div className="bg-card border border-medical-border rounded-lg p-3 shadow-[var(--shadow-medium)]">
-                        <p className="text-sm font-medium text-foreground mb-1">{`Year: ${point.year?.toFixed(1) || point.x?.toFixed(1) || 'N/A'}`}</p>
-                        <p className="text-sm" style={{ color: payload[0].color }}>
-                          {`Waitlist Deaths: ${typeof point.y === 'number' ? point.y.toLocaleString(undefined, { maximumFractionDigits: 0 }) : point.waitlistDeaths?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 'N/A'}`}
-                        </p>
-                        {(point.baseWaitlistDeaths !== undefined || (payload.length > 1 && payload[1]?.payload?.y !== undefined)) && (
-                          <p className="text-sm" style={{ color: '#3b82f6' }}>
-                            {`Base Case: ${point.baseWaitlistDeaths?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || (payload.length > 1 ? payload[1].payload.y?.toLocaleString(undefined, { maximumFractionDigits: 0 }) : 'N/A')}`}
+            {ageBreakdownExpanded && filteredData.waitlistDeathsPerYearDataByAge ? (
+              <LineChart data={prepareAgeDataForChart(filteredData.waitlistDeathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                {/* Total age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`total_${group.key}`}
+                    type="monotone"
+                    dataKey={`total_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2.5}
+                    name={`${group.label}y`}
+                    dot={{ r: 2 }}
+                  />
+                ))}
+              </LineChart>
+            ) : (
+              <ScatterChart
+                margin={{ top: 10, right: 10, bottom: 20, left: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="x"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="y"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={[0, 6000]}
+                  label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <Tooltip
+                  cursor={{ strokeDasharray: '3 3' }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const point = payload[0].payload;
+                      return (
+                        <div className="bg-card border border-medical-border rounded-lg p-3 shadow-[var(--shadow-medium)]">
+                          <p className="text-sm font-medium text-foreground mb-1">{`Year: ${point.year?.toFixed(1) || point.x?.toFixed(1) || 'N/A'}`}</p>
+                          <p className="text-sm" style={{ color: payload[0].color }}>
+                            {`Waitlist Deaths: ${typeof point.y === 'number' ? point.y.toLocaleString(undefined, { maximumFractionDigits: 0 }) : point.waitlistDeaths?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 'N/A'}`}
                           </p>
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Scatter
-                data={filteredData.waitlistDeathsPerYearData.map(d => ({ x: d.year, y: d.waitlistDeaths, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
-                fill="#8b0000"
-                name="Waitlist Deaths/Year (Xeno)"
-                shape={(props: any) => {
-                  const { cx, cy } = props;
-                  return <circle cx={cx} cy={cy} r={3.5} fill="#8b0000" />;
-                }}
-              />
-              <Scatter 
-                data={filteredData.waitlistDeathsPerYearData
-                  .filter(d => d.baseWaitlistDeaths !== undefined)
-                  .map(d => ({ x: d.year, y: d.baseWaitlistDeaths!, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
-                fill="#3b82f6"
-                name="Waitlist Deaths/Year (Base Case)"
-                shape={(props: any) => {
-                  const { cx, cy } = props;
-                  return <circle cx={cx} cy={cy} r={3.5} fill="#3b82f6" />;
-                }}
-              />
-            </ScatterChart>
+                          {(point.baseWaitlistDeaths !== undefined || (payload.length > 1 && payload[1]?.payload?.y !== undefined)) && (
+                            <p className="text-sm" style={{ color: '#3b82f6' }}>
+                              {`Base Case: ${point.baseWaitlistDeaths?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || (payload.length > 1 ? payload[1].payload.y?.toLocaleString(undefined, { maximumFractionDigits: 0 }) : 'N/A')}`}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Scatter
+                  data={filteredData.waitlistDeathsPerYearData.map(d => ({ x: d.year, y: d.waitlistDeaths, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
+                  fill="#8b0000"
+                  name="Waitlist Deaths/Year (Xeno)"
+                  shape={(props: any) => {
+                    const { cx, cy } = props;
+                    return <circle cx={cx} cy={cy} r={3.5} fill="#8b0000" />;
+                  }}
+                />
+                <Scatter
+                  data={filteredData.waitlistDeathsPerYearData
+                    .filter(d => d.baseWaitlistDeaths !== undefined)
+                    .map(d => ({ x: d.year, y: d.baseWaitlistDeaths!, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
+                  fill="#3b82f6"
+                  name="Waitlist Deaths/Year (Base Case)"
+                  shape={(props: any) => {
+                    const { cx, cy } = props;
+                    return <circle cx={cx} cy={cy} r={3.5} fill="#3b82f6" />;
+                  }}
+                />
+              </ScatterChart>
+            )}
           </ResponsiveContainer>
+
+          {/* Age Group Toggle */}
+          {filteredData.waitlistDeathsPerYearDataByAge && (
+            <AgeGroupToggle
+              visible={ageGroupsVisible}
+              onChange={toggleAgeGroup}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -541,27 +782,95 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
-            <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-              <XAxis 
-                type="number"
-                dataKey="year" 
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12 }}
-                domain={xAxisDomain}
-                ticks={xAxisTicks}
-              />
-              <YAxis 
-                stroke="hsl(var(--muted-foreground))"
-                tick={{ fontSize: 12 }}
-                label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="low" fill={COLORS.secondary} name="Low cPRA" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="high" fill={COLORS.primary} name="High cPRA" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="total" fill={COLORS.quaternary} name="Total" radius={[2, 2, 0, 0]} />
-            </BarChart>
+            {ageBreakdownExpanded && filteredData.deathsPerYearDataByAge ? (
+              <LineChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                {/* Low cPRA age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`lowCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`lowCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    name={`Low cPRA ${group.label}y`}
+                    dot={{ r: 1.5 }}
+                  />
+                ))}
+                {/* High cPRA age groups */}
+                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                  <Line
+                    key={`highCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`highCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2.5}
+                    name={`High cPRA ${group.label}y`}
+                    dot={{ r: 2 }}
+                  />
+                ))}
+              </LineChart>
+            ) : (
+              <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                <XAxis
+                  type="number"
+                  dataKey="year"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  domain={xAxisDomain}
+                  ticks={xAxisTicks}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                {deathsPerYearSeriesVisible.low && <Bar dataKey="low" fill={COLORS.secondary} name="Low cPRA" radius={[2, 2, 0, 0]} />}
+                {deathsPerYearSeriesVisible.high && <Bar dataKey="high" fill={COLORS.primary} name="High cPRA" radius={[2, 2, 0, 0]} />}
+                {deathsPerYearSeriesVisible.total && <Bar dataKey="total" fill={COLORS.quaternary} name="Total" radius={[2, 2, 0, 0]} />}
+              </BarChart>
+            )}
           </ResponsiveContainer>
+
+          {/* Series Toggle */}
+          {!ageBreakdownExpanded && (
+            <ChartSeriesToggle
+              series={[
+                { key: 'low', label: 'Low cPRA', color: COLORS.secondary },
+                { key: 'high', label: 'High cPRA', color: COLORS.primary },
+                { key: 'total', label: 'Total', color: COLORS.quaternary },
+              ]}
+              visible={deathsPerYearSeriesVisible}
+              onChange={toggleDeathsPerYearSeries}
+            />
+          )}
+
+          {/* Age Group Toggle */}
+          {filteredData.deathsPerYearDataByAge && (
+            <AgeGroupToggle
+              visible={ageGroupsVisible}
+              onChange={toggleAgeGroup}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -622,12 +931,25 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="low" fill="#86efac" name="Low cPRA Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="high" fill="#22c55e" name="High cPRA Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="total" fill="#15803d" name="Total Net Waitlist Deaths Prevented" radius={[2, 2, 0, 0]} />
+                {netDeathsSeriesVisible.low && <Bar dataKey="low" fill="#86efac" name="Low cPRA" radius={[2, 2, 0, 0]} />}
+                {netDeathsSeriesVisible.high && <Bar dataKey="high" fill="#22c55e" name="High cPRA" radius={[2, 2, 0, 0]} />}
+                {netDeathsSeriesVisible.total && <Bar dataKey="total" fill="#15803d" name="Total" radius={[2, 2, 0, 0]} />}
               </BarChart>
             )}
           </ResponsiveContainer>
+
+          {/* Series Toggle */}
+          {!ageBreakdownExpanded && (
+            <ChartSeriesToggle
+              series={[
+                { key: 'low', label: 'Low cPRA', color: '#86efac' },
+                { key: 'high', label: 'High cPRA', color: '#22c55e' },
+                { key: 'total', label: 'Total', color: '#15803d' },
+              ]}
+              visible={netDeathsSeriesVisible}
+              onChange={toggleNetDeathsSeries}
+            />
+          )}
 
           {/* Age Group Toggle */}
           {filteredData.netDeathsPreventedByAge && (
