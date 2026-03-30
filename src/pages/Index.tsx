@@ -261,141 +261,152 @@ const Index = () => {
                     <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
                       <h4 className="text-foreground font-bold mb-2">In Brief</h4>
                       <p className="text-xs leading-relaxed">
-                        We simulate the U.S. kidney transplant system using a <strong>Markov chain model</strong> with real 2022 SRTR data. Patients flow between states (waiting, transplanted, deceased) based on probabilistic rates. Xenotransplants are added for high-cPRA patients (those with antibodies making donor matching difficult). We measure how many lives could be saved.
+                        We simulate the U.S. kidney transplant system using a <strong>continuous-time Markov chain model</strong> with real 2022 SRTR data. Patients flow between states (waiting, transplanted, deceased) based on probabilistic rates. Xenotransplants are added for high-cPRA patients (those with antibodies making donor matching difficult). We measure how many lives could be saved.
                       </p>
                     </div>
 
-                    {/* Introduction - Shorter */}
+                    {/* Introduction - Full */}
                     <div>
                       <p>
-                        The transplant system is complex: patients arrive, get transplants, experience graft failures, or die. This simulation tracks these dynamics using a <strong className="text-foreground">continuous-time Markov chain</strong>—treating each transition as a probabilistic event based on real-world data.
+                        To understand how xenotransplantation might reshape kidney transplant outcomes, we need a way to model the complex dynamics of the transplant waiting list. Patients arrive, receive transplants, experience graft failures, and unfortunately, some die—all while the system continuously evolves. This simulation uses a <strong className="text-foreground">continuous-time Markov chain</strong> to capture these dynamics, treating each patient transition as a probabilistic event that occurs at rates determined by real-world data.
                       </p>
                     </div>
 
-                    {/* The Problem We're Solving */}
+                    {/* The Problem We're Solving - Full */}
                     <div className="border-l-2 border-primary/30 pl-4">
-                      <h4 className="text-foreground font-semibold mb-2 text-base">The Question</h4>
-                      <p className="mb-2">
-                        <em className="text-foreground">What happens if we add xenotransplantation for high-cPRA patients?</em>
+                      <h4 className="text-foreground font-semibold mb-2 text-base">The Challenge</h4>
+                      <p>
+                        The kidney transplant system is a complex network of patient flows. Each day, new patients join the waiting list, some receive transplants (from human donors or potentially xenotransplants), others experience graft failures and return to the list, and tragically, some die while waiting or after transplantation. The question we're asking is: <em className="text-foreground">What happens if we introduce xenotransplantation as an option for high-cPRA patients?</em>
                       </p>
-                      <p className="text-xs">
-                        <strong className="text-foreground">cPRA (calculated Panel Reactive Antibody)</strong> measures how difficult it is to find a compatible donor. High-cPRA patients (≥{params.highCPRAThreshold}%) wait longer and face higher death rates—making them ideal xenotransplant candidates.
+                      <p className="mt-2">
+                        To answer this, we need to track how patients move between different states over time. We partition patients by their calculated panel reactive antibody (cPRA) level—a measure of how difficult it is to find a compatible donor. Patients with cPRA ≥ {params.highCPRAThreshold}% face significantly longer wait times and higher mortality rates, making them ideal candidates for xenotransplantation.
                       </p>
                     </div>
 
-                    {/* Patient States - Simplified */}
+                    {/* Patient States - Full with better formatting */}
                     <div className="bg-muted/30 rounded-lg p-4">
-                      <h4 className="text-foreground font-semibold mb-3 text-base">Six Patient States</h4>
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="flex items-start gap-2">
-                          <span className="text-blue-500 font-mono mt-0.5">C<sub>L</sub></span>
-                          <span>Low-cPRA waiting</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-red-500 font-mono mt-0.5">C<sub>H</sub></span>
-                          <span>High-cPRA waiting</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-green-500 font-mono mt-0.5">H<sub>L</sub></span>
-                          <span>Low-cPRA transplanted (human)</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-green-600 font-mono mt-0.5">H<sub>std</sub></span>
-                          <span>High-cPRA transplanted (human)</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-purple-500 font-mono mt-0.5">H<sub>xeno</sub></span>
-                          <span>High-cPRA transplanted (xeno)</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="text-gray-500 font-mono mt-0.5">D</span>
-                          <span>Deceased</span>
-                        </div>
-                      </div>
+                      <h4 className="text-foreground font-semibold mb-3 text-base">Tracking Patient States</h4>
+                      <p className="mb-3 text-xs">
+                        At any moment, each patient exists in one of six possible states:
+                      </p>
+                      <ul className="list-disc list-inside space-y-1.5 ml-4 text-xs">
+                        <li><strong className="text-foreground">C<sub>L</sub></strong> and <strong className="text-foreground">C<sub>H</sub></strong> — Low and high-cPRA candidates waiting on the list</li>
+                        <li><strong className="text-foreground">H<sub>L</sub></strong> — Low-cPRA recipients with human donor kidneys</li>
+                        <li><strong className="text-foreground">H<sub>H_std</sub></strong> — High-cPRA recipients with standard human donor kidneys</li>
+                        <li><strong className="text-foreground">H<sub>H_xeno</sub></strong> — High-cPRA recipients with xenotransplanted kidneys</li>
+                        <li><strong className="text-foreground">D</strong> — Deceased (an absorbing state, tracked cumulatively)</li>
+                      </ul>
+                      <p className="mt-3 text-xs">
+                        The model tracks how many patients are in each state at any given time, and how these numbers change as events occur.
+                      </p>
                     </div>
 
-                    {/* How Events Work - Condensed */}
+                    {/* How Events Work - Full */}
                     <details className="group">
                       <summary className="cursor-pointer list-none">
                         <h4 className="text-foreground font-semibold mb-2 text-base inline-flex items-center gap-2">
-                          How Events Work
+                          How Events Drive the System
                           <span className="text-xs text-muted-foreground font-normal">(click to expand)</span>
                         </h4>
                       </summary>
                       <div className="mt-3 pl-4 border-l-2 border-muted space-y-2 text-xs">
-                        <p>Events (transplants, deaths, arrivals) occur at <strong className="text-foreground">probabilistic rates</strong>. Example: 1,000 patients + 0.1% daily death rate = ~1 death/day.</p>
-                        <div className="space-y-2">
-                          <div>
-                            <strong className="text-foreground">Fixed rates</strong> — New arrivals, transplant supply (constant regardless of list size)
-                          </div>
-                          <div>
-                            <strong className="text-foreground">Population-dependent rates</strong> — Deaths, graft failures (scale with population size)
-                          </div>
-                        </div>
+                        <p>
+                          The simulation works by generating events—transplants, deaths, arrivals, and so on—that occur at rates determined by the current state of the system. Think of it like this: if there are 1,000 patients on the waiting list and the death rate is 0.1% per day, we expect about 1 death per day. But these events are probabilistic, not deterministic.
+                        </p>
+                        <p className="mt-2">
+                          We distinguish between two types of rates:
+                        </p>
+                        <ul className="list-disc list-inside space-y-1.5 ml-4 mt-1">
+                          <li><strong className="text-foreground">Absolute rates</strong> (α<sub>L</sub>, α<sub>H</sub>, τ<sub>L</sub>, τ<sub>H</sub>) — These are fixed numbers, like "91 new patients join the high-cPRA waitlist per day," regardless of how many patients are currently waiting.</li>
+                          <li><strong className="text-foreground">Population-dependent rates</strong> (δ<sub>wl</sub>, δ<sub>h</sub>, δ<sub>x</sub>, ρ, ρ<sub>x</sub>, θ) — These scale with the current population. If 1,000 patients are waiting and the death rate is 0.1% per day, we expect 1 death. If 2,000 are waiting, we expect 2 deaths.</li>
+                        </ul>
                       </div>
                     </details>
 
-                    {/* Transplant Allocation Logic - Condensed */}
+                    {/* Transplant Allocation Logic - Full */}
                     <details className="group">
                       <summary className="cursor-pointer list-none">
                         <h4 className="text-foreground font-semibold mb-2 text-base inline-flex items-center gap-2">
-                          Transplant Reallocation
+                          Transplant Allocation: A Key Design Choice
                           <span className="text-xs text-muted-foreground font-normal">(click to expand)</span>
                         </h4>
                       </summary>
                       <div className="mt-3 pl-4 border-l-2 border-muted text-xs space-y-2">
-                        <p>High-cPRA patients get priority. But if no high-cPRA patients are waiting, those organs go to low-cPRA patients instead—nothing is wasted.</p>
-                        <p className="font-mono text-xs bg-muted/50 p-2 rounded">
+                        <p>
+                          One of the model's most important features is how it handles transplant allocation. When high-cPRA candidates are available, they receive priority for transplants. But what happens when we run out of high-cPRA candidates? In reality, those transplant opportunities don't disappear—they get reallocated to low-cPRA patients. This is captured by the rule:
+                        </p>
+                        <p className="mt-2 ml-4 italic font-mono bg-muted/50 p-2 rounded">
                           τ<sub>L</sub> = τ<sub>L_base</sub> + τ<sub>H_base</sub> when C<sub>H</sub> = 0
+                        </p>
+                        <p className="mt-2">
+                          This ensures that transplant opportunities are never wasted, reflecting real-world allocation practices.
                         </p>
                       </div>
                     </details>
 
-                    {/* Xenotransplantation - Clearer */}
+                    {/* Xenotransplantation - Full */}
                     <div className="border-l-2 border-purple-500/30 pl-4">
-                      <h4 className="text-foreground font-semibold mb-2 text-base">Xenotransplant Parameters</h4>
+                      <h4 className="text-foreground font-semibold mb-2 text-base">Modeling Xenotransplantation</h4>
                       <div className="space-y-2 text-xs">
                         <p>
-                          <strong className="text-foreground">Proportion (π):</strong> π=1 means all high-cPRA transplants are xeno. π=0.5 means half xeno, half human.
+                          Xenotransplantation enters the model through the proportion parameter π. When π = 1.0, all high-cPRA transplants are xenotransplants. When π = 0.5, half are xenotransplants and half are standard human donor transplants. This allows us to explore scenarios ranging from "no xenotransplantation" (π = 0) to "xenotransplantation replaces all high-cPRA transplants" (π = 1.0 or higher).
                         </p>
-                        <p>
-                          <strong className="text-foreground">Outcome multipliers:</strong> We model xeno kidneys as potentially performing differently than human kidneys.
+                        <p className="mt-2">
+                          Crucially, we assume that xenotransplant recipients may have different outcomes than standard transplant recipients. Their graft failure rate (ρ<sub>x</sub>) and post-transplant death rate (δ<sub>x</sub>) are modeled as multipliers of the high-cPRA base rates:
                         </p>
-                        <div className="bg-muted/50 p-2 rounded font-mono text-xs space-y-1">
-                          <div>Graft failure: ρ<sub>x</sub> = ρ × <em>m</em><sub>ρ</sub></div>
-                          <div>Death rate: δ<sub>x</sub> = δ<sub>h</sub> × <em>m</em><sub>d</sub></div>
+                        <div className="bg-muted/50 p-2 rounded font-mono text-xs space-y-1 mt-2">
+                          <div>ρ<sub>x</sub> = ρ × <em>m</em><sub>ρ</sub></div>
+                          <div>δ<sub>x</sub> = δ<sub>h</sub> × <em>m</em><sub>d</sub></div>
                         </div>
-                        <p className="text-xs italic">
-                          Multiplier 1.0 = same as human. 0.5 = twice as good. 2.0 = twice as bad.
+                        <p className="mt-2">
+                          When the multiplier is 1.0, xenotransplants perform identically to standard transplants. When it's 0.5, they perform twice as well. When it's 2.0, they perform twice as poorly. This flexibility lets us explore a wide range of "what if" scenarios about xeno kidney efficacy.
                         </p>
                       </div>
                     </div>
 
-                    {/* Simulation Process - Collapsible */}
+                    {/* Simulation Process - Full */}
                     <details className="group">
                       <summary className="cursor-pointer list-none">
                         <h4 className="text-foreground font-semibold mb-2 text-base inline-flex items-center gap-2">
-                          The Simulation Algorithm
+                          The Simulation Process
                           <span className="text-xs text-muted-foreground font-normal">(click to expand)</span>
                         </h4>
                       </summary>
                       <div className="mt-3 pl-4 border-l-2 border-muted text-xs space-y-2">
-                        <ol className="list-decimal list-inside space-y-2 ml-2">
-                          <li><strong className="text-foreground">Initialize</strong> with 2022 SRTR data (baseline: no xenotransplants)</li>
-                          <li><strong className="text-foreground">Calculate rates</strong> for all possible events</li>
-                          <li><strong className="text-foreground">Sample next event time</strong> (exponentially distributed)</li>
-                          <li><strong className="text-foreground">Choose event type</strong> (probability ∝ rate)</li>
-                          <li><strong className="text-foreground">Update populations</strong> (move patients between states)</li>
-                          <li><strong className="text-foreground">Repeat</strong> until {params.simulationHorizon} years</li>
+                        <p>
+                          The simulation proceeds in discrete steps, but time flows continuously. Here's how it works:
+                        </p>
+                        <ol className="list-decimal list-inside space-y-2 ml-2 mt-2">
+                          <li>
+                            <strong className="text-foreground">Start</strong> — Initialize the system with real 2022 data: how many patients were waiting, how many had received transplants, and so on. No xenotransplants exist yet.
+                          </li>
+                          <li>
+                            <strong className="text-foreground">Calculate rates</strong> — At the current time <em>t</em>, compute all possible event rates. The total rate Λ(<em>t</em>) is the sum of all individual rates.
+                          </li>
+                          <li>
+                            <strong className="text-foreground">Wait for next event</strong> — The time until the next event is exponentially distributed with rate Λ(<em>t</em>). On average, events occur more frequently when rates are higher.
+                          </li>
+                          <li>
+                            <strong className="text-foreground">Choose event type</strong> — Which event happens? The probability of event type <em>i</em> is proportional to its rate: <em>p</em><sub><em>i</em></sub> = λ<sub><em>i</em></sub>(<em>t</em>) / Λ(<em>t</em>). Faster events are more likely.
+                          </li>
+                          <li>
+                            <strong className="text-foreground">Update states</strong> — Apply the event. A transplant moves a patient from C to H. A death removes a patient. A graft failure moves a patient from H back to C.
+                          </li>
+                          <li>
+                            <strong className="text-foreground">Repeat</strong> — Continue until we reach the time horizon ({params.simulationHorizon} years) or until all rates become zero.
+                          </li>
                         </ol>
                       </div>
                     </details>
 
-                    {/* Data Sources - Condensed */}
+                    {/* Data Sources - Full */}
                     <div className="pt-3 border-t border-medical-border">
-                      <h4 className="text-foreground font-semibold mb-2 text-base">Data Source</h4>
+                      <h4 className="text-foreground font-semibold mb-2 text-base">Grounding in Real Data</h4>
                       <p className="text-xs">
-                        All rates derived from the <strong className="text-foreground">2022 SRTR database</strong> (Scientific Registry of Transplant Recipients). Low and high-cPRA populations modeled separately. Fixed random seeds ensure reproducibility.
+                        Every rate in this model comes from the 2022 Scientific Registry of Transplant Recipients (SRTR) database. We estimate arrival rates from new listings, transplant rates from actual transplant counts, and death rates from mortality data. These rates are calculated separately for low and high-cPRA populations, reflecting the reality that high-cPRA patients face different challenges.
+                      </p>
+                      <p className="mt-2 text-xs">
+                        The model uses fixed random seeds for reproducibility, meaning that identical parameter settings will produce identical results. This allows for fair comparisons between different scenarios while still capturing the inherent randomness of the system.
                       </p>
                     </div>
                   </div>
