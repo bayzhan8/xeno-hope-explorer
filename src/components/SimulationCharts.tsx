@@ -51,6 +51,11 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     total: true,
   });
 
+  const [comparisonSeriesVisible, setComparisonSeriesVisible] = useState<Record<string, boolean>>({
+    highCPRA: true,
+    baseHighCPRA: true,
+  });
+
   const toggleWaitlistSeries = (key: string, visible: boolean) => {
     setWaitlistSeriesVisible(prev => ({ ...prev, [key]: visible }));
   };
@@ -61,6 +66,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
 
   const toggleDeathsSeries = (key: string, visible: boolean) => {
     setDeathsSeriesVisible(prev => ({ ...prev, [key]: visible }));
+  };
+
+  const toggleComparisonSeries = (key: string, visible: boolean) => {
+    setComparisonSeriesVisible(prev => ({ ...prev, [key]: visible }));
   };
 
   // Filter data to only include years up to simulationHorizon
@@ -270,25 +279,37 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
-                  dataKey="highCPRA"
-                  stroke={COLORS.tertiary}
-                  strokeWidth={3}
-                  name={`High CPRA (${highCPRAThreshold}-100%) - Xeno`}
-                  dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1.5 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="baseHighCPRA" 
-                  stroke="#3b82f6" 
-                  strokeWidth={3}
-                  name={`High CPRA (${highCPRAThreshold}-100%) - Base Case`}
-                  dot={{ fill: '#3b82f6', strokeWidth: 1, r: 1.5 }}
-                  strokeDasharray="5 5"
-                />
+                {comparisonSeriesVisible.highCPRA && (
+                  <Line
+                    type="monotone"
+                    dataKey="highCPRA"
+                    stroke={COLORS.tertiary}
+                    strokeWidth={3}
+                    name={`High CPRA (${highCPRAThreshold}-100%) - Xeno`}
+                    dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1.5 }}
+                  />
+                )}
+                {comparisonSeriesVisible.baseHighCPRA && (
+                  <Line
+                    type="monotone"
+                    dataKey="baseHighCPRA"
+                    stroke="#3b82f6"
+                    strokeWidth={3}
+                    name={`High CPRA (${highCPRAThreshold}-100%) - Base Case`}
+                    dot={{ fill: '#3b82f6', strokeWidth: 1, r: 1.5 }}
+                    strokeDasharray="5 5"
+                  />
+                )}
               </LineChart>
             </ResponsiveContainer>
+            <ChartSeriesToggle
+              series={[
+                { key: 'highCPRA', label: 'High CPRA (Xeno)', color: COLORS.tertiary },
+                { key: 'baseHighCPRA', label: 'High CPRA (Base)', color: '#3b82f6' },
+              ]}
+              visible={comparisonSeriesVisible}
+              onChange={toggleComparisonSeries}
+            />
           </CardContent>
         </Card>
       )}
