@@ -271,18 +271,31 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
 
   // 2. Recipients
   if (vizData.recipients && vizData.recipients.series && vizData.recipients.x && vizData.recipients.x.length > 0) {
-    // Try to aggregate age-stratified data first
-    let lowHuman = aggregateAgeSeries(vizData.recipients.series, 'low cpra');
-    // For high cPRA, we might have separate standard and xeno, so search more specifically
-    let highHuman = findSeries(vizData.recipients.series, ['high cpra standard', 'high cpra recipients']);
-    let highXeno = findSeries(vizData.recipients.series, ['high cpra xeno']);
+    // Check if we have separate human and xeno series (new format)
+    let lowHuman, highHuman, highXeno;
 
-    // Fall back to non-age search if needed
-    if (!lowHuman) {
-      lowHuman = findSeries(vizData.recipients.series, ['low cpra recipients', 'low cpra']);
-    }
-    if (!highHuman) {
-      highHuman = findSeries(vizData.recipients.series, ['high cpra recipients']);
+    if (vizData.recipients_std && vizData.recipients_xeno) {
+      // New format: use recipients_std and recipients_xeno
+      lowHuman = aggregateAgeSeries(vizData.recipients_std.series, 'low cpra');
+      const highStd = aggregateAgeSeries(vizData.recipients_std.series, 'high cpra');
+      highXeno = aggregateAgeSeries(vizData.recipients_xeno.series, 'high cpra');
+
+      // High human is high cPRA standard (human) recipients
+      highHuman = highStd;
+    } else {
+      // Old format: try to find in combined recipients series
+      lowHuman = aggregateAgeSeries(vizData.recipients.series, 'low cpra');
+      // For high cPRA, we might have separate standard and xeno, so search more specifically
+      highHuman = findSeries(vizData.recipients.series, ['high cpra standard', 'high cpra recipients']);
+      highXeno = findSeries(vizData.recipients.series, ['high cpra xeno']);
+
+      // Fall back to non-age search if needed
+      if (!lowHuman) {
+        lowHuman = findSeries(vizData.recipients.series, ['low cpra recipients', 'low cpra']);
+      }
+      if (!highHuman) {
+        highHuman = findSeries(vizData.recipients.series, ['high cpra recipients']);
+      }
     }
     
     // Sample to monthly resolution
