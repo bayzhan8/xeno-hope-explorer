@@ -742,23 +742,25 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.deathsPerYear && filteredData.deathsPerYearDataByAge ? (
-              <BarChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }} barGap={2} barCategoryGap="15%">
+              <BarChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 15, left: 20 }} barGap={2} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
                   dataKey="year"
                   stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 11 }}
                   domain={xAxisDomain}
                   ticks={xAxisTicks}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -8, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
-                  label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                  tick={{ fontSize: 11 }}
+                  domain={[0, 'auto']}
+                  label={{ value: 'Deaths', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: '11px' }} iconSize={10} />
                 {/* Low cPRA age groups - stacked */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
                   <Bar
@@ -783,23 +785,26 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 ))}
               </BarChart>
             ) : (
-              <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 20, bottom: 20, left: 20 }} barCategoryGap="15%">
+              <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 20, bottom: 15, left: 20 }} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
                   dataKey="year"
                   stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 11 }}
                   domain={xAxisDomain}
                   ticks={xAxisTicks}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -8, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                   padding={{ left: 10, right: 10 }}
                 />
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
-                  label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                  tick={{ fontSize: 11 }}
+                  domain={[0, 'auto']}
+                  label={{ value: 'Deaths', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: '11px' }} iconSize={10} />
                 {deathsPerYearSeriesVisible.low && <Bar dataKey="low" fill={COLORS.secondary} name="Low cPRA" radius={[2, 2, 0, 0]} />}
                 {deathsPerYearSeriesVisible.high && <Bar dataKey="high" fill={COLORS.primary} name="High cPRA" radius={[2, 2, 0, 0]} />}
                 {deathsPerYearSeriesVisible.total && <Bar dataKey="total" fill={COLORS.quaternary} name="Total" radius={[2, 2, 0, 0]} />}
@@ -841,24 +846,25 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.netDeathsPrevented && filteredData.netDeathsPreventedByAge ? (
-              <BarChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }} barCategoryGap="15%">
+              <BarChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 15, left: 20 }} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
                   dataKey="year"
                   stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 11 }}
                   domain={xAxisDomain}
                   ticks={xAxisTicks}
-                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -8, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
-                  label={{ value: 'Deaths Prevented', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                  tick={{ fontSize: 11 }}
+                  domain={[0, 'auto']}
+                  label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: '11px' }} iconSize={10} />
                 {/* High cPRA age groups - stacked */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
                   <Bar
@@ -873,24 +879,26 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 ))}
               </BarChart>
             ) : (
-              <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 20, bottom: 20, left: 20 }} barCategoryGap="15%">
+              <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 20, bottom: 15, left: 20 }} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
                   dataKey="year"
                   stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 11 }}
                   domain={xAxisDomain}
                   ticks={xAxisTicks}
-                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                  label={{ value: 'Years', position: 'insideBottom', offset: -8, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                   padding={{ left: 10, right: 10 }}
                 />
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
-                  label={{ value: 'Deaths Prevented', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                  tick={{ fontSize: 11 }}
+                  domain={[0, 'auto']}
+                  label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: '11px' }} iconSize={10} />
                 {netDeathsSeriesVisible.low && <Bar dataKey="low" fill="#86efac" name="Low cPRA" radius={[2, 2, 0, 0]} />}
                 {netDeathsSeriesVisible.high && <Bar dataKey="high" fill="#22c55e" name="High cPRA" radius={[2, 2, 0, 0]} />}
                 {netDeathsSeriesVisible.total && <Bar dataKey="total" fill="#15803d" name="Total" radius={[2, 2, 0, 0]} />}
