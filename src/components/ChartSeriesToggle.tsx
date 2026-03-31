@@ -20,7 +20,7 @@ export const ChartSeriesToggle: React.FC<ChartSeriesToggleProps> = ({
   onChange,
 }) => {
   return (
-    <div className="grid grid-cols-3 gap-x-4 gap-y-2 mt-4 p-3 bg-muted/30 rounded-lg border border-medical-border">
+    <div className="grid grid-cols-3 gap-x-4 gap-y-2 mt-1.5 p-2 bg-muted/30 rounded-lg border border-medical-border">
       {series.map((s) => (
         <div key={s.key} className="flex items-center gap-1.5">
           <Checkbox
