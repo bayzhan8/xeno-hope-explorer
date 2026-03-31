@@ -858,7 +858,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
-                  domain={[0, 'auto']}
+                  domain={[0, 'dataMax']}
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
@@ -891,7 +891,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
-                  domain={[0, 'auto']}
+                  domain={[0, 'dataMax']}
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
