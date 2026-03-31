@@ -760,7 +760,6 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: '11px' }} iconSize={10} />
                 {/* Low cPRA age groups - stacked */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
                   <Bar
@@ -804,7 +803,6 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: '11px' }} iconSize={10} />
                 {deathsPerYearSeriesVisible.low && <Bar dataKey="low" fill={COLORS.secondary} name="Low cPRA" radius={[2, 2, 0, 0]} />}
                 {deathsPerYearSeriesVisible.high && <Bar dataKey="high" fill={COLORS.primary} name="High cPRA" radius={[2, 2, 0, 0]} />}
                 {deathsPerYearSeriesVisible.total && <Bar dataKey="total" fill={COLORS.quaternary} name="Total" radius={[2, 2, 0, 0]} />}
@@ -864,7 +862,6 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: '11px' }} iconSize={10} />
                 {/* High cPRA age groups - stacked */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
                   <Bar
@@ -898,7 +895,6 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: '11px' }} iconSize={10} />
                 {netDeathsSeriesVisible.low && <Bar dataKey="low" fill="#86efac" name="Low cPRA" radius={[2, 2, 0, 0]} />}
                 {netDeathsSeriesVisible.high && <Bar dataKey="high" fill="#22c55e" name="High cPRA" radius={[2, 2, 0, 0]} />}
                 {netDeathsSeriesVisible.total && <Bar dataKey="total" fill="#15803d" name="Total" radius={[2, 2, 0, 0]} />}
