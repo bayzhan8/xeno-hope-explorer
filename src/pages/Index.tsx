@@ -167,9 +167,11 @@ const Index = () => {
         </Card>
 
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-          {/* Controls Sidebar */}
+          {/* Controls Sidebar - Sticky */}
           <div className="xl:col-span-1">
-            <SimulationControls params={params} onParamsChange={setParams} />
+            <div className="xl:sticky xl:top-4">
+              <SimulationControls params={params} onParamsChange={setParams} />
+            </div>
           </div>
 
           {/* Charts and Metrics */}
