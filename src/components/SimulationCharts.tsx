@@ -232,7 +232,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <CardTitle className="text-lg font-semibold text-primary">Waitlist Size Over Time</CardTitle>
           <p className="text-xs text-muted-foreground mt-1.5">Total patients waiting, stratified by cPRA level</p>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={390}>
             {ageBreakdownExpanded.waitlist && filteredData.waitlistDataByAge ? (
               <LineChart data={prepareAgeDataForChart(filteredData.waitlistDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
@@ -410,7 +410,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <CardTitle className="text-lg font-semibold text-primary">Transplant Recipients Over Time</CardTitle>
           <p className="text-xs text-muted-foreground mt-1.5">Living recipients with functioning grafts</p>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.recipients && filteredData.recipientsDataByAge ? (
               <LineChart data={prepareAgeDataForChart(filteredData.recipientsDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
@@ -514,7 +514,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <CardTitle className="text-lg font-semibold text-primary">Cumulative Deaths Over Time</CardTitle>
           <p className="text-xs text-muted-foreground mt-1.5">Total deaths on waitlist and post-transplant</p>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.cumulativeDeaths && filteredData.cumulativeDeathsDataByAge ? (
               <LineChart data={prepareAgeDataForChart(filteredData.cumulativeDeathsDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
@@ -620,7 +620,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <CardTitle className="text-lg font-semibold text-primary">Waitlist Deaths per Year</CardTitle>
           <p className="text-xs text-muted-foreground mt-1.5">Annual mortality while waiting for transplant</p>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.waitlistDeathsPerYear && filteredData.waitlistDeathsPerYearDataByAge ? (
               <LineChart data={prepareAgeDataForChart(filteredData.waitlistDeathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
@@ -739,7 +739,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <CardTitle className="text-lg font-semibold text-primary">Deaths per Year</CardTitle>
           <p className="text-xs text-muted-foreground mt-1.5">Total annual mortality (waitlist + post-transplant)</p>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.deathsPerYear && filteredData.deathsPerYearDataByAge ? (
               <BarChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 15, left: 20 }} barGap={2} barCategoryGap="15%">
@@ -843,7 +843,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <CardTitle className="text-lg font-semibold text-primary">Net Waitlist Deaths Prevented per Year</CardTitle>
           <p className="text-xs text-muted-foreground mt-1.5">Lives saved annually vs. base case (positive = fewer deaths)</p>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.netDeathsPrevented && filteredData.netDeathsPreventedByAge ? (
               <BarChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 15, left: 20 }} barCategoryGap="15%">
