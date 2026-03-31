@@ -588,7 +588,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           </ResponsiveContainer>
 
           {/* Series Toggle */}
-          {!ageBreakdownExpanded.cumulativeDeaths && (
+          {!ageBreakdownExpanded && (
             <ChartSeriesToggle
               series={[
                 { key: 'lowWaitlist', label: 'Low cPRA waitlist', color: COLORS.secondary },
@@ -607,8 +607,8 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
             <AgeGroupToggle
               visible={ageGroupsVisible}
               onChange={toggleAgeGroup}
-              expanded={ageBreakdownExpanded.cumulativeDeaths}
-              onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, cumulativeDeaths: !prev.cumulativeDeaths }))}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
             />
           )}
         </CardContent>
@@ -622,7 +622,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
-            {ageBreakdownExpanded.waitlistDeathsPerYear && filteredData.waitlistDeathsPerYearDataByAge ? (
+            {ageBreakdownExpanded && filteredData.waitlistDeathsPerYearDataByAge ? (
               <LineChart data={prepareAgeDataForChart(filteredData.waitlistDeathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
@@ -726,8 +726,8 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
             <AgeGroupToggle
               visible={ageGroupsVisible}
               onChange={toggleAgeGroup}
-              expanded={ageBreakdownExpanded.waitlistDeathsPerYear}
-              onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, waitlistDeathsPerYear: !prev.waitlistDeathsPerYear }))}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
             />
           )}
         </CardContent>
@@ -741,8 +741,8 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
-            {ageBreakdownExpanded.deathsPerYear && filteredData.deathsPerYearDataByAge ? (
-              <BarChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+            {ageBreakdownExpanded && filteredData.deathsPerYearDataByAge ? (
+              <LineChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
@@ -758,28 +758,32 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend />
                 {/* Low cPRA age groups */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
-                  <Bar
+                  <Line
                     key={`lowCPRA_${group.key}`}
+                    type="monotone"
                     dataKey={`lowCPRA_${group.key}`}
-                    fill={group.color}
-                    fillOpacity={0.6}
+                    stroke={group.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
                     name={`Low cPRA ${group.label}y`}
+                    dot={{ r: 1.5 }}
                   />
                 ))}
                 {/* High cPRA age groups */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
-                  <Bar
+                  <Line
                     key={`highCPRA_${group.key}`}
+                    type="monotone"
                     dataKey={`highCPRA_${group.key}`}
-                    fill={group.color}
-                    fillOpacity={0.9}
+                    stroke={group.color}
+                    strokeWidth={2.5}
                     name={`High cPRA ${group.label}y`}
+                    dot={{ r: 2 }}
                   />
                 ))}
-              </BarChart>
+              </LineChart>
             ) : (
               <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
@@ -805,7 +809,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           </ResponsiveContainer>
 
           {/* Series Toggle */}
-          {!ageBreakdownExpanded.deathsPerYear && (
+          {!ageBreakdownExpanded && (
             <ChartSeriesToggle
               series={[
                 { key: 'low', label: 'Low cPRA', color: COLORS.secondary },
@@ -822,8 +826,8 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
             <AgeGroupToggle
               visible={ageGroupsVisible}
               onChange={toggleAgeGroup}
-              expanded={ageBreakdownExpanded.deathsPerYear}
-              onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, deathsPerYear: !prev.deathsPerYear }))}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
             />
           )}
         </CardContent>
@@ -837,8 +841,8 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
-            {ageBreakdownExpanded.netDeathsPrevented && filteredData.netDeathsPreventedByAge ? (
-              <BarChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+            {ageBreakdownExpanded && filteredData.netDeathsPreventedByAge ? (
+              <LineChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
@@ -855,19 +859,19 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend />
                 {/* High cPRA age groups */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
-                  <Bar
+                  <Line
                     key={`highCPRA_${group.key}`}
+                    type="monotone"
                     dataKey={`highCPRA_${group.key}`}
-                    fill={group.color}
-                    fillOpacity={0.85}
+                    stroke={group.color}
+                    strokeWidth={2}
                     name={`High cPRA ${group.label}y`}
-                    radius={[2, 2, 0, 0]}
+                    dot={{ r: 3 }}
                   />
                 ))}
-              </BarChart>
+              </LineChart>
             ) : (
               <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
@@ -894,7 +898,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           </ResponsiveContainer>
 
           {/* Series Toggle */}
-          {!ageBreakdownExpanded.netDeathsPrevented && (
+          {!ageBreakdownExpanded && (
             <ChartSeriesToggle
               series={[
                 { key: 'low', label: 'Low cPRA', color: '#86efac' },
@@ -911,8 +915,8 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
             <AgeGroupToggle
               visible={ageGroupsVisible}
               onChange={toggleAgeGroup}
-              expanded={ageBreakdownExpanded.netDeathsPrevented}
-              onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, netDeathsPrevented: !prev.netDeathsPrevented }))}
+              expanded={ageBreakdownExpanded}
+              onToggleExpand={() => setAgeBreakdownExpanded(!ageBreakdownExpanded)}
             />
           )}
         </CardContent>
