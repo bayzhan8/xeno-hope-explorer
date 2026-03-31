@@ -59,11 +59,6 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     total: true,
   });
 
-  const [comparisonSeriesVisible, setComparisonSeriesVisible] = useState<Record<string, boolean>>({
-    highCPRA: true,
-    baseHighCPRA: true,
-  });
-
   const [netDeathsSeriesVisible, setNetDeathsSeriesVisible] = useState<Record<string, boolean>>({
     low: true,
     high: true,
@@ -96,10 +91,6 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
 
   const toggleDeathsSeries = (key: string, visible: boolean) => {
     setDeathsSeriesVisible(prev => ({ ...prev, [key]: visible }));
-  };
-
-  const toggleComparisonSeries = (key: string, visible: boolean) => {
-    setComparisonSeriesVisible(prev => ({ ...prev, [key]: visible }));
   };
 
   const toggleNetDeathsSeries = (key: string, visible: boolean) => {
@@ -390,66 +381,6 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardContent>
       </Card>
 
-      {/* 1b. High CPRA Waitlist Comparison */}
-      {filteredData.waitlistData.some(d => d.baseHighCPRA !== undefined) && (
-        <Card className="col-span-1 bg-card shadow-lg border-medical-border hover:shadow-xl transition-shadow duration-300">
-          <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
-            <CardTitle className="text-lg font-semibold text-primary">High CPRA Waitlist Comparison</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1.5">Xenotransplantation vs. Base Case</p>
-          </CardHeader>
-          <CardContent className="p-4">
-            <ResponsiveContainer width="100%" height={390}>
-              <LineChart data={filteredData.waitlistData.filter(d => d.baseHighCPRA !== undefined)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-                <XAxis 
-                  type="number"
-                  dataKey="year" 
-                  stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
-                  domain={xAxisDomain}
-                  ticks={xAxisTicks}
-                  label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
-                />
-                <YAxis 
-                  stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
-                  label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                {comparisonSeriesVisible.highCPRA && (
-                  <Line
-                    type="monotone"
-                    dataKey="highCPRA"
-                    stroke={COLORS.tertiary}
-                    strokeWidth={3}
-                    name={`High CPRA (${highCPRAThreshold}-100%) - Xeno`}
-                    dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1.5 }}
-                  />
-                )}
-                {comparisonSeriesVisible.baseHighCPRA && (
-                  <Line
-                    type="monotone"
-                    dataKey="baseHighCPRA"
-                    stroke="#3b82f6"
-                    strokeWidth={3}
-                    name={`High CPRA (${highCPRAThreshold}-100%) - Base Case`}
-                    dot={{ fill: '#3b82f6', strokeWidth: 1, r: 1.5 }}
-                    strokeDasharray="5 5"
-                  />
-                )}
-              </LineChart>
-            </ResponsiveContainer>
-            <ChartSeriesToggle
-              series={[
-                { key: 'highCPRA', label: 'High CPRA (Xeno)', color: COLORS.tertiary },
-                { key: 'baseHighCPRA', label: 'High CPRA (Base)', color: '#3b82f6' },
-              ]}
-              visible={comparisonSeriesVisible}
-              onChange={toggleComparisonSeries}
-            />
-          </CardContent>
-        </Card>
-      )}
 
       {/* 2. Transplant Recipients Over Time */}
       <Card className="bg-card shadow-lg border-medical-border hover:shadow-xl transition-shadow duration-300">
