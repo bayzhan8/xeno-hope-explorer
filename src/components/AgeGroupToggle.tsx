@@ -24,7 +24,7 @@ export const AgeGroupToggle: React.FC<AgeGroupToggleProps> = ({
   onToggleExpand
 }) => {
   return (
-    <div className="border-t border-medical-border pt-2 mt-2">
+    <div className="border-t border-medical-border pt-2 mt-2 mb-3">
       <button
         type="button"
         onClick={onToggleExpand}
