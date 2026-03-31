@@ -163,16 +163,24 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
 
 
 // Load visualization data from Supabase Storage (age-stratified version)
-export async function loadVisualizationData(configName: string) {
+export async function loadVisualizationData(configName: string, highCPRAThreshold: number = 95) {
   try {
-    const vizUrl = `${SUPABASE_STORAGE_URL}/viz_data_age/${configName}.json`;
-    console.log('[Config Finder] Loading viz data from:', vizUrl);
+    // Determine folder based on threshold
+    let vizFolder = 'viz_data_age';
+    if (highCPRAThreshold === 85) {
+      vizFolder = 'viz_data_age_85';
+    } else if (highCPRAThreshold === 99) {
+      vizFolder = 'viz_data_age_99';
+    }
+
+    const vizUrl = `${SUPABASE_STORAGE_URL}/${vizFolder}/${configName}.json`;
+    console.log(`[Config Finder] Loading viz data from: ${vizUrl} (cPRA ${highCPRAThreshold}%)`);
     const response = await fetch(vizUrl);
     if (!response.ok) {
-      throw new Error(`Failed to load visualization data for ${configName} from Supabase Storage`);
+      throw new Error(`Failed to load visualization data for ${configName} (cPRA ${highCPRAThreshold}%) from Supabase Storage`);
     }
     const data = await response.json();
-    console.log('[Config Finder] ✓ Successfully loaded viz data:', configName, 'Series count:', data.waitlist_sizes?.series?.length);
+    console.log('[Config Finder] ✓ Successfully loaded viz data:', configName, `(cPRA ${highCPRAThreshold}%)`, 'Series count:', data.waitlist_sizes?.series?.length);
     return data;
   } catch (error) {
     console.error('Error loading visualization data:', error);

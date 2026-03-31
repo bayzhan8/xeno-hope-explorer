@@ -85,34 +85,47 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
         <CardContent className="space-y-6 p-4 overflow-y-auto flex-1">
 
 
-          {/* High CPRA Definition - Currently fixed at 95% */}
+          {/* High CPRA Definition */}
           <div className="space-y-3 pb-4 border-b border-medical-border">
             <Label className="text-sm font-medium">High CPRA Definition</Label>
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled
-                className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+                onClick={() => updateParam('highCPRAThreshold', 85)}
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  params.highCPRAThreshold === 85
+                    ? 'border-2 border-primary bg-primary text-primary-foreground'
+                    : 'border border-input bg-background text-foreground hover:bg-muted'
+                }`}
               >
                 85%+
               </button>
               <button
                 type="button"
-                className="flex-1 px-3 py-2 text-sm font-medium rounded-md border-2 border-primary bg-primary text-primary-foreground"
+                onClick={() => updateParam('highCPRAThreshold', 95)}
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  params.highCPRAThreshold === 95
+                    ? 'border-2 border-primary bg-primary text-primary-foreground'
+                    : 'border border-input bg-background text-foreground hover:bg-muted'
+                }`}
               >
                 95%+
               </button>
               <button
                 type="button"
-                disabled
-                className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+                onClick={() => updateParam('highCPRAThreshold', 99)}
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  params.highCPRAThreshold === 99
+                    ? 'border-2 border-primary bg-primary text-primary-foreground'
+                    : 'border border-input bg-background text-foreground hover:bg-muted'
+                }`}
               >
                 99%+
               </button>
             </div>
             <div className="text-xs text-muted-foreground flex items-start gap-2">
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-              <span>Currently fixed at 95% for age-stratified data. 85% and 99% thresholds coming soon.</span>
+              <span>Select the cPRA threshold to define "high cPRA" patients. Different thresholds reflect different patient populations and sensitivity patterns.</span>
             </div>
           </div>
 

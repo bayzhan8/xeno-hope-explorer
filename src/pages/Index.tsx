@@ -67,7 +67,7 @@ const Index = () => {
         }
 
         // Load visualization data
-        const vizData = await loadVisualizationData(configName);
+        const vizData = await loadVisualizationData(configName, params.highCPRAThreshold);
 
         // Load base case data if comparison is available
         let baseVizData = null;
@@ -77,11 +77,11 @@ const Index = () => {
         if (!baseConfigName) {
           baseConfigName = 'xeno_age_prop0';
         }
-        
+
         // Try to load base case - always attempt if we have a config name
         if (baseConfigName) {
           try {
-            baseVizData = await loadVisualizationData(baseConfigName);
+            baseVizData = await loadVisualizationData(baseConfigName, params.highCPRAThreshold);
           } catch (err) {
             console.warn(`Could not load base case data (${baseConfigName}) for comparison:`, err);
           }
