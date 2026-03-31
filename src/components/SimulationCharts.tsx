@@ -109,28 +109,37 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
   const prepareAgeDataForChart = (ageData: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total?: Record<string, number> }> | undefined) => {
     if (!ageData || ageData.length === 0) return [];
 
-    return ageData.map(yearData => {
-      const chartPoint: any = { year: yearData.year };
+    try {
+      return ageData.map(yearData => {
+        const chartPoint: any = { year: yearData.year };
 
-      // Add low cPRA age groups with prefix
-      for (const [ageKey, value] of Object.entries(yearData.lowCPRA)) {
-        chartPoint[`lowCPRA_${ageKey}`] = value;
-      }
-
-      // Add high cPRA age groups with prefix
-      for (const [ageKey, value] of Object.entries(yearData.highCPRA)) {
-        chartPoint[`highCPRA_${ageKey}`] = value;
-      }
-
-      // Add total age groups if available
-      if (yearData.total) {
-        for (const [ageKey, value] of Object.entries(yearData.total)) {
-          chartPoint[`total_${ageKey}`] = value;
+        // Add low cPRA age groups with prefix
+        if (yearData.lowCPRA && typeof yearData.lowCPRA === 'object') {
+          for (const [ageKey, value] of Object.entries(yearData.lowCPRA)) {
+            chartPoint[`lowCPRA_${ageKey}`] = value;
+          }
         }
-      }
 
-      return chartPoint;
-    });
+        // Add high cPRA age groups with prefix
+        if (yearData.highCPRA && typeof yearData.highCPRA === 'object') {
+          for (const [ageKey, value] of Object.entries(yearData.highCPRA)) {
+            chartPoint[`highCPRA_${ageKey}`] = value;
+          }
+        }
+
+        // Add total age groups if available
+        if (yearData.total && typeof yearData.total === 'object') {
+          for (const [ageKey, value] of Object.entries(yearData.total)) {
+            chartPoint[`total_${ageKey}`] = value;
+          }
+        }
+
+        return chartPoint;
+      });
+    } catch (error) {
+      console.error('Error preparing age data for chart:', error);
+      return [];
+    }
   };
 
   // Filter data to only include years up to simulationHorizon
@@ -894,32 +903,6 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardContent>
       </Card>
 
-      {/* Average Waiting Time (Coming Soon) */}
-      <Card className="bg-card border-medical-border opacity-60 grayscale shadow-md">
-        <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
-          <CardTitle className="text-lg font-semibold text-muted-foreground">Average Waiting Time (Coming Soon)</CardTitle>
-          <p className="text-xs text-muted-foreground/70 mt-1.5">Mean time from listing to transplant</p>
-        </CardHeader>
-        <CardContent className="p-4">
-          <ResponsiveContainer width="100%" height={325}>
-            <LineChart data={filteredData.waitingTimeData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-              <XAxis 
-                type="number"
-                dataKey="year" 
-                stroke="hsl(var(--muted-foreground))" 
-                tick={{ fontSize: 12 }}
-                domain={xAxisDomain}
-                ticks={xAxisTicks}
-              />
-              <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} label={{ value: 'Years', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Line type="monotone" dataKey="averageWaitingTime" stroke={COLORS.quaternary} strokeWidth={3} name="Average Wait Time" dot={{ r: 1.5 }} />
-            </LineChart>
-          </ResponsiveContainer>
-          <p className="mt-3 text-xs text-muted-foreground">Not available yet. Will be enabled in a future update.</p>
-        </CardContent>
-      </Card>
     </div>
   );
 };
