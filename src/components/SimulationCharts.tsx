@@ -742,7 +742,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.deathsPerYear && filteredData.deathsPerYearDataByAge ? (
-              <BarChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+              <BarChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }} barGap={2} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
@@ -759,21 +759,23 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                {/* Low cPRA age groups */}
+                {/* Low cPRA age groups - stacked */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
                   <Bar
                     key={`lowCPRA_${group.key}`}
                     dataKey={`lowCPRA_${group.key}`}
+                    stackId="lowCPRA"
                     fill={group.color}
                     fillOpacity={0.6}
                     name={`Low cPRA ${group.label}y`}
                   />
                 ))}
-                {/* High cPRA age groups */}
+                {/* High cPRA age groups - stacked */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
                   <Bar
                     key={`highCPRA_${group.key}`}
                     dataKey={`highCPRA_${group.key}`}
+                    stackId="highCPRA"
                     fill={group.color}
                     fillOpacity={0.9}
                     name={`High cPRA ${group.label}y`}
@@ -781,7 +783,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 ))}
               </BarChart>
             ) : (
-              <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+              <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 20, bottom: 20, left: 20 }} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
@@ -790,6 +792,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   tick={{ fontSize: 12 }}
                   domain={xAxisDomain}
                   ticks={xAxisTicks}
+                  padding={{ left: 10, right: 10 }}
                 />
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
@@ -838,7 +841,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardContent className="p-4">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.netDeathsPrevented && filteredData.netDeathsPreventedByAge ? (
-              <BarChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+              <BarChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
@@ -856,11 +859,12 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                {/* High cPRA age groups */}
+                {/* High cPRA age groups - stacked */}
                 {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
                   <Bar
                     key={`highCPRA_${group.key}`}
                     dataKey={`highCPRA_${group.key}`}
+                    stackId="highCPRA"
                     fill={group.color}
                     fillOpacity={0.85}
                     name={`High cPRA ${group.label}y`}
@@ -869,7 +873,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 ))}
               </BarChart>
             ) : (
-              <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+              <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 20, bottom: 20, left: 20 }} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
@@ -879,6 +883,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   domain={xAxisDomain}
                   ticks={xAxisTicks}
                   label={{ value: 'Years', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
+                  padding={{ left: 10, right: 10 }}
                 />
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
