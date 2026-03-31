@@ -169,7 +169,7 @@ const Index = () => {
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
           {/* Controls Sidebar - Sticky */}
           <div className="xl:col-span-1">
-            <div className="xl:sticky xl:top-2 xl:self-start">
+            <div className="xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:self-start">
               <SimulationControls params={params} onParamsChange={setParams} />
             </div>
           </div>
