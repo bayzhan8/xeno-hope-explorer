@@ -742,7 +742,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.deathsPerYear && filteredData.deathsPerYearDataByAge ? (
-              <BarChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 15, left: 20 }} barGap={2} barCategoryGap="15%">
+              <BarChart data={prepareAgeDataForChart(filteredData.deathsPerYearDataByAge)} margin={{ top: 10, right: 10, bottom: 25, left: 20 }} barGap={2} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
@@ -785,7 +785,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 ))}
               </BarChart>
             ) : (
-              <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 20, bottom: 15, left: 20 }} barCategoryGap="15%">
+              <BarChart data={filteredData.deathsPerYearData} margin={{ top: 10, right: 20, bottom: 25, left: 20 }} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
@@ -846,7 +846,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={325}>
             {ageBreakdownExpanded.netDeathsPrevented && filteredData.netDeathsPreventedByAge ? (
-              <BarChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 15, left: 20 }} barCategoryGap="15%">
+              <BarChart data={prepareAgeDataForChart(filteredData.netDeathsPreventedByAge)} margin={{ top: 10, right: 10, bottom: 25, left: 20 }} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
@@ -879,7 +879,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 ))}
               </BarChart>
             ) : (
-              <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 20, bottom: 15, left: 20 }} barCategoryGap="15%">
+              <BarChart data={filteredData.netDeathsPreventedPerYearData} margin={{ top: 10, right: 20, bottom: 25, left: 20 }} barCategoryGap="15%">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
