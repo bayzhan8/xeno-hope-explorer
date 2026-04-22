@@ -14,6 +14,7 @@ interface SimulationParams {
   simulationHorizon: number;
   xeno_proportion: number;
   highCPRAThreshold: number;
+  targetingStrategy?: string;  // NEW: targeting strategy
 }
 
 interface SimulationData {
@@ -40,6 +41,7 @@ const Index = () => {
     simulationHorizon: 10,
     xeno_proportion: 1,
     highCPRAThreshold: 95, // Age-stratified data uses 95% threshold
+    targetingStrategy: 'standard', // Default to standard (high cPRA, all ages)
   });
 
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
@@ -60,6 +62,7 @@ const Index = () => {
           xenoGraftFailureRate: params.xenoGraftFailureRate,
           postTransplantDeathRate: params.postTransplantDeathRate,
           highCPRAThreshold: params.highCPRAThreshold,
+          targetingStrategy: params.targetingStrategy || 'standard',
         });
 
         if (!configName) {
@@ -67,21 +70,28 @@ const Index = () => {
         }
 
         // Load visualization data
-        const vizData = await loadVisualizationData(configName, params.highCPRAThreshold);
+        const vizData = await loadVisualizationData(configName, params.highCPRAThreshold, params.targetingStrategy);
 
         // Load base case data if comparison is available
         let baseVizData = null;
         let baseConfigName = vizData.base_config_name;
 
-        // For age-stratified data, base case is simply xeno_age_prop0
-        if (!baseConfigName) {
-          baseConfigName = 'xeno_age_prop0';
+        // Base case = same relist/death settings but xeno_proportion=0
+        const strategy = params.targetingStrategy || 'standard';
+        if (strategy === 'standard') {
+          if (!baseConfigName) {
+            const fmt = (v: number) => Number.isInteger(v) ? v.toString() : v.toString().replace('.', 'p');
+            baseConfigName = `xeno_age_prop0_relist${fmt(params.xenoGraftFailureRate)}_death${fmt(params.postTransplantDeathRate)}`;
+          }
+        } else {
+          const fmt = (v: number) => v.toFixed(1).replace('.', 'p');
+          baseConfigName = `${strategy}_prop${fmt(0)}_relist${fmt(params.xenoGraftFailureRate)}_death${fmt(params.postTransplantDeathRate)}`;
         }
 
         // Try to load base case - always attempt if we have a config name
         if (baseConfigName) {
           try {
-            baseVizData = await loadVisualizationData(baseConfigName, params.highCPRAThreshold);
+            baseVizData = await loadVisualizationData(baseConfigName, params.highCPRAThreshold, strategy);
           } catch (err) {
             console.warn(`Could not load base case data (${baseConfigName}) for comparison:`, err);
           }
@@ -117,7 +127,7 @@ const Index = () => {
     }
 
     loadData();
-  }, [params.xeno_proportion, params.xenoGraftFailureRate, params.postTransplantDeathRate, params.simulationHorizon, params.highCPRAThreshold]);
+  }, [params.xeno_proportion, params.xenoGraftFailureRate, params.postTransplantDeathRate, params.simulationHorizon, params.highCPRAThreshold, params.targetingStrategy]);
 
   return (
     <div className="min-h-screen bg-background">
