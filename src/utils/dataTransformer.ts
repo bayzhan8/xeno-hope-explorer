@@ -51,6 +51,10 @@ interface VizData {
     total_net_deaths_prevented?: number;
     average_net_deaths_prevented?: number;
   };
+  cumulative_xeno_transplants?: {
+    x: number[];
+    series: Array<{ label: string; y: number[]; color?: string }>;
+  };
   has_comparison?: boolean;
   base_config_name?: string;
   highCPRAThreshold: number;
@@ -71,6 +75,7 @@ interface SimulationData {
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
   netDeathsPreventedPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   waitlistDeathsPerYearData: Array<{ year: number; waitlistDeaths: number; baseWaitlistDeaths?: number }>;
+  cumulativeXenoTransplants: number;
   // Age-specific data (optional)
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
@@ -226,6 +231,7 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     deathsPerDayData: [],
     netDeathsPreventedPerYearData: [],
     waitlistDeathsPerYearData: [],
+    cumulativeXenoTransplants: 0,
   };
 
   // 1. Waitlist sizes
@@ -434,6 +440,14 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
           highCPRA: highByAge,
         });
       }
+    }
+  }
+
+  // 2b. Cumulative xeno transplants (actual procedures, not living recipients)
+  if (vizData.cumulative_xeno_transplants && vizData.cumulative_xeno_transplants.series && vizData.cumulative_xeno_transplants.x && vizData.cumulative_xeno_transplants.x.length > 0) {
+    const totalSeries = findSeries(vizData.cumulative_xeno_transplants.series, ['total xeno transplants', 'total']);
+    if (totalSeries && totalSeries.length > 0) {
+      result.cumulativeXenoTransplants = totalSeries[totalSeries.length - 1] || 0;
     }
   }
 
@@ -1156,13 +1170,14 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     .filter(d => d.year <= horizon)
     .slice(-1)[0];
   
-  const totalXeno = (finalRecipients?.highXeno || 0) + (finalRecipients?.lowXeno || 0);
-  const totalTransplants = (finalRecipients?.lowHuman || 0) + (finalRecipients?.highHuman || 0) + totalXeno;
-  const xenoTransplants = totalXeno;
+  // Use actual cumulative procedure count if available, else fall back to living recipients
+  const totalXenoRecipients = (finalRecipients?.highXeno || 0) + (finalRecipients?.lowXeno || 0);
+  const xenoTransplants = data.cumulativeXenoTransplants > 0 ? data.cumulativeXenoTransplants : totalXenoRecipients;
+  const totalTransplants = (finalRecipients?.lowHuman || 0) + (finalRecipients?.highHuman || 0) + xenoTransplants;
   
   // Penetration rate: xeno share of all recipients
   const penetrationRate = totalTransplants > 0 
-    ? totalXeno / totalTransplants 
+    ? xenoTransplants / totalTransplants 
     : 0;
 
   return {
