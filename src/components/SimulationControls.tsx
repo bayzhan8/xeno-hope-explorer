@@ -3,8 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { Info, ChevronDown, ChevronUp, Target } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface SimulationParams {
   xenoGraftFailureRate: number;
@@ -12,6 +19,7 @@ interface SimulationParams {
   simulationHorizon: number;
   xeno_proportion: number;
   highCPRAThreshold: number;
+  targetingStrategy?: string;  // NEW: "standard", "age60_cpraHigh", "age45_cpraHigh", "age60_cpraAll", "age45_cpraAll"
 }
 
 interface SimulationControlsProps {
@@ -27,6 +35,10 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
   };
 
   const updateParam = (key: keyof SimulationParams, value: number) => {
+    onParamsChange({ ...params, [key]: value });
+  };
+
+  const updateStringParam = (key: keyof SimulationParams, value: string) => {
     onParamsChange({ ...params, [key]: value });
   };
 
@@ -92,44 +104,94 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
               <button
                 type="button"
                 onClick={() => updateParam('highCPRAThreshold', 85)}
+                disabled={params.targetingStrategy && params.targetingStrategy !== 'standard'}
                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   params.highCPRAThreshold === 85
                     ? 'border-2 border-primary bg-primary text-primary-foreground'
                     : 'border border-input bg-background text-foreground hover:bg-muted'
-                }`}
+                } ${params.targetingStrategy && params.targetingStrategy !== 'standard' ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 85%+
               </button>
               <button
                 type="button"
                 onClick={() => updateParam('highCPRAThreshold', 95)}
+                disabled={params.targetingStrategy && params.targetingStrategy !== 'standard'}
                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   params.highCPRAThreshold === 95
                     ? 'border-2 border-primary bg-primary text-primary-foreground'
                     : 'border border-input bg-background text-foreground hover:bg-muted'
-                }`}
+                } ${params.targetingStrategy && params.targetingStrategy !== 'standard' ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 95%+
               </button>
               <button
                 type="button"
                 onClick={() => updateParam('highCPRAThreshold', 99)}
+                disabled={params.targetingStrategy && params.targetingStrategy !== 'standard'}
                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   params.highCPRAThreshold === 99
                     ? 'border-2 border-primary bg-primary text-primary-foreground'
                     : 'border border-input bg-background text-foreground hover:bg-muted'
-                }`}
+                } ${params.targetingStrategy && params.targetingStrategy !== 'standard' ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 99%+
               </button>
             </div>
             <div className="text-xs text-muted-foreground flex items-start gap-2">
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-              <span>Select the cPRA threshold to define "high cPRA" patients. Different thresholds reflect different patient populations and sensitivity patterns.</span>
+              <span>
+                {params.targetingStrategy && params.targetingStrategy !== 'standard'
+                  ? 'Targeting experiments use 99% threshold (fixed)'
+                  : 'Select the cPRA threshold to define "high cPRA" patients. Different thresholds reflect different patient populations and sensitivity patterns.'}
+              </span>
             </div>
           </div>
 
-
+          {/* Targeting Strategy */}
+          <div className="space-y-3 pb-4 border-b border-medical-border">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-primary" />
+              <Label className="text-sm font-medium">Allocation Strategy</Label>
+            </div>
+            <Select
+              value={params.targetingStrategy || 'standard'}
+              onValueChange={(value) => {
+                // Update both strategy and threshold in a single state update to avoid multiple re-renders
+                const newParams = { ...params, targetingStrategy: value };
+                // Targeting experiments only support 99% threshold
+                if (value !== 'standard') {
+                  newParams.highCPRAThreshold = 99;
+                }
+                onParamsChange(newParams);
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select allocation strategy" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="standard">Standard (High cPRA, All Ages)</SelectItem>
+                <SelectItem value="age60_cpraHigh">Elderly 60+ (High cPRA Only)</SelectItem>
+                <SelectItem value="age45_cpraHigh">Older Adults 45+ (High cPRA Only)</SelectItem>
+                <SelectItem value="age60_cpraAll">Age-Based 60+ (Any cPRA)</SelectItem>
+                <SelectItem value="age45_cpraAll">Age-Based 45+ (Any cPRA)</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div className="flex items-start gap-2">
+                <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                <span>Choose which patient populations receive xenotransplants.</span>
+              </div>
+              {params.targetingStrategy && params.targetingStrategy !== 'standard' && (
+                <div className="pl-5 text-[11px] bg-muted/50 p-2 rounded border border-medical-border">
+                  {params.targetingStrategy === 'age60_cpraHigh' && 'Targets: Patients age 60+ with high cPRA (≥99%)'}
+                  {params.targetingStrategy === 'age45_cpraHigh' && 'Targets: Patients age 45+ with high cPRA (≥99%)'}
+                  {params.targetingStrategy === 'age60_cpraAll' && 'Targets: All patients age 60+, regardless of cPRA'}
+                  {params.targetingStrategy === 'age45_cpraAll' && 'Targets: All patients age 45+, regardless of cPRA'}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Xeno Proportion */}
           <div className="space-y-3">

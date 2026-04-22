@@ -96,6 +96,7 @@ interface UserInputs {
   xenoGraftFailureRate: number; // multiplier (0, 0.5, 1, 1.5, 2)
   postTransplantDeathRate: number; // multiplier (0, 0.5, 1, 1.5, 2)
   highCPRAThreshold: number; // 85, 95, or 99
+  targetingStrategy?: string; // NEW: "standard", "age60_cpraHigh", etc.
 }
 
 interface ExperimentConfigs {
@@ -107,40 +108,63 @@ interface ExperimentConfigs {
 // Supabase Storage base URL
 const SUPABASE_STORAGE_URL = 'https://bkgpfnhbmkxzwtixiwnh.supabase.co/storage/v1/object/public/viz-data';
 
+// Standard configs were generated with Python int list [0, 0.5, 1, 1.5, 2]
+// so str(0) = "0", str(0.5) = "0p5", str(1) = "1"
+function formatStandard(val: number): string {
+  if (Number.isInteger(val)) return val.toString();
+  return val.toString().replace('.', 'p');
+}
+
+// Targeting configs were generated with Python float list [0.0, 0.5, 1.0, 1.5, 2.0]
+// so str(0.0) = "0.0" → "0p0", str(1.0) = "1.0" → "1p0"
+function formatTargeting(val: number): string {
+  return val.toFixed(1).replace('.', 'p');
+}
+
 // Find config name from user inputs
-// Age-stratified version: configs are simple (xeno_age_prop0, xeno_age_prop0p5, xeno_age_prop1, etc.)
 export async function findConfigName(userInputs: UserInputs): Promise<string | null> {
   try {
     console.log('[Config Finder] Starting config lookup with inputs:', userInputs);
 
-    // Load experiment_configs_v2.json from Supabase Storage (age-stratified version)
-    const configUrl = `${SUPABASE_STORAGE_URL}/experiment_configs_v2.json`;
+    const strategy = userInputs.targetingStrategy || 'standard';
+
+    let configUrl: string;
+    if (strategy === 'standard') {
+      configUrl = `${SUPABASE_STORAGE_URL}/experiment_configs_v2.json`;
+    } else {
+      configUrl = `${SUPABASE_STORAGE_URL}/targeting_configs.json`;
+    }
+
     console.log('[Config Finder] Fetching from:', configUrl);
     const response = await fetch(configUrl);
     if (!response.ok) {
-      throw new Error('Failed to load experiment_configs_v2.json from Supabase Storage');
+      throw new Error(`Failed to load config file from ${configUrl}`);
     }
     const experimentConfigs: ExperimentConfigs = await response.json();
 
-    // Age-stratified configs have simple naming: xeno_age_prop{value}
-    // where value is xeno_proportion with dots replaced by 'p'
-    // Examples: xeno_age_prop0, xeno_age_prop0p5, xeno_age_prop1, xeno_age_prop1p5, xeno_age_prop2
+    let configName: string;
+    if (strategy === 'standard') {
+      const fmt = formatStandard;
+      configName = `xeno_age_prop${fmt(userInputs.xeno_proportion)}_relist${fmt(userInputs.xenoGraftFailureRate)}_death${fmt(userInputs.postTransplantDeathRate)}`;
+    } else {
+      const fmt = formatTargeting;
+      configName = `${strategy}_prop${fmt(userInputs.xeno_proportion)}_relist${fmt(userInputs.xenoGraftFailureRate)}_death${fmt(userInputs.postTransplantDeathRate)}`;
+    }
 
-    const propStr = userInputs.xeno_proportion.toString().replace('.', 'p');
-    const configName = `xeno_age_prop${propStr}`;
-
-    // Debug logging
     if (import.meta.env.DEV) {
       console.log('═══════════════════════════════════════════════════════════');
-      console.log('[Config Finder] 🔍 AGE-STRATIFIED CONFIG LOOKUP');
+      console.log('[Config Finder] 🔍 CONFIG LOOKUP');
       console.log('═══════════════════════════════════════════════════════════');
       console.log('User Inputs:');
       console.log('  - xeno_proportion:', userInputs.xeno_proportion);
+      console.log('  - xenoGraftFailureRate:', userInputs.xenoGraftFailureRate);
+      console.log('  - postTransplantDeathRate:', userInputs.postTransplantDeathRate);
+      console.log('  - targetingStrategy:', strategy);
+      console.log('  - Config file:', configUrl);
       console.log('  - Mapped to config:', configName);
       console.log('═══════════════════════════════════════════════════════════');
     }
 
-    // Check if config exists
     if (experimentConfigs.name_to_config[configName]) {
       if (import.meta.env.DEV) {
         console.log('[Config Finder] ✅ FOUND:', configName);
@@ -148,7 +172,6 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
       return configName;
     }
 
-    // No match found
     if (import.meta.env.DEV) {
       console.warn('[Config Finder] ❌ Config not found:', configName);
       console.warn('Available configs:', Object.keys(experimentConfigs.name_to_config));
@@ -163,14 +186,23 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
 
 
 // Load visualization data from Supabase Storage (age-stratified version)
-export async function loadVisualizationData(configName: string, highCPRAThreshold: number = 95) {
+export async function loadVisualizationData(configName: string, highCPRAThreshold: number = 95, targetingStrategy?: string) {
   try {
-    // Determine folder based on threshold
-    let vizFolder = 'viz_data_age';
-    if (highCPRAThreshold === 85) {
-      vizFolder = 'viz_data_age_85';
-    } else if (highCPRAThreshold === 99) {
-      vizFolder = 'viz_data_age_99';
+    let vizFolder: string;
+
+    // Determine folder based on strategy
+    const strategy = targetingStrategy || 'standard';
+    if (strategy !== 'standard') {
+      // Targeting experiments always use 99% threshold data
+      vizFolder = 'viz_data_age_targeting';
+    } else {
+      // Standard configs: use threshold-specific folders
+      vizFolder = 'viz_data_age';
+      if (highCPRAThreshold === 85) {
+        vizFolder = 'viz_data_age_85';
+      } else if (highCPRAThreshold === 99) {
+        vizFolder = 'viz_data_age_99';
+      }
     }
 
     const vizUrl = `${SUPABASE_STORAGE_URL}/${vizFolder}/${configName}.json`;
