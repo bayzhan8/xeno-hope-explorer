@@ -97,9 +97,52 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
         <CardContent className="space-y-6 p-4 overflow-y-auto flex-1">
 
 
+          {/* Allocation Strategy */}
+          <div className="space-y-3 pb-4 border-b border-medical-border">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-primary" />
+              <Label className="text-sm font-medium">Allocation Strategy</Label>
+            </div>
+            <Select
+              value={params.targetingStrategy || 'standard'}
+              onValueChange={(value) => {
+                const newParams = { ...params, targetingStrategy: value };
+                if (value !== 'standard') {
+                  newParams.highCPRAThreshold = 99;
+                }
+                onParamsChange(newParams);
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select allocation strategy" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="standard">Standard (High cPRA, All Ages)</SelectItem>
+                <SelectItem value="age60_cpraHigh">Elderly 60+ (High cPRA Only)</SelectItem>
+                <SelectItem value="age45_cpraHigh">Older Adults 45+ (High cPRA Only)</SelectItem>
+                <SelectItem value="age60_cpraAll">Age-Based 60+ (Any cPRA)</SelectItem>
+                <SelectItem value="age45_cpraAll">Age-Based 45+ (Any cPRA)</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div className="flex items-start gap-2">
+                <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                <span>Choose which patient populations receive xenotransplants.</span>
+              </div>
+              {params.targetingStrategy && params.targetingStrategy !== 'standard' && (
+                <div className="pl-5 text-[11px] bg-muted/50 p-2 rounded border border-medical-border">
+                  {params.targetingStrategy === 'age60_cpraHigh' && 'Targets: Patients age 60+ with high cPRA (≥99%)'}
+                  {params.targetingStrategy === 'age45_cpraHigh' && 'Targets: Patients age 45+ with high cPRA (≥99%)'}
+                  {params.targetingStrategy === 'age60_cpraAll' && 'Targets: All patients age 60+, regardless of cPRA'}
+                  {params.targetingStrategy === 'age45_cpraAll' && 'Targets: All patients age 45+, regardless of cPRA'}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* High CPRA Definition */}
           <div className="space-y-3 pb-4 border-b border-medical-border">
-            <Label className="text-sm font-medium">High CPRA Definition</Label>
+            <Label className="text-sm font-medium">High cPRA Definition</Label>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -142,54 +185,9 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span>
                 {params.targetingStrategy && params.targetingStrategy !== 'standard'
-                  ? 'Targeting experiments use 99% threshold (fixed)'
-                  : 'Select the cPRA threshold to define "high cPRA" patients. Different thresholds reflect different patient populations and sensitivity patterns.'}
+                  ? 'Targeting strategies use 99% threshold (fixed)'
+                  : 'Defines "high cPRA" patients. Only available for the Standard allocation strategy.'}
               </span>
-            </div>
-          </div>
-
-          {/* Targeting Strategy */}
-          <div className="space-y-3 pb-4 border-b border-medical-border">
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-primary" />
-              <Label className="text-sm font-medium">Allocation Strategy</Label>
-            </div>
-            <Select
-              value={params.targetingStrategy || 'standard'}
-              onValueChange={(value) => {
-                // Update both strategy and threshold in a single state update to avoid multiple re-renders
-                const newParams = { ...params, targetingStrategy: value };
-                // Targeting experiments only support 99% threshold
-                if (value !== 'standard') {
-                  newParams.highCPRAThreshold = 99;
-                }
-                onParamsChange(newParams);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select allocation strategy" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="standard">Standard (High cPRA, All Ages)</SelectItem>
-                <SelectItem value="age60_cpraHigh">Elderly 60+ (High cPRA Only)</SelectItem>
-                <SelectItem value="age45_cpraHigh">Older Adults 45+ (High cPRA Only)</SelectItem>
-                <SelectItem value="age60_cpraAll">Age-Based 60+ (Any cPRA)</SelectItem>
-                <SelectItem value="age45_cpraAll">Age-Based 45+ (Any cPRA)</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="text-xs text-muted-foreground space-y-1">
-              <div className="flex items-start gap-2">
-                <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                <span>Choose which patient populations receive xenotransplants.</span>
-              </div>
-              {params.targetingStrategy && params.targetingStrategy !== 'standard' && (
-                <div className="pl-5 text-[11px] bg-muted/50 p-2 rounded border border-medical-border">
-                  {params.targetingStrategy === 'age60_cpraHigh' && 'Targets: Patients age 60+ with high cPRA (≥99%)'}
-                  {params.targetingStrategy === 'age45_cpraHigh' && 'Targets: Patients age 45+ with high cPRA (≥99%)'}
-                  {params.targetingStrategy === 'age60_cpraAll' && 'Targets: All patients age 60+, regardless of cPRA'}
-                  {params.targetingStrategy === 'age45_cpraAll' && 'Targets: All patients age 45+, regardless of cPRA'}
-                </div>
-              )}
             </div>
           </div>
 
