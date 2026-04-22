@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, Minus, Heart, Users, Activity, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Heart, Users, Activity, Info } from 'lucide-react';
 
 interface MetricSummary {
   waitlistReduction: number;
@@ -28,8 +28,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
   };
 
   const xenoActualPerYear = Math.round(metrics.xenoTransplants / horizon);
-  const xenoUnusedPerYear = Math.max(0, xenoIntendedPerYear - xenoActualPerYear);
-  const hasExhaustion = xenoIntendedPerYear > 0 && xenoUnusedPerYear > xenoIntendedPerYear * 0.05;
+  const actualExceedsIntended = xenoActualPerYear > xenoIntendedPerYear && xenoIntendedPerYear > 0;
 
   const standardMetrics = [
     {
@@ -61,7 +60,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
   return (
     <div className="space-y-4">
       {/* Xeno Kidney Allocation Card - full width */}
-      <Card className={`bg-card shadow-[var(--shadow-soft)] border-medical-border hover:shadow-[var(--shadow-medium)] transition-shadow duration-200 ${hasExhaustion ? 'border-amber-300' : ''}`}>
+      <Card className="bg-card shadow-[var(--shadow-soft)] border-medical-border hover:shadow-[var(--shadow-medium)] transition-shadow duration-200">
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -70,35 +69,42 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
                 Xeno Kidney Allocation
               </p>
             </div>
-            {hasExhaustion
-              ? <AlertTriangle className="w-4 h-4 text-amber-500" />
-              : getTrendIcon(metrics.xenoTransplants)
-            }
+            {getTrendIcon(metrics.xenoTransplants)}
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-6">
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Intended</p>
-              <p className="text-xl font-bold text-chart-quaternary">{formatNumber(xenoIntendedPerYear)}<span className="text-sm font-normal text-muted-foreground"> / year</span></p>
+              <p className="text-xs text-muted-foreground mb-1">Xeno Supply Rate</p>
+              <p className="text-xl font-bold text-chart-quaternary">
+                {formatNumber(xenoIntendedPerYear)}
+                <span className="text-sm font-normal text-muted-foreground"> kidneys / year</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Added on top of existing human transplants
+              </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Actually Transplanted</p>
-              <p className={`text-xl font-bold ${hasExhaustion ? 'text-amber-600' : 'text-chart-quaternary'}`}>{formatNumber(xenoActualPerYear)}<span className="text-sm font-normal text-muted-foreground"> / year</span></p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Unused</p>
-              <p className={`text-xl font-bold ${hasExhaustion ? 'text-amber-500' : 'text-muted-foreground'}`}>{formatNumber(xenoUnusedPerYear)}<span className="text-sm font-normal text-muted-foreground"> / year</span></p>
+              <p className="text-xs text-muted-foreground mb-1">Xeno Procedures Performed</p>
+              <p className="text-xl font-bold text-chart-quaternary">
+                {formatNumber(xenoActualPerYear)}
+                <span className="text-sm font-normal text-muted-foreground"> / year avg</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Over {horizon} years {actualExceedsIntended ? '(includes re-transplants from graft failures)' : ''}
+              </p>
             </div>
           </div>
-          {hasExhaustion && (
-            <p className="text-xs text-amber-600 mt-3 flex items-center gap-1.5">
-              <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-              Target population exhausted — {formatNumber(xenoUnusedPerYear)} xeno kidneys/year go unused because there aren't enough eligible patients
-            </p>
-          )}
-          {!hasExhaustion && xenoIntendedPerYear > 0 && (
-            <p className="text-xs text-muted-foreground mt-3">
-              Average per year over {horizon} years
-            </p>
+          {xenoIntendedPerYear > 0 && (
+            <div className="mt-3 pt-3 border-t border-medical-border">
+              <div className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
+                <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-primary" />
+                <span>
+                  {actualExceedsIntended
+                    ? 'Procedures exceed supply because xeno graft failures cause patients to relist and receive repeat transplants. A higher supply rate drains the eligible waitlist faster, reaching the same steady-state floor sooner — but the floor is set by how quickly new patients arrive, not by supply.'
+                    : 'The xeno supply rate exceeds what the target population can absorb. A higher supply drains the eligible pool faster — reaching the waitlist floor sooner — but beyond the saturation point, additional kidneys cycle through repeat transplants without further reducing the waitlist.'
+                  }
+                </span>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
