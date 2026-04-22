@@ -6,7 +6,7 @@ import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
 import MarkovChainVisualization from '@/components/MarkovChainVisualization';
 import { findConfigName, loadVisualizationData } from '@/utils/configFinder';
-import { transformVizDataToSimulationData, calculateSummaryMetrics } from '@/utils/dataTransformer';
+import { transformVizDataToSimulationData, calculateSummaryMetrics, getXenoBaseRate } from '@/utils/dataTransformer';
 
 interface SimulationParams {
   xenoGraftFailureRate: number;
@@ -231,6 +231,9 @@ const Index = () => {
                   <SummaryMetrics
                     metrics={metrics}
                     horizon={params.simulationHorizon}
+                    xenoIntendedPerYear={Math.round(
+                      getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold) * params.xeno_proportion
+                    )}
                   />
                 </div>
 

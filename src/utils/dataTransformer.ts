@@ -1,3 +1,25 @@
+// Yearly transplant rates for targeted populations (SRTR 2022 data).
+// Used to compute how many xeno kidneys are "intended" for a given scenario.
+export const STANDARD_BASE_RATES: Record<number, number> = {
+  85: 2841,
+  95: 1723,
+  99: 974,
+};
+
+export const TARGETING_BASE_RATES: Record<string, number> = {
+  age60_cpraHigh: 192,
+  age45_cpraHigh: 593,
+  age60_cpraAll: 8728,
+  age45_cpraAll: 17705,
+};
+
+export function getXenoBaseRate(strategy: string, threshold: number): number {
+  if (strategy === 'standard') {
+    return STANDARD_BASE_RATES[threshold] || STANDARD_BASE_RATES[95];
+  }
+  return TARGETING_BASE_RATES[strategy] || 0;
+}
+
 // Transform JSON visualization data to format expected by SimulationCharts
 
 interface VizData {

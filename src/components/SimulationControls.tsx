@@ -5,6 +5,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Info, ChevronDown, ChevronUp, Target } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getXenoBaseRate } from '@/utils/dataTransformer';
 import {
   Select,
   SelectContent,
@@ -53,25 +54,8 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
     updateParam('simulationHorizon', params.simulationHorizon === 5 ? 10 : 5);
   };
 
-  // Base transplant rates for targeted populations (from SRTR 2022 data)
-  // Standard mode: xeno goes to all high-cPRA patients across all ages
-  const standardBaseRates: Record<number, number> = {
-    85: 2841,
-    95: 1723,
-    99: 974,
-  };
-  // Targeting mode (all use 99% threshold inputs):
-  const targetingBaseRates: Record<string, number> = {
-    age60_cpraHigh: 192,    // 99%+ cPRA, 60+ only
-    age45_cpraHigh: 593,    // 99%+ cPRA, 45+ and 60+
-    age60_cpraAll: 8728,    // all cPRA, 60+ only
-    age45_cpraAll: 17705,   // all cPRA, 45+ and 60+
-  };
-
   const strategy = params.targetingStrategy || 'standard';
-  const xenoBaseRate = strategy === 'standard'
-    ? (standardBaseRates[params.highCPRAThreshold] || standardBaseRates[95])
-    : (targetingBaseRates[strategy] || 0);
+  const xenoBaseRate = getXenoBaseRate(strategy, params.highCPRAThreshold);
   const xenoKidneysPerYear = Math.round(xenoBaseRate * params.xeno_proportion);
 
   // Graft failure / death base rates by cPRA threshold
