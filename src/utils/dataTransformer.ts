@@ -1052,11 +1052,16 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
       });
     }
 
-    // Transplants (derive from recipients)
+    // Transplants (derive from recipients via closest-year match)
     if (!result.transplantsData.find(d => d.year === year)) {
-      const recipients = result.recipientsData.find(d => d.year === year);
-      const prevRecipients = result.recipientsData.find(d => d.year === year - 1);
-      if (recipients && prevRecipients) {
+      const closestTo = (target: number) =>
+        result.recipientsData.length > 0
+          ? result.recipientsData.reduce((best, d) =>
+              Math.abs(d.year - target) < Math.abs(best.year - target) ? d : best)
+          : undefined;
+      const recipients = closestTo(year);
+      const prevRecipients = closestTo(year - 1);
+      if (recipients && prevRecipients && Math.abs(recipients.year - year) < 0.5 && Math.abs(prevRecipients.year - (year - 1)) < 0.5) {
         result.transplantsData.push({
           year,
           human: (recipients.lowHuman + recipients.highHuman) - (prevRecipients.lowHuman + prevRecipients.highHuman),
