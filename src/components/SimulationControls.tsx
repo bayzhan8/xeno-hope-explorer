@@ -53,23 +53,32 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
     updateParam('simulationHorizon', params.simulationHorizon === 5 ? 10 : 5);
   };
 
-  // Base rates based on CPRA threshold
+  // Base transplant rates for targeted populations (from SRTR 2022 data)
+  // Standard mode: xeno goes to all high-cPRA patients across all ages
+  const standardBaseRates: Record<number, number> = {
+    85: 2841,
+    95: 1723,
+    99: 974,
+  };
+  // Targeting mode (all use 99% threshold inputs):
+  const targetingBaseRates: Record<string, number> = {
+    age60_cpraHigh: 192,    // 99%+ cPRA, 60+ only
+    age45_cpraHigh: 593,    // 99%+ cPRA, 45+ and 60+
+    age60_cpraAll: 8728,    // all cPRA, 60+ only
+    age45_cpraAll: 17705,   // all cPRA, 45+ and 60+
+  };
+
+  const strategy = params.targetingStrategy || 'standard';
+  const xenoBaseRate = strategy === 'standard'
+    ? (standardBaseRates[params.highCPRAThreshold] || standardBaseRates[95])
+    : (targetingBaseRates[strategy] || 0);
+  const xenoKidneysPerYear = Math.round(xenoBaseRate * params.xeno_proportion);
+
+  // Graft failure / death base rates by cPRA threshold
   const baseRates = {
-    85: {
-      transplantsPerYear: 2933,
-      graftFailureRate: 5.60,
-      postTxDeathRate: 4.12
-    },
-    95: {
-      transplantsPerYear: 1812,
-      graftFailureRate: 6.81,
-      postTxDeathRate: 3.96
-    },
-    99: {
-      transplantsPerYear: 1048,
-      graftFailureRate: 8.36,
-      postTxDeathRate: 3.96
-    }
+    85: { transplantsPerYear: 2841, graftFailureRate: 5.60, postTxDeathRate: 4.12 },
+    95: { transplantsPerYear: 1723, graftFailureRate: 6.81, postTxDeathRate: 3.96 },
+    99: { transplantsPerYear: 974, graftFailureRate: 8.36, postTxDeathRate: 3.96 },
   };
 
   const currentRates = baseRates[params.highCPRAThreshold as keyof typeof baseRates] || baseRates[85];
@@ -191,11 +200,11 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
           </div>
 
-          {/* Xeno Proportion */}
+          {/* Xeno Kidneys Per Year */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Xeno Proportion</Label>
-              <span className="text-sm text-muted-foreground">{params.xeno_proportion}x</span>
+              <Label className="text-sm font-medium">Xeno Kidneys Per Year</Label>
+              <span className="text-sm font-semibold text-primary">{xenoKidneysPerYear.toLocaleString()}</span>
             </div>
             <Slider
               value={[params.xeno_proportion]}
@@ -206,15 +215,14 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
               className="w-full"
             />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>0x</span>
-              <span>0.5x</span>
-              <span>1x</span>
-              <span>1.5x</span>
-              <span>2x</span>
+              {[0, 0.5, 1, 1.5, 2].map((m) => (
+                <span key={m}>{Math.round(xenoBaseRate * m).toLocaleString()}</span>
+              ))}
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">
-                Additional xeno transplants as a fraction of high cPRA transplants (added on top)
+                {xenoKidneysPerYear.toLocaleString()} xeno kidneys added per year on top of existing human transplants
+                {' '}({params.xeno_proportion}x of {xenoBaseRate.toLocaleString()} base rate)
               </p>
               <button
                 type="button"
@@ -227,16 +235,24 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
             {expandedSections.xenoProportion && (
               <div className="text-xs text-muted-foreground space-y-2 p-3 bg-muted rounded-md border border-medical-border">
-                <p className="font-medium text-foreground">High cPRA Transplants Per Year (Base Rate)</p>
+                <p className="font-medium text-foreground">How Xeno Kidney Counts Are Calculated</p>
+                <p>The number of xeno kidneys equals the multiplier × the targeted population's yearly transplant rate (from SRTR 2022 data):</p>
+                <p className="font-medium mt-2">Standard (by cPRA only):</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>85+ cPRA: 2,933 transplants/year</li>
-                  <li>95+ cPRA: 1,812 transplants/year</li>
-                  <li>99+ cPRA: 1,048 transplants/year</li>
+                  <li>85+ cPRA: {(2841).toLocaleString()}/year base</li>
+                  <li>95+ cPRA: {(1723).toLocaleString()}/year base</li>
+                  <li>99+ cPRA: {(974).toLocaleString()}/year base</li>
+                </ul>
+                <p className="font-medium mt-2">Targeting (uses 99% cPRA threshold):</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Age 60+, High cPRA: {(192).toLocaleString()}/year base</li>
+                  <li>Age 45+, High cPRA: {(593).toLocaleString()}/year base</li>
+                  <li>Age 60+, Any cPRA: {(8728).toLocaleString()}/year base</li>
+                  <li>Age 45+, Any cPRA: {(17705).toLocaleString()}/year base</li>
                 </ul>
                 <p className="mt-2">
-                  This multiplier determines how many additional xeno transplants occur per year, based on the base high-cPRA transplant rate above. 
-                  Standard transplants continue unchanged. For example, with 1.0x and 85+ cPRA, 2,933 additional xeno transplants are added per year. 
-                  With 0.5x, half that number (1,467) are added.
+                  For example, Standard 1x with 85+ cPRA adds {(2841).toLocaleString()} xeno kidneys/year.
+                  Age 60+ Any cPRA at 0.5x adds {Math.round(8728 * 0.5).toLocaleString()}/year.
                 </p>
               </div>
             )}
