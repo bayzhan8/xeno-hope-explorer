@@ -26,7 +26,7 @@ interface SimulationData {
   transplantsData: Array<{ year: number; human: number; xeno: number }>;
   penetrationData: Array<{ year: number; proportion: number }>;
   waitingTimeData: Array<{ year: number; averageWaitingTime: number }>;
-  recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number }>;
+  recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number; lowXeno: number }>;
   cumulativeDeathsData: Array<{ year: number; lowWaitlist: number; highWaitlist: number; lowPostTx: number; highPostTx: number; total: number }>;
   deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;

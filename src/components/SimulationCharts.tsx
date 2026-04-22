@@ -13,7 +13,7 @@ interface SimulationData {
   transplantsData: Array<{ year: number; human: number; xeno: number }>;
   penetrationData: Array<{ year: number; proportion: number }>;
   waitingTimeData: Array<{ year: number; averageWaitingTime: number }>;
-  recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number }>;
+  recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number; lowXeno: number }>;
   cumulativeDeathsData: Array<{ year: number; lowWaitlist: number; highWaitlist: number; lowPostTx: number; highPostTx: number; total: number }>;
   deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
@@ -49,6 +49,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     lowHuman: true,
     highHuman: true,
     highXeno: true,
+    lowXeno: true,
   });
 
   const [deathsSeriesVisible, setDeathsSeriesVisible] = useState<Record<string, boolean>>({
@@ -179,6 +180,8 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     deathsPerYearDataByAge: data.deathsPerYearDataByAge ? filterByYear(data.deathsPerYearDataByAge) : undefined,
     waitlistDeathsPerYearDataByAge: data.waitlistDeathsPerYearDataByAge ? filterByYear(data.waitlistDeathsPerYearDataByAge) : undefined,
   };
+
+  const hasLowXeno = data.recipientsData.some(d => d.lowXeno > 0);
 
   // Dynamic x-axis configuration based on horizon
   const xAxisDomain = [0.5, simulationHorizon + 0.5];
@@ -473,6 +476,9 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 {recipientsSeriesVisible.highXeno && (
                   <Line type="monotone" dataKey="highXeno" stroke={COLORS.quaternary} name="High cPRA (xeno)" strokeWidth={3} dot={{ r: 0.3 }} />
                 )}
+                {recipientsSeriesVisible.lowXeno && hasLowXeno && (
+                  <Line type="monotone" dataKey="lowXeno" stroke={COLORS.tertiary} name="Low cPRA (xeno)" strokeWidth={3} dot={{ r: 0.3 }} />
+                )}
               </LineChart>
             )}
           </ResponsiveContainer>
@@ -480,17 +486,12 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           {/* Series Toggle */}
           <ChartSeriesToggle
             series={
-              ageBreakdownExpanded.recipients
-                ? [
-                    { key: 'lowHuman', label: 'Low cPRA', color: COLORS.secondary },
-                    { key: 'highHuman', label: 'High cPRA (human)', color: COLORS.primary },
-                    { key: 'highXeno', label: 'High cPRA (xeno)', color: COLORS.quaternary },
-                  ]
-                : [
-                    { key: 'lowHuman', label: 'Low cPRA (human)', color: COLORS.secondary },
-                    { key: 'highHuman', label: 'High cPRA (human)', color: COLORS.primary },
-                    { key: 'highXeno', label: 'High cPRA (xeno)', color: COLORS.quaternary },
-                  ]
+              [
+                { key: 'lowHuman', label: 'Low cPRA (human)', color: COLORS.secondary },
+                { key: 'highHuman', label: 'High cPRA (human)', color: COLORS.primary },
+                { key: 'highXeno', label: 'High cPRA (xeno)', color: COLORS.quaternary },
+                ...(hasLowXeno ? [{ key: 'lowXeno', label: 'Low cPRA (xeno)', color: COLORS.tertiary }] : []),
+              ]
             }
             visible={recipientsSeriesVisible}
             onChange={toggleRecipientsSeries}
