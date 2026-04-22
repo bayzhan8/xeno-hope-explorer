@@ -43,7 +43,7 @@ interface SimulationData {
   transplantsData: Array<{ year: number; human: number; xeno: number }>;
   penetrationData: Array<{ year: number; proportion: number }>;
   waitingTimeData: Array<{ year: number; averageWaitingTime: number }>;
-  recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number }>;
+  recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number; lowXeno: number }>;
   cumulativeDeathsData: Array<{ year: number; lowWaitlist: number; highWaitlist: number; lowPostTx: number; highPostTx: number; total: number }>;
   deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
@@ -338,15 +338,14 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
   // 2. Recipients
   if (vizData.recipients && vizData.recipients.series && vizData.recipients.x && vizData.recipients.x.length > 0) {
     // Check if we have separate human and xeno series (new format)
-    let lowHuman, highHuman, highXeno;
+    let lowHuman, highHuman, highXeno, lowXeno;
 
     if (vizData.recipients_std && vizData.recipients_xeno) {
-      // New format: use recipients_std and recipients_xeno
       lowHuman = aggregateAgeSeries(vizData.recipients_std.series, 'low cpra');
       const highStd = aggregateAgeSeries(vizData.recipients_std.series, 'high cpra');
       highXeno = aggregateAgeSeries(vizData.recipients_xeno.series, 'high cpra');
+      lowXeno = aggregateAgeSeries(vizData.recipients_xeno.series, 'low cpra');
 
-      // High human is high cPRA standard (human) recipients
       highHuman = highStd;
     } else {
       // Old format: try to find in combined recipients series
@@ -372,6 +371,7 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     const sampledLowHuman = lowHuman ? sampleData(lowHuman, targetPoints) : [];
     const sampledHighHuman = highHuman ? sampleData(highHuman, targetPoints) : [];
     const sampledHighXeno = highXeno ? sampleData(highXeno, targetPoints) : [];
+    const sampledLowXeno = lowXeno ? sampleData(lowXeno, targetPoints) : [];
     const years = sampledDays.map(daysToYears);
     
     for (let i = 0; i < years.length; i++) {
@@ -380,6 +380,7 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
         lowHuman: sampledLowHuman[i] || 0,
         highHuman: sampledHighHuman[i] || 0,
         highXeno: sampledHighXeno[i] || 0,
+        lowXeno: sampledLowXeno[i] || 0,
       });
     }
 
@@ -1023,7 +1024,7 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
         result.transplantsData.push({
           year,
           human: (recipients.lowHuman + recipients.highHuman) - (prevRecipients.lowHuman + prevRecipients.highHuman),
-          xeno: recipients.highXeno - prevRecipients.highXeno,
+          xeno: (recipients.highXeno + recipients.lowXeno) - (prevRecipients.highXeno + prevRecipients.lowXeno),
         });
       } else {
         result.transplantsData.push({ year, human: 0, xeno: 0 });
@@ -1133,16 +1134,13 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     .filter(d => d.year <= horizon)
     .slice(-1)[0];
   
-  // Total Transplants = final cumulative total recipients
-  const totalTransplants = (finalRecipients?.lowHuman || 0) + (finalRecipients?.highHuman || 0) + (finalRecipients?.highXeno || 0);
+  const totalXeno = (finalRecipients?.highXeno || 0) + (finalRecipients?.lowXeno || 0);
+  const totalTransplants = (finalRecipients?.lowHuman || 0) + (finalRecipients?.highHuman || 0) + totalXeno;
+  const xenoTransplants = totalXeno;
   
-  // Xeno Transplants = final cumulative xeno recipients
-  const xenoTransplants = finalRecipients?.highXeno || 0;
-  
-  // Calculate penetration rate (proportion of high CPRA patients who received xeno)
-  const highCPRATotal = (finalRecipients?.highHuman || 0) + (finalRecipients?.highXeno || 0);
-  const penetrationRate = highCPRATotal > 0 
-    ? (finalRecipients?.highXeno || 0) / highCPRATotal 
+  // Penetration rate: xeno share of all recipients
+  const penetrationRate = totalTransplants > 0 
+    ? totalXeno / totalTransplants 
     : 0;
 
   return {
