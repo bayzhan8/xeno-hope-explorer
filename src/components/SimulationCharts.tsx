@@ -72,12 +72,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     total: true,
   });
 
-  // Age group visibility state
-  const [ageGroupsVisible, setAgeGroupsVisible] = useState<Record<string, boolean>>({
-    age0_18: true,
-    age18_45: true,
-    age45_60: true,
-    age60plus: true,
+  // Per-chart age group visibility state
+  const defaultAgeGroups = { age0_18: true, age18_45: true, age45_60: true, age60plus: true };
+  const [ageGroupsPerChart, setAgeGroupsPerChart] = useState<Record<string, Record<string, boolean>>>({
+    waitlist: { ...defaultAgeGroups },
+    recipients: { ...defaultAgeGroups },
+    cumulativeDeaths: { ...defaultAgeGroups },
+    deathsPerYear: { ...defaultAgeGroups },
+    waitlistDeathsPerYear: { ...defaultAgeGroups },
+    netDeathsPrevented: { ...defaultAgeGroups },
   });
 
   // Independent age breakdown state for each chart
@@ -110,8 +113,11 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     setDeathsPerYearSeriesVisible(prev => ({ ...prev, [key]: visible }));
   };
 
-  const toggleAgeGroup = (key: string, visible: boolean) => {
-    setAgeGroupsVisible(prev => ({ ...prev, [key]: visible }));
+  const toggleAgeGroup = (chartKey: string) => (key: string, visible: boolean) => {
+    setAgeGroupsPerChart(prev => ({
+      ...prev,
+      [chartKey]: { ...prev[chartKey], [key]: visible },
+    }));
   };
 
   // Helper: Prepare age-specific data for charts
@@ -256,7 +262,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 />
                 <Tooltip content={<CustomTooltip />} />
                 {/* Low cPRA age groups */}
-                {waitlistSeriesVisible.lowCPRA && AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {waitlistSeriesVisible.lowCPRA && AGE_GROUPS.filter(group => ageGroupsPerChart.waitlist[group.key]).map(group => (
                   <Line
                     key={`lowCPRA_${group.key}`}
                     type="monotone"
@@ -269,7 +275,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   />
                 ))}
                 {/* High cPRA age groups */}
-                {waitlistSeriesVisible.highCPRA && AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {waitlistSeriesVisible.highCPRA && AGE_GROUPS.filter(group => ageGroupsPerChart.waitlist[group.key]).map(group => (
                   <Line
                     key={`highCPRA_${group.key}`}
                     type="monotone"
@@ -392,13 +398,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
             }
             visible={waitlistSeriesVisible}
             onChange={toggleWaitlistSeries}
+            chartId="waitlist"
           />
 
           {/* Age Group Toggle */}
           {filteredData.waitlistDataByAge && (
             <AgeGroupToggle
-              visible={ageGroupsVisible}
-              onChange={toggleAgeGroup}
+              chartId="waitlist"
+              visible={ageGroupsPerChart.waitlist}
+              onChange={toggleAgeGroup('waitlist')}
               expanded={ageBreakdownExpanded.waitlist}
               onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, waitlist: !prev.waitlist }))}
             />
@@ -429,7 +437,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
                 <Tooltip content={<CustomTooltip />} />
                 {/* Low cPRA age groups */}
-                {recipientsSeriesVisible.lowHuman && AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {recipientsSeriesVisible.lowHuman && AGE_GROUPS.filter(group => ageGroupsPerChart.recipients[group.key]).map(group => (
                   <Line
                     key={`lowCPRA_${group.key}`}
                     type="monotone"
@@ -442,7 +450,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   />
                 ))}
                 {/* High cPRA age groups */}
-                {(recipientsSeriesVisible.highHuman || recipientsSeriesVisible.highXeno) && AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {(recipientsSeriesVisible.highHuman || recipientsSeriesVisible.highXeno) && AGE_GROUPS.filter(group => ageGroupsPerChart.recipients[group.key]).map(group => (
                   <Line
                     key={`highCPRA_${group.key}`}
                     type="monotone"
@@ -495,13 +503,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
             }
             visible={recipientsSeriesVisible}
             onChange={toggleRecipientsSeries}
+            chartId="recipients"
           />
 
           {/* Age Group Toggle */}
           {filteredData.recipientsDataByAge && (
             <AgeGroupToggle
-              visible={ageGroupsVisible}
-              onChange={toggleAgeGroup}
+              chartId="recipients"
+              visible={ageGroupsPerChart.recipients}
+              onChange={toggleAgeGroup('recipients')}
               expanded={ageBreakdownExpanded.recipients}
               onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, recipients: !prev.recipients }))}
             />
@@ -531,7 +541,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
                 <Tooltip content={<CustomTooltip />} />
                 {/* Low cPRA age groups */}
-                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
                   <Line
                     key={`lowCPRA_${group.key}`}
                     type="monotone"
@@ -544,7 +554,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   />
                 ))}
                 {/* High cPRA age groups */}
-                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
                   <Line
                     key={`highCPRA_${group.key}`}
                     type="monotone"
@@ -600,14 +610,16 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               ]}
               visible={deathsSeriesVisible}
               onChange={toggleDeathsSeries}
+              chartId="cumulativeDeaths"
             />
           )}
 
           {/* Age Group Toggle */}
           {filteredData.cumulativeDeathsDataByAge && (
             <AgeGroupToggle
-              visible={ageGroupsVisible}
-              onChange={toggleAgeGroup}
+              chartId="cumulativeDeaths"
+              visible={ageGroupsPerChart.cumulativeDeaths}
+              onChange={toggleAgeGroup('cumulativeDeaths')}
               expanded={ageBreakdownExpanded.cumulativeDeaths}
               onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, cumulativeDeaths: !prev.cumulativeDeaths }))}
             />
@@ -643,7 +655,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 />
                 <Tooltip content={<CustomTooltip />} />
                 {/* Total age groups */}
-                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {AGE_GROUPS.filter(group => ageGroupsPerChart.waitlistDeathsPerYear[group.key]).map(group => (
                   <Line
                     key={`total_${group.key}`}
                     type="monotone"
@@ -726,8 +738,9 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           {/* Age Group Toggle */}
           {filteredData.waitlistDeathsPerYearDataByAge && (
             <AgeGroupToggle
-              visible={ageGroupsVisible}
-              onChange={toggleAgeGroup}
+              chartId="waitlistDeathsPerYear"
+              visible={ageGroupsPerChart.waitlistDeathsPerYear}
+              onChange={toggleAgeGroup('waitlistDeathsPerYear')}
               expanded={ageBreakdownExpanded.waitlistDeathsPerYear}
               onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, waitlistDeathsPerYear: !prev.waitlistDeathsPerYear }))}
             />
@@ -764,7 +777,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 />
                 <Tooltip content={<CustomTooltip />} />
                 {/* Low cPRA age groups - stacked */}
-                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {AGE_GROUPS.filter(group => ageGroupsPerChart.deathsPerYear[group.key]).map(group => (
                   <Bar
                     key={`lowCPRA_${group.key}`}
                     dataKey={`lowCPRA_${group.key}`}
@@ -775,7 +788,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   />
                 ))}
                 {/* High cPRA age groups - stacked */}
-                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {AGE_GROUPS.filter(group => ageGroupsPerChart.deathsPerYear[group.key]).map(group => (
                   <Bar
                     key={`highCPRA_${group.key}`}
                     dataKey={`highCPRA_${group.key}`}
@@ -824,14 +837,16 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               ]}
               visible={deathsPerYearSeriesVisible}
               onChange={toggleDeathsPerYearSeries}
+              chartId="deathsPerYear"
             />
           )}
 
           {/* Age Group Toggle */}
           {filteredData.deathsPerYearDataByAge && (
             <AgeGroupToggle
-              visible={ageGroupsVisible}
-              onChange={toggleAgeGroup}
+              chartId="deathsPerYear"
+              visible={ageGroupsPerChart.deathsPerYear}
+              onChange={toggleAgeGroup('deathsPerYear')}
               expanded={ageBreakdownExpanded.deathsPerYear}
               onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, deathsPerYear: !prev.deathsPerYear }))}
             />
@@ -868,7 +883,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 />
                 <Tooltip content={<CustomTooltip />} />
                 {/* High cPRA age groups - stacked */}
-                {AGE_GROUPS.filter(group => ageGroupsVisible[group.key]).map(group => (
+                {AGE_GROUPS.filter(group => ageGroupsPerChart.netDeathsPrevented[group.key]).map(group => (
                   <Bar
                     key={`highCPRA_${group.key}`}
                     dataKey={`highCPRA_${group.key}`}
@@ -918,14 +933,16 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               ]}
               visible={netDeathsSeriesVisible}
               onChange={toggleNetDeathsSeries}
+              chartId="netDeathsPrevented"
             />
           )}
 
           {/* Age Group Toggle */}
           {filteredData.netDeathsPreventedByAge && (
             <AgeGroupToggle
-              visible={ageGroupsVisible}
-              onChange={toggleAgeGroup}
+              chartId="netDeathsPrevented"
+              visible={ageGroupsPerChart.netDeathsPrevented}
+              onChange={toggleAgeGroup('netDeathsPrevented')}
               expanded={ageBreakdownExpanded.netDeathsPrevented}
               onToggleExpand={() => setAgeBreakdownExpanded(prev => ({ ...prev, netDeathsPrevented: !prev.netDeathsPrevented }))}
             />
