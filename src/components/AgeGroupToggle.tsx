@@ -15,13 +15,15 @@ interface AgeGroupToggleProps {
   onChange: (key: string, visible: boolean) => void;
   expanded: boolean;
   onToggleExpand: () => void;
+  chartId?: string;
 }
 
 export const AgeGroupToggle: React.FC<AgeGroupToggleProps> = ({
   visible,
   onChange,
   expanded,
-  onToggleExpand
+  onToggleExpand,
+  chartId = 'default'
 }) => {
   return (
     <div className="border-t border-medical-border pt-2 mt-2 mb-3">
@@ -40,13 +42,13 @@ export const AgeGroupToggle: React.FC<AgeGroupToggleProps> = ({
           {AGE_GROUPS.map((group) => (
             <div key={group.key} className="flex items-center gap-1.5">
               <Checkbox
-                id={`age-${group.key}`}
+                id={`age-${chartId}-${group.key}`}
                 checked={visible[group.key]}
                 onCheckedChange={(checked) => onChange(group.key, checked === true)}
                 className="data-[state=checked]:bg-primary h-3.5 w-3.5"
               />
               <Label
-                htmlFor={`age-${group.key}`}
+                htmlFor={`age-${chartId}-${group.key}`}
                 className="text-xs font-normal cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
               >
                 <span
