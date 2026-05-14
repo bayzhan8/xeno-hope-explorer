@@ -94,7 +94,15 @@ interface SimulationData {
   deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   deathsPerDayData: Array<{ year: number; low: number; high: number; total: number }>;
   netDeathsPreventedPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
-  waitlistDeathsPerYearData: Array<{ year: number; waitlistDeaths: number; baseWaitlistDeaths?: number }>;
+  waitlistDeathsPerYearData: Array<{
+    year: number;
+    waitlistDeaths: number;
+    lowWaitlistDeaths?: number;
+    highWaitlistDeaths?: number;
+    baseWaitlistDeaths?: number;
+    baseLowWaitlistDeaths?: number;
+    baseHighWaitlistDeaths?: number;
+  }>;
   cumulativeXenoTransplants: number;
   cumulativeStdTransplants: number;
   // Age-specific data (optional)
@@ -119,7 +127,12 @@ interface SimulationData {
     highPostTx?: Record<string, number>;
   }>;
   deathsPerYearDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
-  waitlistDeathsPerYearDataByAge?: Array<{ year: number; total: Record<string, number> }>;
+  waitlistDeathsPerYearDataByAge?: Array<{
+    year: number;
+    total: Record<string, number>;
+    lowCPRA?: Record<string, number>;
+    highCPRA?: Record<string, number>;
+  }>;
 }
 
 // Convert days to years (assuming 365 days per year)
@@ -1272,56 +1285,93 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     const xData = vizData.waitlist_deaths_per_year.x;
 
     if (totalSeries && totalSeries.length > 0) {
-      // Clear existing data and use backend data
-      result.waitlistDeathsPerYearData = [];
+      // Helpers: sum any series whose label includes the cPRA prefix and
+      // an age token. The backend ships per-age series only (no aggregate
+      // "Low cPRA Total" row), so we build the cPRA-level totals here.
+      const sumCpraSeries = (
+        series: Array<{ label: string; y: number[] }>,
+        cpraPattern: string
+      ): number[] | null => {
+        const matches = series.filter(s => {
+          const lbl = s.label.toLowerCase();
+          return lbl.includes(cpraPattern.toLowerCase()) && lbl.includes('age');
+        });
+        if (matches.length === 0) return null;
+        const len = matches[0].y?.length || 0;
+        const sum = new Array(len).fill(0);
+        for (const s of matches) {
+          for (let i = 0; i < len; i++) sum[i] += s.y?.[i] || 0;
+        }
+        return sum;
+      };
 
-      // Also get base case if available
-      let baseTotalSeries = null;
+      const lowSumSeries = sumCpraSeries(vizData.waitlist_deaths_per_year.series, 'low cpra');
+      const highSumSeries = sumCpraSeries(vizData.waitlist_deaths_per_year.series, 'high cpra');
+
+      // Base case (optional)
+      let baseTotalSeries: number[] | null = null;
+      let baseLowSumSeries: number[] | null = null;
+      let baseHighSumSeries: number[] | null = null;
       if (baseVizData && baseVizData.waitlist_deaths_per_year && baseVizData.waitlist_deaths_per_year.series) {
         baseTotalSeries = findSeries(baseVizData.waitlist_deaths_per_year.series, ['total waitlist deaths']);
+        baseLowSumSeries = sumCpraSeries(baseVizData.waitlist_deaths_per_year.series, 'low cpra');
+        baseHighSumSeries = sumCpraSeries(baseVizData.waitlist_deaths_per_year.series, 'high cpra');
       }
 
+      result.waitlistDeathsPerYearData = [];
       for (let i = 0; i < xData.length; i++) {
         result.waitlistDeathsPerYearData.push({
           year: xData[i] + 1, // Convert 0-based to 1-based
           waitlistDeaths: totalSeries[i] || 0,
+          lowWaitlistDeaths: lowSumSeries ? (lowSumSeries[i] || 0) : undefined,
+          highWaitlistDeaths: highSumSeries ? (highSumSeries[i] || 0) : undefined,
           baseWaitlistDeaths: baseTotalSeries ? (baseTotalSeries[i] || 0) : undefined,
+          baseLowWaitlistDeaths: baseLowSumSeries ? (baseLowSumSeries[i] || 0) : undefined,
+          baseHighWaitlistDeaths: baseHighSumSeries ? (baseHighSumSeries[i] || 0) : undefined,
         });
       }
 
       // Extract age-specific waitlist deaths per year data (optional)
-      const ageGroupsWaitlistDeaths = {};
       const agePatterns = [
         { key: 'age0_18', pattern: 'age 0-18' },
         { key: 'age18_45', pattern: 'age 18-45' },
         { key: 'age45_60', pattern: 'age 45-60' },
-        { key: 'age60plus', pattern: 'age 60+' }
+        { key: 'age60plus', pattern: 'age 60+' },
       ];
 
+      const lowByAge: Record<string, number[]> = {};
+      const highByAge: Record<string, number[]> = {};
+      const totalByAge: Record<string, number[]> = {};
       for (const { key, pattern } of agePatterns) {
-        // Aggregate across cPRA levels for each age group
         const lowAge = vizData.waitlist_deaths_per_year.series.find(s =>
           s.label.toLowerCase().includes('low cpra') && s.label.toLowerCase().includes(pattern)
         );
         const highAge = vizData.waitlist_deaths_per_year.series.find(s =>
           s.label.toLowerCase().includes('high cpra') && s.label.toLowerCase().includes(pattern)
         );
-
-        if (lowAge && highAge && lowAge.y && highAge.y) {
-          ageGroupsWaitlistDeaths[key] = lowAge.y.map((v, i) => v + (highAge.y[i] || 0));
+        if (lowAge?.y) lowByAge[key] = lowAge.y;
+        if (highAge?.y) highByAge[key] = highAge.y;
+        if (lowAge?.y && highAge?.y) {
+          totalByAge[key] = lowAge.y.map((v, i) => v + (highAge.y[i] || 0));
         }
       }
 
-      if (Object.keys(ageGroupsWaitlistDeaths).length > 0) {
+      if (Object.keys(totalByAge).length > 0) {
         result.waitlistDeathsPerYearDataByAge = [];
         for (let i = 0; i < xData.length; i++) {
-          const totalByAge: Record<string, number> = {};
-          for (const [ageKey, ageData] of Object.entries(ageGroupsWaitlistDeaths)) {
-            totalByAge[ageKey] = ageData[i] || 0;
+          const totalAt: Record<string, number> = {};
+          const lowAt: Record<string, number> = {};
+          const highAt: Record<string, number> = {};
+          for (const ageKey of Object.keys(totalByAge)) {
+            totalAt[ageKey] = totalByAge[ageKey][i] || 0;
+            if (lowByAge[ageKey]) lowAt[ageKey] = lowByAge[ageKey][i] || 0;
+            if (highByAge[ageKey]) highAt[ageKey] = highByAge[ageKey][i] || 0;
           }
           result.waitlistDeathsPerYearDataByAge.push({
             year: xData[i] + 1,
-            total: totalByAge,
+            total: totalAt,
+            lowCPRA: Object.keys(lowAt).length > 0 ? lowAt : undefined,
+            highCPRA: Object.keys(highAt).length > 0 ? highAt : undefined,
           });
         }
       }
