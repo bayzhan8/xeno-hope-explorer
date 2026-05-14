@@ -971,7 +971,87 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
       console.log('  ✗✗✗ FAILED - totalSeries is empty or not found');
     }
   }
-  // FALLBACK: Calculate from cumulative waitlist deaths (old non-age format)
+  // FALLBACK (age-stratified): compute net deaths prevented client-side from
+  // the scenario's and base case's `waitlist_deaths_per_year` series.
+  //
+  // The backend's create_viz_data only populates `net_deaths_prevented_per_year`
+  // for configs whose name matches its `xeno_age_prop...` regex — targeting
+  // configs (e.g. `age60_cpraHigh_prop1p0_relist1p0_death1p0`) never match, so
+  // their viz JSONs ship without the field. Both viz JSONs DO carry
+  // `waitlist_deaths_per_year` though, and net = base - scenario per year is
+  // the same computation the backend would do, so we just do it here.
+  else if (
+    !result.netDeathsPreventedPerYearData.length &&
+    baseVizData?.waitlist_deaths_per_year?.series &&
+    vizData.waitlist_deaths_per_year?.series &&
+    Array.isArray(vizData.waitlist_deaths_per_year.series) &&
+    vizData.waitlist_deaths_per_year.series.length > 0
+  ) {
+    console.log('[dataTransformer] Using client-side fallback: base.waitlist_deaths_per_year − scenario.waitlist_deaths_per_year');
+
+    const scenSeries = vizData.waitlist_deaths_per_year.series;
+    const baseSeries = baseVizData.waitlist_deaths_per_year.series;
+
+    // Try age-stratified aggregation first (the actual format on disk).
+    const scenLow   = aggregateAgeSeries(scenSeries, 'low cpra');
+    const scenHigh  = aggregateAgeSeries(scenSeries, 'high cpra');
+    const baseLow   = aggregateAgeSeries(baseSeries, 'low cpra');
+    const baseHigh  = aggregateAgeSeries(baseSeries, 'high cpra');
+    const scenTotal = findSeries(scenSeries, ['total waitlist deaths', 'total']);
+    const baseTotal = findSeries(baseSeries, ['total waitlist deaths', 'total']);
+
+    if (scenTotal && baseTotal) {
+      const n = Math.min(scenTotal.length, baseTotal.length);
+      for (let i = 0; i < n; i++) {
+        result.netDeathsPreventedPerYearData.push({
+          year: i + 1,
+          low:   (baseLow?.[i]  ?? 0) - (scenLow?.[i]  ?? 0),
+          high:  (baseHigh?.[i] ?? 0) - (scenHigh?.[i] ?? 0),
+          total: (baseTotal[i]  ?? 0) - (scenTotal[i] ?? 0),
+        });
+      }
+      console.log(`  ✓ client-side fallback emitted ${result.netDeathsPreventedPerYearData.length} years`);
+
+      // Age-stratified breakdown — same idea, per (cPRA, age) cell.
+      const scenLowAge   = extractAgeGroupSeries(scenSeries, 'low cpra');
+      const scenHighAge  = extractAgeGroupSeries(scenSeries, 'high cpra');
+      const baseLowAge   = extractAgeGroupSeries(baseSeries, 'low cpra');
+      const baseHighAge  = extractAgeGroupSeries(baseSeries, 'high cpra');
+
+      if (scenLowAge || scenHighAge) {
+        result.netDeathsPreventedByAge = [];
+        for (let i = 0; i < n; i++) {
+          const lowByAge:   Record<string, number> = {};
+          const highByAge:  Record<string, number> = {};
+          const totalByAge: Record<string, number> = {};
+          if (baseLowAge && scenLowAge) {
+            for (const k of Object.keys(scenLowAge)) {
+              lowByAge[k] = (baseLowAge[k]?.[i] ?? 0) - (scenLowAge[k]?.[i] ?? 0);
+            }
+          }
+          if (baseHighAge && scenHighAge) {
+            for (const k of Object.keys(scenHighAge)) {
+              highByAge[k] = (baseHighAge[k]?.[i] ?? 0) - (scenHighAge[k]?.[i] ?? 0);
+            }
+          }
+          // total per age = low_age + high_age (per cell)
+          const keys = new Set([...Object.keys(lowByAge), ...Object.keys(highByAge)]);
+          for (const k of keys) {
+            totalByAge[k] = (lowByAge[k] ?? 0) + (highByAge[k] ?? 0);
+          }
+          result.netDeathsPreventedByAge.push({
+            year: i + 1,
+            lowCPRA: lowByAge,
+            highCPRA: highByAge,
+            total: totalByAge,
+          });
+        }
+      }
+    } else {
+      console.warn('  ✗ client-side fallback skipped — missing total series in waitlist_deaths_per_year');
+    }
+  }
+  // LEGACY FALLBACK: Calculate from cumulative waitlist deaths (old non-age format)
   else if (baseVizData && vizData.cumulative_deaths && vizData.cumulative_deaths.series && baseVizData.cumulative_deaths && baseVizData.cumulative_deaths.series) {
     console.log('[dataTransformer] Using fallback calculation from cumulative_deaths');
 
