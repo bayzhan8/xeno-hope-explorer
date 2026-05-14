@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip, ScatterChart, Scatter } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip, ScatterChart, Scatter, ReferenceLine } from 'recharts';
 import { ChartSeriesToggle } from './ChartSeriesToggle';
 import { AgeGroupToggle, AGE_GROUPS } from './AgeGroupToggle';
 
@@ -948,9 +948,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
                   tickFormatter={(value) => value.toLocaleString()}
-                  domain={[0, 'dataMax']}
+                  domain={['dataMin', 'dataMax']}
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
+                <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
                 <Tooltip content={<CustomTooltip />} />
                 {/* Total age groups (low + high cPRA) - stacked */}
                 {netDeathsSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.netDeathsPrevented[group.key]).map(group => (
@@ -1006,9 +1007,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
                   tickFormatter={(value) => value.toLocaleString()}
-                  domain={[0, 'dataMax']}
+                  domain={['dataMin', 'dataMax']}
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
+                <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
                 <Tooltip content={<CustomTooltip />} />
                 {netDeathsSeriesVisible.low && <Bar dataKey="low" fill="#86efac" name="Low cPRA" radius={[2, 2, 0, 0]} />}
                 {netDeathsSeriesVisible.high && <Bar dataKey="high" fill="#22c55e" name="High cPRA" radius={[2, 2, 0, 0]} />}
