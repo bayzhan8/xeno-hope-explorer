@@ -721,12 +721,10 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
       const totalSeries = findSeries(vizData.deaths_per_year.series, ['total']);
 
       const xData = vizData.deaths_per_year.x;
-      // x is already in years (0, 1, 2, ...), not days
-      const years = xData;
 
-      for (let i = 0; i < years.length; i++) {
+      for (let i = 0; i < xData.length; i++) {
         result.deathsPerYearData.push({
-          year: years[i],
+          year: xData[i] + 1, // Convert 0-based to 1-based (yearly_deltas[0] = Year 1 deaths)
           low: lowSeries ? lowSeries[i] || 0 : 0,
           high: highSeries ? highSeries[i] || 0 : 0,
           total: totalSeries ? totalSeries[i] || 0 : 0,
@@ -756,7 +754,7 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
           }
 
           result.deathsPerYearDataByAge.push({
-            year: years[i],
+            year: xData[i] + 1, // Convert 0-based to 1-based
             lowCPRA: lowByAge,
             highCPRA: highByAge,
           });
