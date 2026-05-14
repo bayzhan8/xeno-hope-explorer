@@ -212,43 +212,58 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
 }
 
 
+// Backup prefix for the pre-rerun viz JSONs. While the Monte Carlo re-run
+// is in flight, the original prefixes are emptied and the old data lives
+// here. Once a config gets re-run, its fresh JSON lands at the original
+// prefix and takes precedence; until then we transparently fall back so
+// the website keeps working throughout the rerun.
+const BACKUP_PREFIX_ROOT = '_backup_pre_rerun_2026_05_14';
+
 // Load visualization data from Supabase Storage (age-stratified version)
 export async function loadVisualizationData(configName: string, highCPRAThreshold: number = 95, targetingStrategy?: string) {
+  let vizFolder: string;
+
+  // Determine folder based on (strategy, threshold).
+  const strategy = targetingStrategy || 'standard';
+  if (strategy !== 'standard') {
+    vizFolder = targetingVizFolder(highCPRAThreshold);
+  } else {
+    vizFolder = 'viz_data_age';
+    if (highCPRAThreshold === 85) {
+      vizFolder = 'viz_data_age_85';
+    } else if (highCPRAThreshold === 99) {
+      vizFolder = 'viz_data_age_99';
+    }
+  }
+
+  const primaryUrl = `${SUPABASE_STORAGE_URL}/${vizFolder}/${configName}.json`;
+  const backupUrl = `${SUPABASE_STORAGE_URL}/${BACKUP_PREFIX_ROOT}/${vizFolder}/${configName}.json`;
+
+  // Try the primary (live) prefix first; fall back to the pre-rerun backup
+  // if the new viz hasn't landed yet for this config.
   try {
-    let vizFolder: string;
-
-    // Determine folder based on (strategy, threshold).
-    const strategy = targetingStrategy || 'standard';
-    if (strategy !== 'standard') {
-      // Targeting strategies have one folder per threshold.
-      vizFolder = targetingVizFolder(highCPRAThreshold);
-    } else {
-      // Standard configs use threshold-specific folders too.
-      vizFolder = 'viz_data_age';
-      if (highCPRAThreshold === 85) {
-        vizFolder = 'viz_data_age_85';
-      } else if (highCPRAThreshold === 99) {
-        vizFolder = 'viz_data_age_99';
-      }
+    console.log(`[Config Finder] Loading viz data from: ${primaryUrl} (cPRA ${highCPRAThreshold}%)`);
+    const response = await fetch(primaryUrl);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('[Config Finder] ✓ loaded fresh viz data:', configName, `(cPRA ${highCPRAThreshold}%)`,
+                  'Series count:', data.waitlist_sizes?.series?.length);
+      return data;
     }
-
-    const vizUrl = `${SUPABASE_STORAGE_URL}/${vizFolder}/${configName}.json`;
-    console.log(`[Config Finder] Loading viz data from: ${vizUrl} (cPRA ${highCPRAThreshold}%)`);
-    const response = await fetch(vizUrl);
-    if (!response.ok) {
-      // 404 = config not yet available (re-run in progress for this
-      // threshold). Surface a clean message that the UI's "Configuration
-      // not found" handler renders as a friendly state.
-      if (response.status === 404) {
-        throw new Error(
-          `Visualization data for ${configName} (cPRA ${highCPRAThreshold}%) is not yet available — re-run in progress.`
-        );
-      }
-      throw new Error(`Failed to load visualization data for ${configName} (cPRA ${highCPRAThreshold}%) from Supabase Storage`);
+    if (response.status !== 404) {
+      throw new Error(`Failed to load viz data for ${configName} (cPRA ${highCPRAThreshold}%) from primary path: HTTP ${response.status}`);
     }
-    const data = await response.json();
-    console.log('[Config Finder] ✓ Successfully loaded viz data:', configName, `(cPRA ${highCPRAThreshold}%)`, 'Series count:', data.waitlist_sizes?.series?.length);
-    return data;
+    // 404 → try backup
+    console.log(`[Config Finder] primary 404, trying backup: ${backupUrl}`);
+    const backupResp = await fetch(backupUrl);
+    if (backupResp.ok) {
+      const data = await backupResp.json();
+      console.log('[Config Finder] ✓ loaded BACKUP viz data (re-run not finished for this config):', configName);
+      return data;
+    }
+    throw new Error(
+      `Visualization data for ${configName} (cPRA ${highCPRAThreshold}%) is not yet available — re-run in progress.`
+    );
   } catch (error) {
     console.error('Error loading visualization data:', error);
     throw error;
