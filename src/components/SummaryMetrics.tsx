@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, Minus, Heart, Users, Activity, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Heart, Users, Activity, Info, AlertTriangle } from 'lucide-react';
 
 interface MetricSummary {
   waitlistReduction: number;
@@ -28,7 +28,23 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
   };
 
   const xenoActualPerYear = Math.round(metrics.xenoTransplants / horizon);
-  const actualExceedsIntended = xenoActualPerYear > xenoIntendedPerYear && xenoIntendedPerYear > 0;
+  // Use a 2% tolerance so Monte Carlo noise around the linear regime doesn't
+  // accidentally flag "saturation" or "recycling" when actual ≈ intended.
+  const SATURATION_TOLERANCE = 0.02;
+  const actualExceedsIntended =
+    xenoIntendedPerYear > 0 &&
+    xenoActualPerYear > xenoIntendedPerYear * (1 + SATURATION_TOLERANCE);
+  const supplyExceedsActual =
+    xenoIntendedPerYear > 0 &&
+    xenoActualPerYear < xenoIntendedPerYear * (1 - SATURATION_TOLERANCE);
+  const unusedPerYear = supplyExceedsActual
+    ? Math.max(0, xenoIntendedPerYear - xenoActualPerYear)
+    : 0;
+  const unusedTotal = unusedPerYear * horizon;
+  const unusedPct =
+    xenoIntendedPerYear > 0 ? (unusedPerYear / xenoIntendedPerYear) * 100 : 0;
+  const allocatedTotal = xenoActualPerYear * horizon;
+  const intendedTotal = xenoIntendedPerYear * horizon;
 
   const standardMetrics = [
     {
@@ -79,29 +95,55 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
                 <span className="text-sm font-normal text-muted-foreground"> kidneys / year</span>
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Added on top of existing human transplants
+                {xenoIntendedPerYear > 0
+                  ? `${formatNumber(intendedTotal)} kidneys offered over ${horizon} years`
+                  : 'Added on top of existing human transplants'}
               </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Xeno Procedures Performed</p>
+              <p className="text-xs text-muted-foreground mb-1">
+                {supplyExceedsActual ? 'Xeno Kidneys Allocated' : 'Xeno Procedures Performed'}
+              </p>
               <p className="text-xl font-bold text-chart-quaternary">
                 {formatNumber(xenoActualPerYear)}
                 <span className="text-sm font-normal text-muted-foreground"> / year avg</span>
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Over {horizon} years {actualExceedsIntended ? '(includes re-transplants from graft failures)' : ''}
+                {formatNumber(allocatedTotal)} procedures over {horizon} years
+                {actualExceedsIntended ? ' (includes re-transplants from graft failures)' : ''}
               </p>
             </div>
           </div>
-          {xenoIntendedPerYear > 0 && (
+
+          {supplyExceedsActual && (
+            <div className="mt-3 pt-3 border-t border-medical-border">
+              <div className="flex items-start gap-3 p-3 rounded-md bg-warning/10 border border-warning/30">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-warning" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    {formatNumber(unusedPerYear)} kidneys / year unused
+                    <span className="text-xs font-normal text-muted-foreground"> ({unusedPct.toFixed(1)}% of supply)</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatNumber(unusedTotal)} kidneys go unused over {horizon} years because the
+                    target population is exhausted faster than additional supply can be absorbed.
+                    The eligible waitlist has hit its arrival-driven floor — additional kidneys
+                    have no one left to transplant into.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {actualExceedsIntended && (
             <div className="mt-3 pt-3 border-t border-medical-border">
               <div className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
                 <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-primary" />
                 <span>
-                  {actualExceedsIntended
-                    ? 'Procedures exceed supply because xeno graft failures cause patients to relist and receive repeat transplants. A higher supply rate drains the eligible waitlist faster, reaching the same steady-state floor sooner — but the floor is set by how quickly new patients arrive, not by supply.'
-                    : 'The xeno supply rate exceeds what the target population can absorb. A higher supply drains the eligible pool faster — reaching the waitlist floor sooner — but beyond the saturation point, additional kidneys cycle through repeat transplants without further reducing the waitlist.'
-                  }
+                  Procedures exceed supply because xeno graft failures cause patients to relist
+                  and receive repeat transplants. A higher supply rate drains the eligible
+                  waitlist faster, reaching the same steady-state floor sooner — but the floor is
+                  set by how quickly new patients arrive, not by supply.
                 </span>
               </div>
             </div>
