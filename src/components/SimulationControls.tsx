@@ -240,7 +240,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Xeno Graft Failure Rate (Kidney Rejection)</Label>
               <div className="text-right">
-                <div className="text-sm text-muted-foreground">{params.xenoGraftFailureRate.toFixed(2)}x</div>
+                <div className="text-sm text-muted-foreground">{params.xenoGraftFailureRate.toFixed(2)}x standard kidney</div>
                 <div className="text-xs text-muted-foreground">{meanTimeToGraftFailure} until rejection</div>
               </div>
             </div>
@@ -261,7 +261,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                Coefficient multiplied by high cPRA graft failure rate
+                Modeled as a multiplier on a standard human kidney's graft-failure rate (1.0x = same as standard)
               </p>
               <button
                 type="button"
@@ -275,7 +275,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             {expandedSections.graftFailure && (
               <div className="text-xs text-muted-foreground space-y-2 p-3 bg-muted rounded-md border border-medical-border">
                 <p className="font-medium text-foreground">Xeno Graft Failure Rate (Kidney Rejection)</p>
-                <p>Rate at which xeno kidneys fail and the recipient is re-listed back on the waiting list. Base rate (multiplier = 1.0) by cPRA threshold:</p>
+                <p>We model a xeno kidney as a <strong>standard human kidney scaled by a multiplier</strong>. At 1.0x, xeno graft failure matches the SRTR-derived rate for a standard human kidney in the same cPRA bin. Below are those reference (1.0x) rates by cPRA threshold &mdash; with the corresponding mean time until the graft fails and the recipient is re-listed back on the waiting list:</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>85+ cPRA: 5.60 % / yr → {formatMeanTime(5.60)} until rejection</li>
                   <li>95+ cPRA: 6.81 % / yr → {formatMeanTime(6.81)} until rejection</li>
@@ -305,7 +305,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Xeno Post-Transplant Death Rate</Label>
               <div className="text-right">
-                <div className="text-sm text-muted-foreground">{params.postTransplantDeathRate.toFixed(2)}x</div>
+                <div className="text-sm text-muted-foreground">{params.postTransplantDeathRate.toFixed(2)}x standard kidney</div>
                 <div className="text-xs text-muted-foreground">{meanTimeToPostTxDeath} until death</div>
               </div>
             </div>
@@ -326,7 +326,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                Coefficient multiplied by high cPRA post-transplant death rate
+                Modeled as a multiplier on a standard human kidney's post-transplant death rate (1.0x = same as standard)
               </p>
               <button
                 type="button"
@@ -340,7 +340,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             {expandedSections.postTxDeath && (
               <div className="text-xs text-muted-foreground space-y-2 p-3 bg-muted rounded-md border border-medical-border">
                 <p className="font-medium text-foreground">Xeno Post-Transplant Death Rate</p>
-                <p>Rate at which patients die after receiving a xeno kidney. Base rate (multiplier = 1.0) by cPRA threshold:</p>
+                <p>Same idea as graft failure: a xeno recipient's post-transplant death hazard is modeled as a <strong>standard human kidney recipient's hazard scaled by a multiplier</strong>. At 1.0x, the rate equals the SRTR-derived value for a standard human kidney recipient in the same cPRA bin. Reference (1.0x) rates by cPRA threshold:</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>85+ cPRA: 4.12 % / yr → {formatMeanTime(4.12)} until death</li>
                   <li>95+ cPRA: 3.96 % / yr → {formatMeanTime(3.96)} until death</li>
