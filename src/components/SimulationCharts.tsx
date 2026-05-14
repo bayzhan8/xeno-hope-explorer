@@ -23,7 +23,15 @@ interface SimulationData {
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
   recipientsDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
-  cumulativeDeathsDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
+  cumulativeDeathsDataByAge?: Array<{
+    year: number;
+    lowCPRA: Record<string, number>;
+    highCPRA: Record<string, number>;
+    lowWaitlist?: Record<string, number>;
+    highWaitlist?: Record<string, number>;
+    lowPostTx?: Record<string, number>;
+    highPostTx?: Record<string, number>;
+  }>;
   deathsPerYearDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   waitlistDeathsPerYearDataByAge?: Array<{ year: number; total: Record<string, number> }>;
 }
@@ -122,7 +130,20 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
   };
 
   // Helper: Prepare age-specific data for charts
-  const prepareAgeDataForChart = (ageData: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total?: Record<string, number> }> | undefined) => {
+  const prepareAgeDataForChart = (
+    ageData:
+      | Array<{
+          year: number;
+          lowCPRA: Record<string, number>;
+          highCPRA: Record<string, number>;
+          total?: Record<string, number>;
+          lowWaitlist?: Record<string, number>;
+          highWaitlist?: Record<string, number>;
+          lowPostTx?: Record<string, number>;
+          highPostTx?: Record<string, number>;
+        }>
+      | undefined
+  ) => {
     if (!ageData || ageData.length === 0) return [];
 
     try {
@@ -145,6 +166,21 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
             highByAge[ageKey] = value;
           }
         }
+
+        // Optional waitlist / post-tx breakdowns (cumulative deaths chart)
+        const flattenInto = (
+          source: Record<string, number> | undefined,
+          prefix: string
+        ) => {
+          if (!source || typeof source !== 'object') return;
+          for (const [ageKey, value] of Object.entries(source)) {
+            chartPoint[`${prefix}_${ageKey}`] = value;
+          }
+        };
+        flattenInto(yearData.lowWaitlist, 'lowWaitlist');
+        flattenInto(yearData.highWaitlist, 'highWaitlist');
+        flattenInto(yearData.lowPostTx, 'lowPostTx');
+        flattenInto(yearData.highPostTx, 'highPostTx');
 
         // Use precomputed totals if backend provided them; otherwise sum low + high
         if (yearData.total && typeof yearData.total === 'object') {
@@ -569,59 +605,123 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={325}>
-            {ageBreakdownExpanded.cumulativeDeaths && filteredData.cumulativeDeathsDataByAge ? (
-              <LineChart data={prepareAgeDataForChart(filteredData.cumulativeDeathsDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-                <XAxis
-                  type="number"
-                  dataKey="year"
-                  stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
-                  domain={xAxisDomain}
-                  ticks={xAxisTicks}
-                />
-                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
-                <Tooltip content={<CustomTooltip />} />
-                {/* Total age groups (low + high cPRA) */}
-                {deathsSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
-                  <Line
-                    key={`total_${group.key}`}
-                    type="monotone"
-                    dataKey={`total_${group.key}`}
-                    stroke={group.color}
-                    strokeWidth={3}
-                    name={`Total ${group.label}y`}
-                    dot={{ r: 0.3 }}
+            {ageBreakdownExpanded.cumulativeDeaths && filteredData.cumulativeDeathsDataByAge ? (() => {
+              // Detect whether the backend provided the waitlist / post-tx split.
+              const sample = filteredData.cumulativeDeathsDataByAge[0];
+              const hasSplit = !!(sample && (sample.lowWaitlist || sample.highWaitlist || sample.lowPostTx || sample.highPostTx));
+              const visibleAgeGroups = AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]);
+              return (
+                <LineChart data={prepareAgeDataForChart(filteredData.cumulativeDeathsDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                  <XAxis
+                    type="number"
+                    dataKey="year"
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fontSize: 12 }}
+                    domain={xAxisDomain}
+                    ticks={xAxisTicks}
                   />
-                ))}
-                {/* Low cPRA age groups */}
-                {(deathsSeriesVisible.lowWaitlist || deathsSeriesVisible.lowPostTx) && AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
-                  <Line
-                    key={`lowCPRA_${group.key}`}
-                    type="monotone"
-                    dataKey={`lowCPRA_${group.key}`}
-                    stroke={group.color}
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    name={`Low cPRA ${group.label}y`}
-                    dot={{ r: 0.15 }}
-                  />
-                ))}
-                {/* High cPRA age groups */}
-                {(deathsSeriesVisible.highWaitlist || deathsSeriesVisible.highPostTx) && AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
-                  <Line
-                    key={`highCPRA_${group.key}`}
-                    type="monotone"
-                    dataKey={`highCPRA_${group.key}`}
-                    stroke={group.color}
-                    strokeWidth={2.5}
-                    strokeDasharray="2 2"
-                    name={`High cPRA ${group.label}y`}
-                    dot={{ r: 0.3 }}
-                  />
-                ))}
-              </LineChart>
-            ) : (
+                  <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  {/* Total age groups (low + high cPRA, waitlist + post-tx) */}
+                  {deathsSeriesVisible.total && visibleAgeGroups.map(group => (
+                    <Line
+                      key={`total_${group.key}`}
+                      type="monotone"
+                      dataKey={`total_${group.key}`}
+                      stroke={group.color}
+                      strokeWidth={3}
+                      name={`Total ${group.label}y`}
+                      dot={{ r: 0.3 }}
+                    />
+                  ))}
+                  {hasSplit ? (
+                    <>
+                      {/* Low cPRA waitlist (per age group) */}
+                      {deathsSeriesVisible.lowWaitlist && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`lowWaitlist_${group.key}`}
+                          type="monotone"
+                          dataKey={`lowWaitlist_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          name={`Low cPRA waitlist ${group.label}y`}
+                          dot={{ r: 0.15 }}
+                        />
+                      ))}
+                      {/* High cPRA waitlist (per age group) */}
+                      {deathsSeriesVisible.highWaitlist && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`highWaitlist_${group.key}`}
+                          type="monotone"
+                          dataKey={`highWaitlist_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2.5}
+                          strokeDasharray="5 5"
+                          name={`High cPRA waitlist ${group.label}y`}
+                          dot={{ r: 0.2 }}
+                        />
+                      ))}
+                      {/* Low cPRA post-tx (per age group) */}
+                      {deathsSeriesVisible.lowPostTx && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`lowPostTx_${group.key}`}
+                          type="monotone"
+                          dataKey={`lowPostTx_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2}
+                          strokeDasharray="2 2"
+                          name={`Low cPRA post-tx ${group.label}y`}
+                          dot={{ r: 0.15 }}
+                        />
+                      ))}
+                      {/* High cPRA post-tx (per age group) */}
+                      {deathsSeriesVisible.highPostTx && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`highPostTx_${group.key}`}
+                          type="monotone"
+                          dataKey={`highPostTx_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2.5}
+                          strokeDasharray="2 2"
+                          name={`High cPRA post-tx ${group.label}y`}
+                          dot={{ r: 0.2 }}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      {/* Older JSONs without the split: fall back to lump-sum lines */}
+                      {(deathsSeriesVisible.lowWaitlist || deathsSeriesVisible.lowPostTx) && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`lowCPRA_${group.key}`}
+                          type="monotone"
+                          dataKey={`lowCPRA_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          name={`Low cPRA ${group.label}y`}
+                          dot={{ r: 0.15 }}
+                        />
+                      ))}
+                      {(deathsSeriesVisible.highWaitlist || deathsSeriesVisible.highPostTx) && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`highCPRA_${group.key}`}
+                          type="monotone"
+                          dataKey={`highCPRA_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2.5}
+                          strokeDasharray="2 2"
+                          name={`High cPRA ${group.label}y`}
+                          dot={{ r: 0.3 }}
+                        />
+                      ))}
+                    </>
+                  )}
+                </LineChart>
+              );
+            })() : (
               <LineChart data={filteredData.cumulativeDeathsData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
@@ -655,21 +755,13 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
 
           {/* Series Toggle */}
           <ChartSeriesToggle
-            series={
-              ageBreakdownExpanded.cumulativeDeaths
-                ? [
-                    { key: 'total', label: 'Total', color: COLORS.primary },
-                    { key: 'lowWaitlist', label: 'Low cPRA', color: COLORS.secondary },
-                    { key: 'highWaitlist', label: 'High cPRA', color: COLORS.primary },
-                  ]
-                : [
-                    { key: 'lowWaitlist', label: 'Low cPRA waitlist', color: COLORS.secondary },
-                    { key: 'highWaitlist', label: 'High cPRA waitlist', color: COLORS.primary },
-                    { key: 'lowPostTx', label: 'Low cPRA post-tx', color: COLORS.tertiary },
-                    { key: 'highPostTx', label: 'High cPRA post-tx', color: COLORS.quaternary },
-                    { key: 'total', label: 'Total', color: COLORS.primary },
-                  ]
-            }
+            series={[
+              { key: 'lowWaitlist', label: 'Low cPRA waitlist', color: COLORS.secondary },
+              { key: 'highWaitlist', label: 'High cPRA waitlist', color: COLORS.primary },
+              { key: 'lowPostTx', label: 'Low cPRA post-tx', color: COLORS.tertiary },
+              { key: 'highPostTx', label: 'High cPRA post-tx', color: COLORS.quaternary },
+              { key: 'total', label: 'Total', color: COLORS.primary },
+            ]}
             visible={deathsSeriesVisible}
             onChange={toggleDeathsSeries}
             chartId="cumulativeDeaths"

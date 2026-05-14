@@ -101,7 +101,15 @@ interface SimulationData {
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
   recipientsDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
-  cumulativeDeathsDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
+  cumulativeDeathsDataByAge?: Array<{
+    year: number;
+    lowCPRA: Record<string, number>;  // total deaths (waitlist + post-tx) by age
+    highCPRA: Record<string, number>;
+    lowWaitlist?: Record<string, number>;
+    highWaitlist?: Record<string, number>;
+    lowPostTx?: Record<string, number>;
+    highPostTx?: Record<string, number>;
+  }>;
   deathsPerYearDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   waitlistDeathsPerYearDataByAge?: Array<{ year: number; total: Record<string, number> }>;
 }
@@ -544,9 +552,36 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     const lowAgeGroupsDeaths = extractAgeGroupSeries(vizData.cumulative_deaths.series, 'low cpra');
     const highAgeGroupsDeaths = extractAgeGroupSeries(vizData.cumulative_deaths.series, 'high cpra');
 
+    // M6: split waitlist vs post-tx by age when the backend provides them
+    const lowAgeWaitlist = vizData.cumulative_waitlist_deaths?.series
+      ? extractAgeGroupSeries(vizData.cumulative_waitlist_deaths.series, 'low cpra')
+      : null;
+    const highAgeWaitlist = vizData.cumulative_waitlist_deaths?.series
+      ? extractAgeGroupSeries(vizData.cumulative_waitlist_deaths.series, 'high cpra')
+      : null;
+    const lowAgePostTx = vizData.cumulative_post_tx_deaths?.series
+      ? extractAgeGroupSeries(vizData.cumulative_post_tx_deaths.series, 'low cpra')
+      : null;
+    const highAgePostTx = vizData.cumulative_post_tx_deaths?.series
+      ? extractAgeGroupSeries(vizData.cumulative_post_tx_deaths.series, 'high cpra')
+      : null;
+
     if (lowAgeGroupsDeaths || highAgeGroupsDeaths) {
       result.cumulativeDeathsDataByAge = [];
       const targetPoints = Math.ceil(daysToYears(maxDays) * 12);
+
+      const sampleAgeGroups = (
+        groups: Record<string, number[]> | null,
+        idx: number
+      ): Record<string, number> | undefined => {
+        if (!groups) return undefined;
+        const out: Record<string, number> = {};
+        for (const [ageKey, ageData] of Object.entries(groups)) {
+          out[ageKey] = sampleData(ageData, targetPoints)[idx] || 0;
+        }
+        return out;
+      };
+
       for (let i = 0; i < years.length; i++) {
         const lowByAge: Record<string, number> = {};
         const highByAge: Record<string, number> = {};
@@ -567,6 +602,10 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
           year: Math.round(years[i] * 100) / 100,
           lowCPRA: lowByAge,
           highCPRA: highByAge,
+          lowWaitlist: sampleAgeGroups(lowAgeWaitlist, i),
+          highWaitlist: sampleAgeGroups(highAgeWaitlist, i),
+          lowPostTx: sampleAgeGroups(lowAgePostTx, i),
+          highPostTx: sampleAgeGroups(highAgePostTx, i),
         });
       }
     }
