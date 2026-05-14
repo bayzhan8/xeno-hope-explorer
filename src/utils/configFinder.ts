@@ -121,23 +121,50 @@ function formatTargeting(val: number): string {
   return val.toFixed(1).replace('.', 'p');
 }
 
+// Map (strategy, threshold) -> registry file in Supabase storage.
+// Targeting strategies were re-run separately for every cPRA threshold and
+// therefore live in their own per-threshold registries. The 99% file keeps
+// its original name (`targeting_configs.json`) so any in-flight requests
+// from older cached frontends keep resolving.
+function targetingConfigsFile(threshold: number): string {
+  if (threshold === 85) return 'targeting_configs_85.json';
+  if (threshold === 95) return 'targeting_configs_95.json';
+  return 'targeting_configs.json'; // default = 99%
+}
+
+// Same idea for the per-threshold viz JSON folders.
+function targetingVizFolder(threshold: number): string {
+  if (threshold === 85) return 'viz_data_age_targeting_85';
+  if (threshold === 95) return 'viz_data_age_targeting_95';
+  return 'viz_data_age_targeting'; // default = 99%
+}
+
 // Find config name from user inputs
 export async function findConfigName(userInputs: UserInputs): Promise<string | null> {
   try {
     console.log('[Config Finder] Starting config lookup with inputs:', userInputs);
 
     const strategy = userInputs.targetingStrategy || 'standard';
+    const threshold = userInputs.highCPRAThreshold;
 
     let configUrl: string;
     if (strategy === 'standard') {
       configUrl = `${SUPABASE_STORAGE_URL}/experiment_configs_v2.json`;
     } else {
-      configUrl = `${SUPABASE_STORAGE_URL}/targeting_configs.json`;
+      configUrl = `${SUPABASE_STORAGE_URL}/${targetingConfigsFile(threshold)}`;
     }
 
     console.log('[Config Finder] Fetching from:', configUrl);
     const response = await fetch(configUrl);
     if (!response.ok) {
+      // 404 here typically means the per-threshold registry hasn't been
+      // generated yet (re-run still in progress). Treat the same as
+      // "config not yet available" rather than a hard error so the UI can
+      // show its friendly "Configuration not found" message.
+      if (response.status === 404) {
+        console.warn(`[Config Finder] Registry not yet available: ${configUrl}`);
+        return null;
+      }
       throw new Error(`Failed to load config file from ${configUrl}`);
     }
     const experimentConfigs: ExperimentConfigs = await response.json();
@@ -190,13 +217,13 @@ export async function loadVisualizationData(configName: string, highCPRAThreshol
   try {
     let vizFolder: string;
 
-    // Determine folder based on strategy
+    // Determine folder based on (strategy, threshold).
     const strategy = targetingStrategy || 'standard';
     if (strategy !== 'standard') {
-      // Targeting experiments always use 99% threshold data
-      vizFolder = 'viz_data_age_targeting';
+      // Targeting strategies have one folder per threshold.
+      vizFolder = targetingVizFolder(highCPRAThreshold);
     } else {
-      // Standard configs: use threshold-specific folders
+      // Standard configs use threshold-specific folders too.
       vizFolder = 'viz_data_age';
       if (highCPRAThreshold === 85) {
         vizFolder = 'viz_data_age_85';
@@ -209,6 +236,14 @@ export async function loadVisualizationData(configName: string, highCPRAThreshol
     console.log(`[Config Finder] Loading viz data from: ${vizUrl} (cPRA ${highCPRAThreshold}%)`);
     const response = await fetch(vizUrl);
     if (!response.ok) {
+      // 404 = config not yet available (re-run in progress for this
+      // threshold). Surface a clean message that the UI's "Configuration
+      // not found" handler renders as a friendly state.
+      if (response.status === 404) {
+        throw new Error(
+          `Visualization data for ${configName} (cPRA ${highCPRAThreshold}%) is not yet available — re-run in progress.`
+        );
+      }
       throw new Error(`Failed to load visualization data for ${configName} (cPRA ${highCPRAThreshold}%) from Supabase Storage`);
     }
     const data = await response.json();
