@@ -100,7 +100,15 @@ interface SimulationData {
   // Age-specific data (optional)
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
-  recipientsDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
+  recipientsDataByAge?: Array<{
+    year: number;
+    lowCPRA: Record<string, number>;  // human + xeno combined (back-compat)
+    highCPRA: Record<string, number>;
+    lowHuman?: Record<string, number>;
+    highHuman?: Record<string, number>;
+    lowXeno?: Record<string, number>;
+    highXeno?: Record<string, number>;
+  }>;
   cumulativeDeathsDataByAge?: Array<{
     year: number;
     lowCPRA: Record<string, number>;  // total deaths (waitlist + post-tx) by age
@@ -445,29 +453,57 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     // Extract age-specific recipients data (optional)
     const lowAgeGroupsStd = vizData.recipients_std ? extractAgeGroupSeries(vizData.recipients_std.series, 'low cpra') : null;
     const highAgeGroupsStd = vizData.recipients_std ? extractAgeGroupSeries(vizData.recipients_std.series, 'high cpra') : null;
+    const lowAgeGroupsXeno = vizData.recipients_xeno ? extractAgeGroupSeries(vizData.recipients_xeno.series, 'low cpra') : null;
+    const highAgeGroupsXeno = vizData.recipients_xeno ? extractAgeGroupSeries(vizData.recipients_xeno.series, 'high cpra') : null;
 
-    if (lowAgeGroupsStd || highAgeGroupsStd) {
+    if (lowAgeGroupsStd || highAgeGroupsStd || lowAgeGroupsXeno || highAgeGroupsXeno) {
       result.recipientsDataByAge = [];
-      for (let i = 0; i < years.length; i++) {
-        const lowByAge: Record<string, number> = {};
-        const highByAge: Record<string, number> = {};
 
-        if (lowAgeGroupsStd) {
-          for (const [ageKey, ageData] of Object.entries(lowAgeGroupsStd)) {
-            lowByAge[ageKey] = sampleData(ageData, targetPoints)[i] || 0;
-          }
+      const sampleAgeGroups = (
+        groups: Record<string, number[]> | null,
+        idx: number
+      ): Record<string, number> => {
+        if (!groups) return {};
+        const out: Record<string, number> = {};
+        for (const [ageKey, ageData] of Object.entries(groups)) {
+          out[ageKey] = sampleData(ageData, targetPoints)[idx] || 0;
         }
+        return out;
+      };
 
-        if (highAgeGroupsStd) {
-          for (const [ageKey, ageData] of Object.entries(highAgeGroupsStd)) {
-            highByAge[ageKey] = sampleData(ageData, targetPoints)[i] || 0;
-          }
+      for (let i = 0; i < years.length; i++) {
+        const lowHumanByAge = sampleAgeGroups(lowAgeGroupsStd, i);
+        const highHumanByAge = sampleAgeGroups(highAgeGroupsStd, i);
+        const lowXenoByAge = sampleAgeGroups(lowAgeGroupsXeno, i);
+        const highXenoByAge = sampleAgeGroups(highAgeGroupsXeno, i);
+
+        // Combined (human + xeno) per age group preserves the legacy
+        // lowCPRA/highCPRA shape that older readers expect.
+        const lowCombined: Record<string, number> = {};
+        const highCombined: Record<string, number> = {};
+        const lowKeys = new Set([
+          ...Object.keys(lowHumanByAge),
+          ...Object.keys(lowXenoByAge),
+        ]);
+        const highKeys = new Set([
+          ...Object.keys(highHumanByAge),
+          ...Object.keys(highXenoByAge),
+        ]);
+        for (const ageKey of lowKeys) {
+          lowCombined[ageKey] = (lowHumanByAge[ageKey] || 0) + (lowXenoByAge[ageKey] || 0);
+        }
+        for (const ageKey of highKeys) {
+          highCombined[ageKey] = (highHumanByAge[ageKey] || 0) + (highXenoByAge[ageKey] || 0);
         }
 
         result.recipientsDataByAge.push({
           year: Math.round(years[i] * 100) / 100,
-          lowCPRA: lowByAge,
-          highCPRA: highByAge,
+          lowCPRA: lowCombined,
+          highCPRA: highCombined,
+          lowHuman: lowAgeGroupsStd ? lowHumanByAge : undefined,
+          highHuman: highAgeGroupsStd ? highHumanByAge : undefined,
+          lowXeno: lowAgeGroupsXeno ? lowXenoByAge : undefined,
+          highXeno: highAgeGroupsXeno ? highXenoByAge : undefined,
         });
       }
     }

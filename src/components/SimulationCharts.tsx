@@ -22,7 +22,15 @@ interface SimulationData {
   // Age-specific data (optional)
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
-  recipientsDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
+  recipientsDataByAge?: Array<{
+    year: number;
+    lowCPRA: Record<string, number>;
+    highCPRA: Record<string, number>;
+    lowHuman?: Record<string, number>;
+    highHuman?: Record<string, number>;
+    lowXeno?: Record<string, number>;
+    highXeno?: Record<string, number>;
+  }>;
   cumulativeDeathsDataByAge?: Array<{
     year: number;
     lowCPRA: Record<string, number>;
@@ -141,6 +149,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           highWaitlist?: Record<string, number>;
           lowPostTx?: Record<string, number>;
           highPostTx?: Record<string, number>;
+          lowHuman?: Record<string, number>;
+          highHuman?: Record<string, number>;
+          lowXeno?: Record<string, number>;
+          highXeno?: Record<string, number>;
         }>
       | undefined
   ) => {
@@ -181,6 +193,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         flattenInto(yearData.highWaitlist, 'highWaitlist');
         flattenInto(yearData.lowPostTx, 'lowPostTx');
         flattenInto(yearData.highPostTx, 'highPostTx');
+        flattenInto(yearData.lowHuman, 'lowHuman');
+        flattenInto(yearData.highHuman, 'highHuman');
+        flattenInto(yearData.lowXeno, 'lowXeno');
+        flattenInto(yearData.highXeno, 'highXeno');
 
         // Use precomputed totals if backend provided them; otherwise sum low + high
         if (yearData.total && typeof yearData.total === 'object') {
@@ -482,59 +498,116 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
         </CardHeader>
         <CardContent className="px-4 pt-4 pb-1">
           <ResponsiveContainer width="100%" height={325}>
-            {ageBreakdownExpanded.recipients && filteredData.recipientsDataByAge ? (
-              <LineChart data={prepareAgeDataForChart(filteredData.recipientsDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
-                <XAxis
-                  type="number"
-                  dataKey="year"
-                  stroke="hsl(var(--muted-foreground))"
-                  tick={{ fontSize: 12 }}
-                  domain={xAxisDomain}
-                  ticks={xAxisTicks}
-                />
-                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
-                <Tooltip content={<CustomTooltip />} />
-                {/* Total age groups (low + high cPRA) */}
-                {recipientsSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.recipients[group.key]).map(group => (
-                  <Line
-                    key={`total_${group.key}`}
-                    type="monotone"
-                    dataKey={`total_${group.key}`}
-                    stroke={group.color}
-                    strokeWidth={3}
-                    name={`Total ${group.label}y`}
-                    dot={{ r: 0.3 }}
+            {ageBreakdownExpanded.recipients && filteredData.recipientsDataByAge ? (() => {
+              const sample = filteredData.recipientsDataByAge[0];
+              const hasSplit = !!(sample && (sample.lowHuman || sample.highHuman || sample.lowXeno || sample.highXeno));
+              const visibleAgeGroups = AGE_GROUPS.filter(group => ageGroupsPerChart.recipients[group.key]);
+              return (
+                <LineChart data={prepareAgeDataForChart(filteredData.recipientsDataByAge)} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
+                  <XAxis
+                    type="number"
+                    dataKey="year"
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fontSize: 12 }}
+                    domain={xAxisDomain}
+                    ticks={xAxisTicks}
                   />
-                ))}
-                {/* Low cPRA age groups */}
-                {recipientsSeriesVisible.lowHuman && AGE_GROUPS.filter(group => ageGroupsPerChart.recipients[group.key]).map(group => (
-                  <Line
-                    key={`lowCPRA_${group.key}`}
-                    type="monotone"
-                    dataKey={`lowCPRA_${group.key}`}
-                    stroke={group.color}
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    name={`Low cPRA ${group.label}y`}
-                    dot={{ r: 0.2 }}
-                  />
-                ))}
-                {/* High cPRA age groups */}
-                {(recipientsSeriesVisible.highHuman || recipientsSeriesVisible.highXeno) && AGE_GROUPS.filter(group => ageGroupsPerChart.recipients[group.key]).map(group => (
-                  <Line
-                    key={`highCPRA_${group.key}`}
-                    type="monotone"
-                    dataKey={`highCPRA_${group.key}`}
-                    stroke={group.color}
-                    strokeWidth={2.5}
-                    strokeDasharray="2 2"
-                    name={`High cPRA ${group.label}y`}
-                    dot={{ r: 0.3 }}
-                  />
-                ))}
-              </LineChart>
-            ) : (
+                  <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  {/* Total age groups (low + high cPRA, human + xeno) */}
+                  {recipientsSeriesVisible.total && visibleAgeGroups.map(group => (
+                    <Line
+                      key={`total_${group.key}`}
+                      type="monotone"
+                      dataKey={`total_${group.key}`}
+                      stroke={group.color}
+                      strokeWidth={3}
+                      name={`Total ${group.label}y`}
+                      dot={{ r: 0.3 }}
+                    />
+                  ))}
+                  {hasSplit ? (
+                    <>
+                      {recipientsSeriesVisible.lowHuman && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`lowHuman_${group.key}`}
+                          type="monotone"
+                          dataKey={`lowHuman_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          name={`Low cPRA human ${group.label}y`}
+                          dot={{ r: 0.15 }}
+                        />
+                      ))}
+                      {recipientsSeriesVisible.highHuman && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`highHuman_${group.key}`}
+                          type="monotone"
+                          dataKey={`highHuman_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2.5}
+                          strokeDasharray="5 5"
+                          name={`High cPRA human ${group.label}y`}
+                          dot={{ r: 0.2 }}
+                        />
+                      ))}
+                      {recipientsSeriesVisible.lowXeno && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`lowXeno_${group.key}`}
+                          type="monotone"
+                          dataKey={`lowXeno_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2}
+                          name={`Low cPRA xeno ${group.label}y`}
+                          dot={{ r: 0.15 }}
+                        />
+                      ))}
+                      {recipientsSeriesVisible.highXeno && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`highXeno_${group.key}`}
+                          type="monotone"
+                          dataKey={`highXeno_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2.5}
+                          name={`High cPRA xeno ${group.label}y`}
+                          dot={{ r: 0.2 }}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      {/* Older JSONs: only the human-aggregated lowCPRA/highCPRA series exist */}
+                      {recipientsSeriesVisible.lowHuman && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`lowCPRA_${group.key}`}
+                          type="monotone"
+                          dataKey={`lowCPRA_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          name={`Low cPRA ${group.label}y`}
+                          dot={{ r: 0.2 }}
+                        />
+                      ))}
+                      {(recipientsSeriesVisible.highHuman || recipientsSeriesVisible.highXeno) && visibleAgeGroups.map(group => (
+                        <Line
+                          key={`highCPRA_${group.key}`}
+                          type="monotone"
+                          dataKey={`highCPRA_${group.key}`}
+                          stroke={group.color}
+                          strokeWidth={2.5}
+                          strokeDasharray="2 2"
+                          name={`High cPRA ${group.label}y`}
+                          dot={{ r: 0.3 }}
+                        />
+                      ))}
+                    </>
+                  )}
+                </LineChart>
+              );
+            })() : (
               <LineChart data={filteredData.recipientsData} margin={{ top: 10, right: 10, bottom: 20, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
@@ -569,8 +642,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
               ageBreakdownExpanded.recipients
                 ? [
                     { key: 'total', label: 'Total', color: COLORS.primary },
-                    { key: 'lowHuman', label: 'Low cPRA', color: COLORS.secondary },
-                    { key: 'highHuman', label: 'High cPRA', color: COLORS.primary },
+                    { key: 'lowHuman', label: 'Low cPRA (human)', color: COLORS.secondary },
+                    { key: 'highHuman', label: 'High cPRA (human)', color: COLORS.primary },
+                    { key: 'highXeno', label: 'High cPRA (xeno)', color: COLORS.quaternary },
+                    ...(hasLowXeno ? [{ key: 'lowXeno', label: 'Low cPRA (xeno)', color: COLORS.tertiary }] : []),
                   ]
                 : [
                     { key: 'lowHuman', label: 'Low cPRA (human)', color: COLORS.secondary },
