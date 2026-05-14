@@ -250,11 +250,14 @@ export async function loadVisualizationData(configName: string, highCPRAThreshol
                   'Series count:', data.waitlist_sizes?.series?.length);
       return data;
     }
-    if (response.status !== 404) {
+    // Supabase Storage's PUBLIC endpoint returns HTTP 400 (with a JSON
+    // body containing "not_found") when an object doesn't exist —
+    // NOT 404. Treat both as "missing" and fall back to the backup.
+    const missing = response.status === 404 || response.status === 400;
+    if (!missing) {
       throw new Error(`Failed to load viz data for ${configName} (cPRA ${highCPRAThreshold}%) from primary path: HTTP ${response.status}`);
     }
-    // 404 → try backup
-    console.log(`[Config Finder] primary 404, trying backup: ${backupUrl}`);
+    console.log(`[Config Finder] primary missing (HTTP ${response.status}), trying backup: ${backupUrl}`);
     const backupResp = await fetch(backupUrl);
     if (backupResp.ok) {
       const data = await backupResp.json();
