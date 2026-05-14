@@ -55,6 +55,26 @@ interface VizData {
     x: number[];
     series: Array<{ label: string; y: number[]; color?: string }>;
   };
+  cumulative_std_transplants?: {
+    x: number[];
+    series: Array<{ label: string; y: number[]; color?: string }>;
+  };
+  cumulative_waitlist_deaths?: {
+    x: number[];
+    series: Array<{ label: string; y: number[]; color?: string }>;
+  };
+  cumulative_post_tx_deaths?: {
+    x: number[];
+    series: Array<{ label: string; y: number[]; color?: string }>;
+  };
+  recipients_xeno?: {
+    x: number[];
+    series: Array<{ label: string; y: number[]; color?: string }>;
+  };
+  recipients_std?: {
+    x: number[];
+    series: Array<{ label: string; y: number[]; color?: string }>;
+  };
   has_comparison?: boolean;
   base_config_name?: string;
   highCPRAThreshold: number;
@@ -76,6 +96,7 @@ interface SimulationData {
   netDeathsPreventedPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
   waitlistDeathsPerYearData: Array<{ year: number; waitlistDeaths: number; baseWaitlistDeaths?: number }>;
   cumulativeXenoTransplants: number;
+  cumulativeStdTransplants: number;
   // Age-specific data (optional)
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
@@ -232,6 +253,7 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     netDeathsPreventedPerYearData: [],
     waitlistDeathsPerYearData: [],
     cumulativeXenoTransplants: 0,
+    cumulativeStdTransplants: 0,
   };
 
   // 1. Waitlist sizes
@@ -448,6 +470,14 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     const totalSeries = findSeries(vizData.cumulative_xeno_transplants.series, ['total xeno transplants', 'total']);
     if (totalSeries && totalSeries.length > 0) {
       result.cumulativeXenoTransplants = totalSeries[totalSeries.length - 1] || 0;
+    }
+  }
+
+  // 2c. Cumulative human transplants (actual procedures, not living recipients)
+  if (vizData.cumulative_std_transplants && vizData.cumulative_std_transplants.series && vizData.cumulative_std_transplants.x && vizData.cumulative_std_transplants.x.length > 0) {
+    const totalSeries = findSeries(vizData.cumulative_std_transplants.series, ['total human transplants', 'total']);
+    if (totalSeries && totalSeries.length > 0) {
+      result.cumulativeStdTransplants = totalSeries[totalSeries.length - 1] || 0;
     }
   }
 
@@ -1179,14 +1209,21 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     .filter(d => d.year <= horizon)
     .slice(-1)[0];
   
-  // Use actual cumulative procedure count if available, else fall back to living recipients
+  // Use actual cumulative procedure counts (a flow) when the backend provides
+  // them; otherwise fall back to end-of-horizon living recipients (a stock).
   const totalXenoRecipients = (finalRecipients?.highXeno || 0) + (finalRecipients?.lowXeno || 0);
-  const xenoTransplants = data.cumulativeXenoTransplants > 0 ? data.cumulativeXenoTransplants : totalXenoRecipients;
-  const totalTransplants = (finalRecipients?.lowHuman || 0) + (finalRecipients?.highHuman || 0) + xenoTransplants;
-  
-  // Penetration rate: xeno share of all recipients
-  const penetrationRate = totalTransplants > 0 
-    ? xenoTransplants / totalTransplants 
+  const totalHumanRecipients = (finalRecipients?.lowHuman || 0) + (finalRecipients?.highHuman || 0);
+  const xenoTransplants = data.cumulativeXenoTransplants > 0
+    ? data.cumulativeXenoTransplants
+    : totalXenoRecipients;
+  const humanTransplants = data.cumulativeStdTransplants > 0
+    ? data.cumulativeStdTransplants
+    : totalHumanRecipients;
+  const totalTransplants = humanTransplants + xenoTransplants;
+
+  // Penetration rate: xeno share of all transplants performed
+  const penetrationRate = totalTransplants > 0
+    ? xenoTransplants / totalTransplants
     : 0;
 
   return {
