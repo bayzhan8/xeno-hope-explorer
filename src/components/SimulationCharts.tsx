@@ -89,6 +89,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     total: true,
   });
 
+  const [waitlistDeathsPerYearSeriesVisible, setWaitlistDeathsPerYearSeriesVisible] = useState<Record<string, boolean>>({
+    total: true,
+    lowCPRA: false,
+    highCPRA: false,
+    baseTotal: true,
+    baseLowCPRA: false,
+    baseHighCPRA: false,
+  });
+
   // Per-chart age group visibility state
   const defaultAgeGroups = { age0_18: true, age18_45: true, age45_60: true, age60plus: true };
   const [ageGroupsPerChart, setAgeGroupsPerChart] = useState<Record<string, Record<string, boolean>>>({
@@ -128,6 +137,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
 
   const toggleDeathsPerYearSeries = (key: string, visible: boolean) => {
     setDeathsPerYearSeriesVisible(prev => ({ ...prev, [key]: visible }));
+  };
+
+  const toggleWaitlistDeathsPerYearSeries = (key: string, visible: boolean) => {
+    setWaitlistDeathsPerYearSeriesVisible(prev => ({ ...prev, [key]: visible }));
   };
 
   const toggleAgeGroup = (chartKey: string) => (key: string, visible: boolean) => {
@@ -882,16 +895,42 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                {/* Total age groups */}
-                {AGE_GROUPS.filter(group => ageGroupsPerChart.waitlistDeathsPerYear[group.key]).map(group => (
+                {/* Total per age group (solid, thick) */}
+                {waitlistDeathsPerYearSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.waitlistDeathsPerYear[group.key]).map(group => (
                   <Line
                     key={`total_${group.key}`}
                     type="monotone"
                     dataKey={`total_${group.key}`}
                     stroke={group.color}
-                    strokeWidth={2.5}
-                    name={`${group.label}y`}
+                    strokeWidth={3}
+                    name={`Total ${group.label}y`}
                     dot={{ r: 2 }}
+                  />
+                ))}
+                {/* Low cPRA per age group (long-dashed) */}
+                {waitlistDeathsPerYearSeriesVisible.lowCPRA && AGE_GROUPS.filter(group => ageGroupsPerChart.waitlistDeathsPerYear[group.key]).map(group => (
+                  <Line
+                    key={`lowCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`lowCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    name={`Low cPRA ${group.label}y`}
+                    dot={{ r: 1.5 }}
+                  />
+                ))}
+                {/* High cPRA per age group (short-dashed) */}
+                {waitlistDeathsPerYearSeriesVisible.highCPRA && AGE_GROUPS.filter(group => ageGroupsPerChart.waitlistDeathsPerYear[group.key]).map(group => (
+                  <Line
+                    key={`highCPRA_${group.key}`}
+                    type="monotone"
+                    dataKey={`highCPRA_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={2}
+                    strokeDasharray="2 2"
+                    name={`High cPRA ${group.label}y`}
+                    dot={{ r: 1.5 }}
                   />
                 ))}
               </LineChart>
@@ -925,43 +964,127 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                       return (
                         <div className="bg-card border border-medical-border rounded-lg p-3 shadow-[var(--shadow-medium)]">
                           <p className="text-sm font-medium text-foreground mb-1">{`Year: ${point.year?.toFixed(1) || point.x?.toFixed(1) || 'N/A'}`}</p>
-                          <p className="text-sm" style={{ color: payload[0].color }}>
-                            {`Waitlist Deaths: ${typeof point.y === 'number' ? point.y.toLocaleString(undefined, { maximumFractionDigits: 0 }) : point.waitlistDeaths?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 'N/A'}`}
-                          </p>
-                          {(point.baseWaitlistDeaths !== undefined || (payload.length > 1 && payload[1]?.payload?.y !== undefined)) && (
-                            <p className="text-sm" style={{ color: '#3b82f6' }}>
-                              {`Base Case: ${point.baseWaitlistDeaths?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || (payload.length > 1 ? payload[1].payload.y?.toLocaleString(undefined, { maximumFractionDigits: 0 }) : 'N/A')}`}
+                          {payload.map((entry: any, idx: number) => (
+                            <p key={idx} className="text-sm" style={{ color: entry.color }}>
+                              {`${entry.name}: ${typeof entry.value === 'number' ? entry.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : entry.value}`}
                             </p>
-                          )}
+                          ))}
                         </div>
                       );
                     }
                     return null;
                   }}
                 />
-                <Scatter
-                  data={filteredData.waitlistDeathsPerYearData.map(d => ({ x: d.year, y: d.waitlistDeaths, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
-                  fill="#8b0000"
-                  name="Waitlist Deaths/Year (Xeno)"
-                  shape={(props: any) => {
-                    const { cx, cy } = props;
-                    return <circle cx={cx} cy={cy} r={3.5} fill="#8b0000" />;
-                  }}
-                />
-                <Scatter
-                  data={filteredData.waitlistDeathsPerYearData
-                    .filter(d => d.baseWaitlistDeaths !== undefined)
-                    .map(d => ({ x: d.year, y: d.baseWaitlistDeaths!, year: d.year, waitlistDeaths: d.waitlistDeaths, baseWaitlistDeaths: d.baseWaitlistDeaths }))}
-                  fill="#3b82f6"
-                  name="Waitlist Deaths/Year (Base Case)"
-                  shape={(props: any) => {
-                    const { cx, cy } = props;
-                    return <circle cx={cx} cy={cy} r={3.5} fill="#3b82f6" />;
-                  }}
-                />
+                {/* Xeno scenario */}
+                {waitlistDeathsPerYearSeriesVisible.total && (
+                  <Scatter
+                    data={filteredData.waitlistDeathsPerYearData.map(d => ({ x: d.year, y: d.waitlistDeaths, year: d.year }))}
+                    fill="#8b0000"
+                    name="Total (Xeno)"
+                    shape={(props: any) => {
+                      const { cx, cy } = props;
+                      return <circle cx={cx} cy={cy} r={3.5} fill="#8b0000" />;
+                    }}
+                  />
+                )}
+                {waitlistDeathsPerYearSeriesVisible.lowCPRA && (
+                  <Scatter
+                    data={filteredData.waitlistDeathsPerYearData
+                      .filter(d => d.lowWaitlistDeaths !== undefined)
+                      .map(d => ({ x: d.year, y: d.lowWaitlistDeaths!, year: d.year }))}
+                    fill="#ef4444"
+                    name="Low cPRA (Xeno)"
+                    shape={(props: any) => {
+                      const { cx, cy } = props;
+                      return <rect x={cx - 3} y={cy - 3} width={6} height={6} fill="#ef4444" />;
+                    }}
+                  />
+                )}
+                {waitlistDeathsPerYearSeriesVisible.highCPRA && (
+                  <Scatter
+                    data={filteredData.waitlistDeathsPerYearData
+                      .filter(d => d.highWaitlistDeaths !== undefined)
+                      .map(d => ({ x: d.year, y: d.highWaitlistDeaths!, year: d.year }))}
+                    fill="#f59e0b"
+                    name="High cPRA (Xeno)"
+                    shape={(props: any) => {
+                      const { cx, cy } = props;
+                      return <polygon points={`${cx},${cy - 4} ${cx + 3.5},${cy + 2.5} ${cx - 3.5},${cy + 2.5}`} fill="#f59e0b" />;
+                    }}
+                  />
+                )}
+                {/* Base case */}
+                {waitlistDeathsPerYearSeriesVisible.baseTotal && (
+                  <Scatter
+                    data={filteredData.waitlistDeathsPerYearData
+                      .filter(d => d.baseWaitlistDeaths !== undefined)
+                      .map(d => ({ x: d.year, y: d.baseWaitlistDeaths!, year: d.year }))}
+                    fill="#3b82f6"
+                    name="Total (Base Case)"
+                    shape={(props: any) => {
+                      const { cx, cy } = props;
+                      return <circle cx={cx} cy={cy} r={3.5} stroke="#3b82f6" strokeWidth={1.5} fill="none" />;
+                    }}
+                  />
+                )}
+                {waitlistDeathsPerYearSeriesVisible.baseLowCPRA && (
+                  <Scatter
+                    data={filteredData.waitlistDeathsPerYearData
+                      .filter(d => d.baseLowWaitlistDeaths !== undefined)
+                      .map(d => ({ x: d.year, y: d.baseLowWaitlistDeaths!, year: d.year }))}
+                    fill="#60a5fa"
+                    name="Low cPRA (Base Case)"
+                    shape={(props: any) => {
+                      const { cx, cy } = props;
+                      return <rect x={cx - 3} y={cy - 3} width={6} height={6} stroke="#60a5fa" strokeWidth={1.5} fill="none" />;
+                    }}
+                  />
+                )}
+                {waitlistDeathsPerYearSeriesVisible.baseHighCPRA && (
+                  <Scatter
+                    data={filteredData.waitlistDeathsPerYearData
+                      .filter(d => d.baseHighWaitlistDeaths !== undefined)
+                      .map(d => ({ x: d.year, y: d.baseHighWaitlistDeaths!, year: d.year }))}
+                    fill="#7dd3fc"
+                    name="High cPRA (Base Case)"
+                    shape={(props: any) => {
+                      const { cx, cy } = props;
+                      return <polygon points={`${cx},${cy - 4} ${cx + 3.5},${cy + 2.5} ${cx - 3.5},${cy + 2.5}`} stroke="#7dd3fc" strokeWidth={1.5} fill="none" />;
+                    }}
+                  />
+                )}
               </ScatterChart>
             )}
           </ResponsiveContainer>
+
+          {/* Series Toggle */}
+          <ChartSeriesToggle
+            series={
+              ageBreakdownExpanded.waitlistDeathsPerYear
+                ? [
+                    { key: 'total', label: 'Total', color: '#8b0000' },
+                    { key: 'lowCPRA', label: 'Low cPRA', color: '#ef4444' },
+                    { key: 'highCPRA', label: 'High cPRA', color: '#f59e0b' },
+                  ]
+                : [
+                    { key: 'total', label: 'Total (Xeno)', color: '#8b0000' },
+                    { key: 'lowCPRA', label: 'Low cPRA (Xeno)', color: '#ef4444' },
+                    { key: 'highCPRA', label: 'High cPRA (Xeno)', color: '#f59e0b' },
+                    ...(filteredData.waitlistDeathsPerYearData.some(d => d.baseWaitlistDeaths !== undefined)
+                      ? [{ key: 'baseTotal', label: 'Total (Base)', color: '#3b82f6' }]
+                      : []),
+                    ...(filteredData.waitlistDeathsPerYearData.some(d => d.baseLowWaitlistDeaths !== undefined)
+                      ? [{ key: 'baseLowCPRA', label: 'Low cPRA (Base)', color: '#60a5fa' }]
+                      : []),
+                    ...(filteredData.waitlistDeathsPerYearData.some(d => d.baseHighWaitlistDeaths !== undefined)
+                      ? [{ key: 'baseHighCPRA', label: 'High cPRA (Base)', color: '#7dd3fc' }]
+                      : []),
+                  ]
+            }
+            visible={waitlistDeathsPerYearSeriesVisible}
+            onChange={toggleWaitlistDeathsPerYearSeries}
+            chartId="waitlistDeathsPerYear"
+          />
 
           {/* Age Group Toggle */}
           {filteredData.waitlistDeathsPerYearDataByAge && (
