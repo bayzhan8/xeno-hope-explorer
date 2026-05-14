@@ -33,10 +33,10 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
   const standardMetrics = [
     {
       title: 'Waitlist Reduction',
-      value: formatNumber(Math.abs(metrics.waitlistReduction)),
+      value: formatNumber(metrics.waitlistReduction),
       icon: <Users className="w-5 h-5 text-primary" />,
-      trend: getTrendIcon(-metrics.waitlistReduction),
-      subtitle: `Fewer patients waiting after ${horizon} years`,
+      trend: getTrendIcon(metrics.waitlistReduction),
+      subtitle: `Fewer patients waiting vs. base case at year ${horizon}`,
       color: 'text-primary'
     },
     {
