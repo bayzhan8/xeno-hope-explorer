@@ -1160,9 +1160,15 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     };
   }
 
-  const initialWaitlist = relevantData[0]?.total || 0;
-  const finalWaitlist = relevantData[relevantData.length - 1]?.total || 0;
-  
+  // Waitlist reduction relative to base case (xeno_proportion = 0).
+  // Without a counterfactual we cannot attribute any reduction to xeno.
+  const finalRow = relevantData[relevantData.length - 1];
+  const finalWaitlist = finalRow?.total || 0;
+  const baseFinalWaitlist = finalRow?.baseTotal;
+  const waitlistReductionVsBase = baseFinalWaitlist !== undefined
+    ? baseFinalWaitlist - finalWaitlist
+    : 0;
+
   // Sum net deaths prevented up to horizon
   const totalDeathsPrevented = data.netDeathsPreventedPerYearData
     .filter(d => d.year <= horizon)
@@ -1184,7 +1190,7 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     : 0;
 
   return {
-    waitlistReduction: Math.max(0, initialWaitlist - finalWaitlist),
+    waitlistReduction: waitlistReductionVsBase,
     deathsPrevented: totalDeathsPrevented,
     totalTransplants,
     xenoTransplants,
