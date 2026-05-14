@@ -154,21 +154,15 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
       configUrl = `${SUPABASE_STORAGE_URL}/${targetingConfigsFile(threshold)}`;
     }
 
-    console.log('[Config Finder] Fetching from:', configUrl);
-    const response = await fetch(configUrl);
-    if (!response.ok) {
-      // 404 here typically means the per-threshold registry hasn't been
-      // generated yet (re-run still in progress). Treat the same as
-      // "config not yet available" rather than a hard error so the UI can
-      // show its friendly "Configuration not found" message.
-      if (response.status === 404) {
-        console.warn(`[Config Finder] Registry not yet available: ${configUrl}`);
-        return null;
-      }
-      throw new Error(`Failed to load config file from ${configUrl}`);
-    }
-    const experimentConfigs: ExperimentConfigs = await response.json();
-
+    // The config name is fully deterministic from (strategy, prop, relist,
+    // death) — same encoding the Python runner uses. Compute it directly
+    // and rely on the viz-fetch layer's live→backup→404 fallback for
+    // existence checks. We used to also gate on the per-threshold
+    // registry's `name_to_config` map, but that registry is written
+    // per-machine by the runner, so during the multi-machine rerun it's
+    // ALWAYS missing entries the other machine produced. Gating on it
+    // would silently break the UI for any config not run on the machine
+    // that last uploaded the registry.
     let configName: string;
     if (strategy === 'standard') {
       const fmt = formatStandard;
@@ -182,29 +176,34 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
       console.log('═══════════════════════════════════════════════════════════');
       console.log('[Config Finder] 🔍 CONFIG LOOKUP');
       console.log('═══════════════════════════════════════════════════════════');
-      console.log('User Inputs:');
-      console.log('  - xeno_proportion:', userInputs.xeno_proportion);
-      console.log('  - xenoGraftFailureRate:', userInputs.xenoGraftFailureRate);
-      console.log('  - postTransplantDeathRate:', userInputs.postTransplantDeathRate);
-      console.log('  - targetingStrategy:', strategy);
-      console.log('  - Config file:', configUrl);
-      console.log('  - Mapped to config:', configName);
+      console.log('  strategy:', strategy);
+      console.log('  threshold:', threshold);
+      console.log('  xeno_proportion:', userInputs.xeno_proportion);
+      console.log('  xenoGraftFailureRate:', userInputs.xenoGraftFailureRate);
+      console.log('  postTransplantDeathRate:', userInputs.postTransplantDeathRate);
+      console.log('  → derived configName:', configName);
       console.log('═══════════════════════════════════════════════════════════');
     }
 
-    if (experimentConfigs.name_to_config[configName]) {
-      if (import.meta.env.DEV) {
-        console.log('[Config Finder] ✅ FOUND:', configName);
-      }
-      return configName;
-    }
-
+    // Best-effort registry fetch for dev-time diagnostics — the result no
+    // longer affects the return value. Wrapped so a network error or
+    // missing registry never breaks the UI.
     if (import.meta.env.DEV) {
-      console.warn('[Config Finder] ❌ Config not found:', configName);
-      console.warn('Available configs:', Object.keys(experimentConfigs.name_to_config));
+      try {
+        const r = await fetch(configUrl);
+        if (r.ok) {
+          const reg: ExperimentConfigs = await r.json();
+          const present = !!reg.name_to_config?.[configName];
+          console.log(`[Config Finder] registry membership check (informational): ${present ? '✓ in registry' : '✗ not in registry yet — will still attempt fetch'}`);
+        } else {
+          console.log(`[Config Finder] registry fetch returned HTTP ${r.status} (informational only)`);
+        }
+      } catch {
+        /* ignore */
+      }
     }
 
-    return null;
+    return configName;
   } catch (error) {
     console.error('Error finding config name:', error);
     return null;
