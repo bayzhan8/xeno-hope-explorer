@@ -137,49 +137,43 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
           <div className="space-y-3 pb-4 border-b border-medical-border">
             <Label className="text-sm font-medium">High cPRA Definition</Label>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => updateParam('highCPRAThreshold', 85)}
-                disabled={params.targetingStrategy && params.targetingStrategy !== 'standard'}
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  params.highCPRAThreshold === 85
-                    ? 'border-2 border-primary bg-primary text-primary-foreground'
-                    : 'border border-input bg-background text-foreground hover:bg-muted'
-                } ${params.targetingStrategy && params.targetingStrategy !== 'standard' ? 'opacity-40 cursor-not-allowed' : ''}`}
-              >
-                85%+
-              </button>
-              <button
-                type="button"
-                onClick={() => updateParam('highCPRAThreshold', 95)}
-                disabled={params.targetingStrategy && params.targetingStrategy !== 'standard'}
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  params.highCPRAThreshold === 95
-                    ? 'border-2 border-primary bg-primary text-primary-foreground'
-                    : 'border border-input bg-background text-foreground hover:bg-muted'
-                } ${params.targetingStrategy && params.targetingStrategy !== 'standard' ? 'opacity-40 cursor-not-allowed' : ''}`}
-              >
-                95%+
-              </button>
-              <button
-                type="button"
-                onClick={() => updateParam('highCPRAThreshold', 99)}
-                disabled={params.targetingStrategy && params.targetingStrategy !== 'standard'}
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  params.highCPRAThreshold === 99
-                    ? 'border-2 border-primary bg-primary text-primary-foreground'
-                    : 'border border-input bg-background text-foreground hover:bg-muted'
-                } ${params.targetingStrategy && params.targetingStrategy !== 'standard' ? 'opacity-40 cursor-not-allowed' : ''}`}
-              >
-                99%+
-              </button>
+              {[85, 95, 99].map((threshold) => {
+                const isTargeting =
+                  !!params.targetingStrategy && params.targetingStrategy !== 'standard';
+                const isActive = params.highCPRAThreshold === threshold;
+                // For targeting strategies we only have data at 99%, so other
+                // thresholds are not selectable. The active button stays
+                // clickable and visually highlighted so the section never
+                // looks "frozen".
+                const isDisabled = isTargeting && threshold !== 99;
+                return (
+                  <button
+                    key={threshold}
+                    type="button"
+                    onClick={() => updateParam('highCPRAThreshold', threshold)}
+                    disabled={isDisabled}
+                    title={
+                      isDisabled
+                        ? 'Only the 99% threshold has data for targeting strategies'
+                        : undefined
+                    }
+                    className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      isActive
+                        ? 'border-2 border-primary bg-primary text-primary-foreground'
+                        : 'border border-input bg-background text-foreground hover:bg-muted'
+                    } ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    {threshold}%+
+                  </button>
+                );
+              })}
             </div>
             <div className="text-xs text-muted-foreground flex items-start gap-2">
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span>
                 {params.targetingStrategy && params.targetingStrategy !== 'standard'
-                  ? 'Targeting strategies use 99% threshold (fixed)'
-                  : 'Defines "high cPRA" patients. Only available for the Standard allocation strategy.'}
+                  ? 'Targeting strategies were simulated with the 99% threshold; other thresholds will be available once we generate matching data.'
+                  : 'Defines who counts as "high cPRA" in this simulation.'}
               </span>
             </div>
           </div>
