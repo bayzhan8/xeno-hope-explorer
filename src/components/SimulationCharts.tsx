@@ -747,7 +747,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   dataKey="y"
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 12 }}
-                  domain={[0, 6000]}
+                  domain={[0, 'auto']}
                   label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip
