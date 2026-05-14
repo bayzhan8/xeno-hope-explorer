@@ -50,6 +50,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     highHuman: true,
     highXeno: true,
     lowXeno: true,
+    total: false,
   });
 
   const [deathsSeriesVisible, setDeathsSeriesVisible] = useState<Record<string, boolean>>({
@@ -128,24 +129,32 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
       return ageData.map(yearData => {
         const chartPoint: any = { year: yearData.year };
 
-        // Add low cPRA age groups with prefix
+        const lowByAge: Record<string, number> = {};
+        const highByAge: Record<string, number> = {};
+
         if (yearData.lowCPRA && typeof yearData.lowCPRA === 'object') {
           for (const [ageKey, value] of Object.entries(yearData.lowCPRA)) {
             chartPoint[`lowCPRA_${ageKey}`] = value;
+            lowByAge[ageKey] = value;
           }
         }
 
-        // Add high cPRA age groups with prefix
         if (yearData.highCPRA && typeof yearData.highCPRA === 'object') {
           for (const [ageKey, value] of Object.entries(yearData.highCPRA)) {
             chartPoint[`highCPRA_${ageKey}`] = value;
+            highByAge[ageKey] = value;
           }
         }
 
-        // Add total age groups if available
+        // Use precomputed totals if backend provided them; otherwise sum low + high
         if (yearData.total && typeof yearData.total === 'object') {
           for (const [ageKey, value] of Object.entries(yearData.total)) {
             chartPoint[`total_${ageKey}`] = value;
+          }
+        } else {
+          const ageKeys = new Set([...Object.keys(lowByAge), ...Object.keys(highByAge)]);
+          for (const ageKey of ageKeys) {
+            chartPoint[`total_${ageKey}`] = (lowByAge[ageKey] || 0) + (highByAge[ageKey] || 0);
           }
         }
 
@@ -261,6 +270,18 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
+                {/* Total age groups (low + high cPRA) */}
+                {waitlistSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.waitlist[group.key]).map(group => (
+                  <Line
+                    key={`total_${group.key}`}
+                    type="monotone"
+                    dataKey={`total_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={3}
+                    name={`Total ${group.label}y`}
+                    dot={{ r: 1.5 }}
+                  />
+                ))}
                 {/* Low cPRA age groups */}
                 {waitlistSeriesVisible.lowCPRA && AGE_GROUPS.filter(group => ageGroupsPerChart.waitlist[group.key]).map(group => (
                   <Line
@@ -282,6 +303,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                     dataKey={`highCPRA_${group.key}`}
                     stroke={group.color}
                     strokeWidth={2.5}
+                    strokeDasharray="2 2"
                     name={`High cPRA ${group.label}y`}
                     dot={{ r: 1.5 }}
                   />
@@ -378,6 +400,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
             series={
               ageBreakdownExpanded.waitlist
                 ? [
+                    { key: 'total', label: `Total`, color: COLORS.primary },
                     { key: 'lowCPRA', label: `Low cPRA`, color: COLORS.secondary },
                     { key: 'highCPRA', label: `High cPRA`, color: COLORS.tertiary },
                   ]
@@ -436,6 +459,18 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 />
                 <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
                 <Tooltip content={<CustomTooltip />} />
+                {/* Total age groups (low + high cPRA) */}
+                {recipientsSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.recipients[group.key]).map(group => (
+                  <Line
+                    key={`total_${group.key}`}
+                    type="monotone"
+                    dataKey={`total_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={3}
+                    name={`Total ${group.label}y`}
+                    dot={{ r: 0.3 }}
+                  />
+                ))}
                 {/* Low cPRA age groups */}
                 {recipientsSeriesVisible.lowHuman && AGE_GROUPS.filter(group => ageGroupsPerChart.recipients[group.key]).map(group => (
                   <Line
@@ -457,6 +492,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                     dataKey={`highCPRA_${group.key}`}
                     stroke={group.color}
                     strokeWidth={2.5}
+                    strokeDasharray="2 2"
                     name={`High cPRA ${group.label}y`}
                     dot={{ r: 0.3 }}
                   />
@@ -494,12 +530,18 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           {/* Series Toggle */}
           <ChartSeriesToggle
             series={
-              [
-                { key: 'lowHuman', label: 'Low cPRA (human)', color: COLORS.secondary },
-                { key: 'highHuman', label: 'High cPRA (human)', color: COLORS.primary },
-                { key: 'highXeno', label: 'High cPRA (xeno)', color: COLORS.quaternary },
-                ...(hasLowXeno ? [{ key: 'lowXeno', label: 'Low cPRA (xeno)', color: COLORS.tertiary }] : []),
-              ]
+              ageBreakdownExpanded.recipients
+                ? [
+                    { key: 'total', label: 'Total', color: COLORS.primary },
+                    { key: 'lowHuman', label: 'Low cPRA', color: COLORS.secondary },
+                    { key: 'highHuman', label: 'High cPRA', color: COLORS.primary },
+                  ]
+                : [
+                    { key: 'lowHuman', label: 'Low cPRA (human)', color: COLORS.secondary },
+                    { key: 'highHuman', label: 'High cPRA (human)', color: COLORS.primary },
+                    { key: 'highXeno', label: 'High cPRA (xeno)', color: COLORS.quaternary },
+                    ...(hasLowXeno ? [{ key: 'lowXeno', label: 'Low cPRA (xeno)', color: COLORS.tertiary }] : []),
+                  ]
             }
             visible={recipientsSeriesVisible}
             onChange={toggleRecipientsSeries}
@@ -540,8 +582,20 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 />
                 <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
                 <Tooltip content={<CustomTooltip />} />
+                {/* Total age groups (low + high cPRA) */}
+                {deathsSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
+                  <Line
+                    key={`total_${group.key}`}
+                    type="monotone"
+                    dataKey={`total_${group.key}`}
+                    stroke={group.color}
+                    strokeWidth={3}
+                    name={`Total ${group.label}y`}
+                    dot={{ r: 0.3 }}
+                  />
+                ))}
                 {/* Low cPRA age groups */}
-                {AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
+                {(deathsSeriesVisible.lowWaitlist || deathsSeriesVisible.lowPostTx) && AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
                   <Line
                     key={`lowCPRA_${group.key}`}
                     type="monotone"
@@ -554,13 +608,14 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   />
                 ))}
                 {/* High cPRA age groups */}
-                {AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
+                {(deathsSeriesVisible.highWaitlist || deathsSeriesVisible.highPostTx) && AGE_GROUPS.filter(group => ageGroupsPerChart.cumulativeDeaths[group.key]).map(group => (
                   <Line
                     key={`highCPRA_${group.key}`}
                     type="monotone"
                     dataKey={`highCPRA_${group.key}`}
                     stroke={group.color}
                     strokeWidth={2.5}
+                    strokeDasharray="2 2"
                     name={`High cPRA ${group.label}y`}
                     dot={{ r: 0.3 }}
                   />
@@ -599,20 +654,26 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           </ResponsiveContainer>
 
           {/* Series Toggle */}
-          {!ageBreakdownExpanded.cumulativeDeaths && (
-            <ChartSeriesToggle
-              series={[
-                { key: 'lowWaitlist', label: 'Low cPRA waitlist', color: COLORS.secondary },
-                { key: 'highWaitlist', label: 'High cPRA waitlist', color: COLORS.primary },
-                { key: 'lowPostTx', label: 'Low cPRA post-tx', color: COLORS.tertiary },
-                { key: 'highPostTx', label: 'High cPRA post-tx', color: COLORS.quaternary },
-                { key: 'total', label: 'Total', color: COLORS.primary },
-              ]}
-              visible={deathsSeriesVisible}
-              onChange={toggleDeathsSeries}
-              chartId="cumulativeDeaths"
-            />
-          )}
+          <ChartSeriesToggle
+            series={
+              ageBreakdownExpanded.cumulativeDeaths
+                ? [
+                    { key: 'total', label: 'Total', color: COLORS.primary },
+                    { key: 'lowWaitlist', label: 'Low cPRA', color: COLORS.secondary },
+                    { key: 'highWaitlist', label: 'High cPRA', color: COLORS.primary },
+                  ]
+                : [
+                    { key: 'lowWaitlist', label: 'Low cPRA waitlist', color: COLORS.secondary },
+                    { key: 'highWaitlist', label: 'High cPRA waitlist', color: COLORS.primary },
+                    { key: 'lowPostTx', label: 'Low cPRA post-tx', color: COLORS.tertiary },
+                    { key: 'highPostTx', label: 'High cPRA post-tx', color: COLORS.quaternary },
+                    { key: 'total', label: 'Total', color: COLORS.primary },
+                  ]
+            }
+            visible={deathsSeriesVisible}
+            onChange={toggleDeathsSeries}
+            chartId="cumulativeDeaths"
+          />
 
           {/* Age Group Toggle */}
           {filteredData.cumulativeDeathsDataByAge && (
@@ -776,25 +837,36 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
+                {/* Total age groups (low + high cPRA) - stacked */}
+                {deathsPerYearSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.deathsPerYear[group.key]).map(group => (
+                  <Bar
+                    key={`total_${group.key}`}
+                    dataKey={`total_${group.key}`}
+                    stackId="total"
+                    fill={group.color}
+                    fillOpacity={1}
+                    name={`Total ${group.label}y`}
+                  />
+                ))}
                 {/* Low cPRA age groups - stacked */}
-                {AGE_GROUPS.filter(group => ageGroupsPerChart.deathsPerYear[group.key]).map(group => (
+                {deathsPerYearSeriesVisible.low && AGE_GROUPS.filter(group => ageGroupsPerChart.deathsPerYear[group.key]).map(group => (
                   <Bar
                     key={`lowCPRA_${group.key}`}
                     dataKey={`lowCPRA_${group.key}`}
                     stackId="lowCPRA"
                     fill={group.color}
-                    fillOpacity={0.6}
+                    fillOpacity={0.55}
                     name={`Low cPRA ${group.label}y`}
                   />
                 ))}
                 {/* High cPRA age groups - stacked */}
-                {AGE_GROUPS.filter(group => ageGroupsPerChart.deathsPerYear[group.key]).map(group => (
+                {deathsPerYearSeriesVisible.high && AGE_GROUPS.filter(group => ageGroupsPerChart.deathsPerYear[group.key]).map(group => (
                   <Bar
                     key={`highCPRA_${group.key}`}
                     dataKey={`highCPRA_${group.key}`}
                     stackId="highCPRA"
                     fill={group.color}
-                    fillOpacity={0.9}
+                    fillOpacity={0.85}
                     name={`High cPRA ${group.label}y`}
                   />
                 ))}
@@ -828,18 +900,16 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           </ResponsiveContainer>
 
           {/* Series Toggle */}
-          {!ageBreakdownExpanded.deathsPerYear && (
-            <ChartSeriesToggle
-              series={[
-                { key: 'low', label: 'Low cPRA', color: COLORS.secondary },
-                { key: 'high', label: 'High cPRA', color: COLORS.primary },
-                { key: 'total', label: 'Total', color: COLORS.quaternary },
-              ]}
-              visible={deathsPerYearSeriesVisible}
-              onChange={toggleDeathsPerYearSeries}
-              chartId="deathsPerYear"
-            />
-          )}
+          <ChartSeriesToggle
+            series={[
+              { key: 'total', label: 'Total', color: COLORS.quaternary },
+              { key: 'low', label: 'Low cPRA', color: COLORS.secondary },
+              { key: 'high', label: 'High cPRA', color: COLORS.primary },
+            ]}
+            visible={deathsPerYearSeriesVisible}
+            onChange={toggleDeathsPerYearSeries}
+            chartId="deathsPerYear"
+          />
 
           {/* Age Group Toggle */}
           {filteredData.deathsPerYearDataByAge && (
@@ -882,8 +952,32 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
+                {/* Total age groups (low + high cPRA) - stacked */}
+                {netDeathsSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.netDeathsPrevented[group.key]).map(group => (
+                  <Bar
+                    key={`total_${group.key}`}
+                    dataKey={`total_${group.key}`}
+                    stackId="total"
+                    fill={group.color}
+                    fillOpacity={1}
+                    name={`Total ${group.label}y`}
+                    radius={[2, 2, 0, 0]}
+                  />
+                ))}
+                {/* Low cPRA age groups - stacked */}
+                {netDeathsSeriesVisible.low && AGE_GROUPS.filter(group => ageGroupsPerChart.netDeathsPrevented[group.key]).map(group => (
+                  <Bar
+                    key={`lowCPRA_${group.key}`}
+                    dataKey={`lowCPRA_${group.key}`}
+                    stackId="lowCPRA"
+                    fill={group.color}
+                    fillOpacity={0.55}
+                    name={`Low cPRA ${group.label}y`}
+                    radius={[2, 2, 0, 0]}
+                  />
+                ))}
                 {/* High cPRA age groups - stacked */}
-                {AGE_GROUPS.filter(group => ageGroupsPerChart.netDeathsPrevented[group.key]).map(group => (
+                {netDeathsSeriesVisible.high && AGE_GROUPS.filter(group => ageGroupsPerChart.netDeathsPrevented[group.key]).map(group => (
                   <Bar
                     key={`highCPRA_${group.key}`}
                     dataKey={`highCPRA_${group.key}`}
@@ -924,18 +1018,16 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           </ResponsiveContainer>
 
           {/* Series Toggle */}
-          {!ageBreakdownExpanded.netDeathsPrevented && (
-            <ChartSeriesToggle
-              series={[
-                { key: 'low', label: 'Low cPRA', color: '#86efac' },
-                { key: 'high', label: 'High cPRA', color: '#22c55e' },
-                { key: 'total', label: 'Total', color: '#15803d' },
-              ]}
-              visible={netDeathsSeriesVisible}
-              onChange={toggleNetDeathsSeries}
-              chartId="netDeathsPrevented"
-            />
-          )}
+          <ChartSeriesToggle
+            series={[
+              { key: 'total', label: 'Total', color: '#15803d' },
+              { key: 'low', label: 'Low cPRA', color: '#86efac' },
+              { key: 'high', label: 'High cPRA', color: '#22c55e' },
+            ]}
+            visible={netDeathsSeriesVisible}
+            onChange={toggleNetDeathsSeries}
+            chartId="netDeathsPrevented"
+          />
 
           {/* Age Group Toggle */}
           {filteredData.netDeathsPreventedByAge && (
