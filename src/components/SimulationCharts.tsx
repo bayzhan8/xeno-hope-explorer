@@ -273,7 +273,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
     quaternary: 'hsl(var(--chart-quaternary))',
   };
 
-  // Custom tooltip component
+  // Format a numeric chart value as an integer count of people. Every
+  // y-axis on this page is a head-count (waitlist size, deaths, transplant
+  // recipients, etc.) so showing ".5" or ".789" from the Monte-Carlo
+  // averaging just adds noise without conveying additional precision.
+  const fmtCount = (v: unknown): string => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return String(v ?? '');
+    return Math.round(v).toLocaleString();
+  };
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -281,7 +289,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
           <p className="text-sm font-medium text-foreground mb-1">{`Year: ${label}`}</p>
           {payload.map((entry: any, index: number) => (
             <p key={index} className="text-sm" style={{ color: entry.color }}>
-              {`${entry.name}: ${typeof entry.value === 'number' ? entry.value.toLocaleString() : entry.value}`}
+              {`${entry.name}: ${fmtCount(entry.value)}`}
             </p>
           ))}
         </div>
@@ -332,6 +340,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 12 }}
+                  tickFormatter={fmtCount}
                   label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
@@ -389,6 +398,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 12 }}
+                  tickFormatter={fmtCount}
                   label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
@@ -526,7 +536,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                     domain={xAxisDomain}
                     ticks={xAxisTicks}
                   />
-                  <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={fmtCount} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
                   <Tooltip content={<CustomTooltip />} />
                   {/* Total age groups (low + high cPRA, human + xeno) */}
                   {recipientsSeriesVisible.total && visibleAgeGroups.map(group => (
@@ -631,7 +641,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   domain={xAxisDomain}
                   ticks={xAxisTicks}
                 />
-                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={fmtCount} label={{ value: 'Count', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
                 <Tooltip content={<CustomTooltip />} />
                 {recipientsSeriesVisible.lowHuman && (
                   <Line type="monotone" dataKey="lowHuman" stroke={COLORS.secondary} name="Low cPRA (human)" strokeWidth={2} dot={{ r: 0.2 }} />
@@ -709,7 +719,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                     domain={xAxisDomain}
                     ticks={xAxisTicks}
                   />
-                  <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={fmtCount} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
                   <Tooltip content={<CustomTooltip />} />
                   {/* Total age groups (low + high cPRA, waitlist + post-tx) */}
                   {deathsSeriesVisible.total && visibleAgeGroups.map(group => (
@@ -820,7 +830,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   domain={xAxisDomain}
                   ticks={xAxisTicks}
                 />
-                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={(value) => value.toLocaleString()} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
+                <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={fmtCount} label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
                 <Tooltip content={<CustomTooltip />} />
                 {deathsSeriesVisible.lowWaitlist && (
                   <Line type="monotone" dataKey="lowWaitlist" stroke={COLORS.secondary} name="Low cPRA waitlist" strokeWidth={2} dot={{ r: 0.15 }} />
@@ -891,7 +901,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => value.toLocaleString()}
+                  tickFormatter={fmtCount}
                   label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <Tooltip content={<CustomTooltip />} />
@@ -953,6 +963,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                   dataKey="y"
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 12 }}
+                  tickFormatter={fmtCount}
                   domain={[0, 'auto']}
                   label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
@@ -1122,7 +1133,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
-                  tickFormatter={(value) => value.toLocaleString()}
+                  tickFormatter={fmtCount}
                   domain={[0, 'auto']}
                   label={{ value: 'Deaths', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
@@ -1177,7 +1188,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
-                  tickFormatter={(value) => value.toLocaleString()}
+                  tickFormatter={fmtCount}
                   domain={[0, 'auto']}
                   label={{ value: 'Deaths', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
@@ -1237,7 +1248,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
-                  tickFormatter={(value) => value.toLocaleString()}
+                  tickFormatter={fmtCount}
                   domain={['dataMin', 'dataMax']}
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
@@ -1296,7 +1307,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 11 }}
-                  tickFormatter={(value) => value.toLocaleString()}
+                  tickFormatter={fmtCount}
                   domain={['dataMin', 'dataMax']}
                   label={{ value: 'Deaths Prevented', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
