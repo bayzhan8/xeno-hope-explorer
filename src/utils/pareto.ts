@@ -121,16 +121,45 @@ export function totalDeathsAtYear(viz: VizLike, targetYear: number): number | nu
   return valueAtYear(viz.cumulative_deaths, targetYear);
 }
 
-/** Lives saved = baseDeaths − scenarioDeaths at `targetYear`. */
+/** Cumulative waitlist deaths at `targetYear`. */
+export function waitlistDeathsAtYear(
+  viz: VizLike,
+  targetYear: number,
+): number | null {
+  return valueAtYear(viz.cumulative_waitlist_deaths, targetYear);
+}
+
+/**
+ * Lives saved = WAITLIST deaths reduction (base − scenario) at `targetYear`.
+ *
+ * IMPORTANT: We deliberately use waitlist deaths only, NOT total
+ * (waitlist + post-tx) deaths. Reason: a bridge xenograft moves a patient
+ * off the waitlist for ~1 year, exposing them to ~1 yr of post-tx
+ * mortality risk in exchange. For high-cPRA recipients those two hazards
+ * roughly cancel at the simulation horizon, so total-death reduction is
+ * dominated by Monte-Carlo noise (often slightly negative). The
+ * clinically interesting signal is "deaths AVOIDED on the waitlist", which
+ * matches the definition the existing landing-page summary card uses
+ * (see `calculateSummaryMetrics` in dataTransformer.ts: it sums
+ * `netDeathsPreventedPerYearData`, which for bridge configs is
+ * client-side derived from `waitlist_deaths_per_year` diffs).
+ *
+ * Falls back to the legacy `cumulative_deaths` Total series only if
+ * `cumulative_waitlist_deaths` isn't present in EITHER viz JSON.
+ */
 export function livesSavedFromViz(
   scenarioViz: VizLike,
   baseViz: VizLike,
   targetYear: number,
 ): number | null {
-  const scen = totalDeathsAtYear(scenarioViz, targetYear);
-  const base = totalDeathsAtYear(baseViz, targetYear);
-  if (scen === null || base === null) return null;
-  return base - scen;
+  const scen = waitlistDeathsAtYear(scenarioViz, targetYear);
+  const base = waitlistDeathsAtYear(baseViz, targetYear);
+  if (scen !== null && base !== null) return base - scen;
+
+  const scenT = totalDeathsAtYear(scenarioViz, targetYear);
+  const baseT = totalDeathsAtYear(baseViz, targetYear);
+  if (scenT === null || baseT === null) return null;
+  return baseT - scenT;
 }
 
 /** Total waitlist size at `targetYear`. */
