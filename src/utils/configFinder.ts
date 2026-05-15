@@ -139,6 +139,35 @@ function targetingVizFolder(threshold: number): string {
   return 'viz_data_age_targeting'; // default = 99%
 }
 
+// ─── Bridge Therapy support ────────────────────────────────────────────────
+//
+// Bridge mode uses pre-baked input pickles (one per (cPRA threshold, target
+// graft survival in months)) so the relisting/death-with-tx multipliers are
+// always 1.0 in every config name. The graft-survival dimension is encoded
+// in the *folder/prefix*, NOT in the config name. This keeps the per-config
+// JSON name compatible with all existing safety-net regexes.
+//
+// Folder layout (mirrors `run_bridge_experiments.py::folders_for`):
+//
+//   viz_data_age_bridge_<threshold>_surv<M>mo/             (no targeting)
+//   viz_data_age_bridge_targeting_<threshold>_surv<M>mo/   (4 strategies)
+//
+// The Mode union is exported so other modules can pass-through the active
+// therapy mode without re-deriving it from URL-state etc.
+export type TherapyMode = 'replacement' | 'bridge';
+
+// Allowed graft-survival targets for Bridge Therapy (must mirror the values
+// in run_bridge_experiments.py SURVIVALS / make_bridge_inputs.py).
+export const BRIDGE_SURVIVAL_MONTHS = [6, 12, 18, 24, 36] as const;
+export type BridgeSurvivalMonths = (typeof BRIDGE_SURVIVAL_MONTHS)[number];
+
+function bridgeVizFolder(strategy: string, threshold: number, surv: BridgeSurvivalMonths): string {
+  const suf = `${threshold}_surv${surv}mo`;
+  return strategy === 'standard'
+    ? `viz_data_age_bridge_${suf}`
+    : `viz_data_age_bridge_targeting_${suf}`;
+}
+
 // Find config name from user inputs
 export async function findConfigName(userInputs: UserInputs): Promise<string | null> {
   try {
@@ -218,34 +247,112 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
 // the website keeps working throughout the rerun.
 const BACKUP_PREFIX_ROOT = '_backup_pre_rerun_2026_05_14';
 
-// Load visualization data from Supabase Storage (age-stratified version)
-export async function loadVisualizationData(configName: string, highCPRAThreshold: number = 95, targetingStrategy?: string) {
-  let vizFolder: string;
+// Compose the canonical config-name string for a (mode, strategy, params)
+// triple. Single source of truth shared by the page + the Pareto loader.
+//
+//   replacement-standard:  xeno_age_prop{p}_relist{r}_death{d}
+//   replacement-targeted:  {strategy}_prop{p}_relist{r}_death{d}
+//   bridge-standard:       xeno_age_prop{p}_relist1p0_death1p0
+//   bridge-targeted:       {strategy}_prop{p}_relist1p0_death1p0
+//
+// The bridge variants HARD-CODE _relist1p0_death1p0 because the bridge
+// runner always passes those multipliers (the actual rates are pre-baked
+// per-age into the input pickle — see make_bridge_inputs.py).
+export interface ComposeNameParams {
+  xeno_proportion: number;
+  xenoGraftFailureRate?: number;     // replacement only; ignored in bridge mode
+  postTransplantDeathRate?: number;  // replacement only; ignored in bridge mode
+}
 
-  // Determine folder based on (strategy, threshold).
-  const strategy = targetingStrategy || 'standard';
-  if (strategy !== 'standard') {
+export function composeConfigName(
+  mode: TherapyMode,
+  params: ComposeNameParams,
+  strategy: string = 'standard',
+): string {
+  if (mode === 'bridge') {
+    // Bridge: targeting-style float formatting throughout (matches
+    // run_bridge_experiments.py::config_name_for which always uses
+    // str(float).replace(".", "p")).
+    const fmt = formatTargeting;
+    const propStr = fmt(params.xeno_proportion);
+    const base = strategy === 'standard' ? 'xeno_age' : strategy;
+    return `${base}_prop${propStr}_relist1p0_death1p0`;
+  }
+
+  // Replacement therapy — preserve historical formatting quirk: the
+  // standard runner uses `str(int_or_float).replace(".", "p")` so 1 stays
+  // "1" while 0.5 becomes "0p5". The targeting runner formats every value
+  // as `f"{v:.1f}".replace(".", "p")` so 1.0 → "1p0".
+  const xrate = params.xenoGraftFailureRate ?? 1;
+  const drate = params.postTransplantDeathRate ?? 1;
+  if (strategy === 'standard') {
+    const fmt = formatStandard;
+    return `xeno_age_prop${fmt(params.xeno_proportion)}_relist${fmt(xrate)}_death${fmt(drate)}`;
+  }
+  const fmt = formatTargeting;
+  return `${strategy}_prop${fmt(params.xeno_proportion)}_relist${fmt(xrate)}_death${fmt(drate)}`;
+}
+
+// Resolve the live and backup viz JSON URLs for a given (mode, strategy,
+// threshold, optional surv). The backup URL is only meaningful in
+// replacement therapy (the pre-rerun snapshot did not include bridge
+// therapy data); for bridge mode the backup is null.
+export function resolveVizUrls(
+  configName: string,
+  mode: TherapyMode,
+  highCPRAThreshold: number,
+  strategy: string = 'standard',
+  surv?: BridgeSurvivalMonths,
+): { primaryUrl: string; backupUrl: string | null; vizFolder: string } {
+  let vizFolder: string;
+  if (mode === 'bridge') {
+    if (!surv) {
+      throw new Error('resolveVizUrls(mode=bridge) requires a `surv` (graft survival in months).');
+    }
+    vizFolder = bridgeVizFolder(strategy, highCPRAThreshold, surv);
+  } else if (strategy !== 'standard') {
     vizFolder = targetingVizFolder(highCPRAThreshold);
   } else {
     vizFolder = 'viz_data_age';
-    if (highCPRAThreshold === 85) {
-      vizFolder = 'viz_data_age_85';
-    } else if (highCPRAThreshold === 99) {
-      vizFolder = 'viz_data_age_99';
-    }
+    if (highCPRAThreshold === 85) vizFolder = 'viz_data_age_85';
+    else if (highCPRAThreshold === 99) vizFolder = 'viz_data_age_99';
   }
 
   const primaryUrl = `${SUPABASE_STORAGE_URL}/${vizFolder}/${configName}.json`;
-  const backupUrl = `${SUPABASE_STORAGE_URL}/${BACKUP_PREFIX_ROOT}/${vizFolder}/${configName}.json`;
+  const backupUrl = mode === 'replacement'
+    ? `${SUPABASE_STORAGE_URL}/${BACKUP_PREFIX_ROOT}/${vizFolder}/${configName}.json`
+    : null;
+
+  return { primaryUrl, backupUrl, vizFolder };
+}
+
+// Load visualization data from Supabase Storage (age-stratified version)
+export interface LoadVizOptions {
+  mode?: TherapyMode;          // defaults to 'replacement'
+  surv?: BridgeSurvivalMonths; // required when mode === 'bridge'
+}
+
+export async function loadVisualizationData(
+  configName: string,
+  highCPRAThreshold: number = 95,
+  targetingStrategy?: string,
+  opts: LoadVizOptions = {},
+) {
+  const mode: TherapyMode = opts.mode || 'replacement';
+  const strategy = targetingStrategy || 'standard';
+  const { primaryUrl, backupUrl, vizFolder } = resolveVizUrls(
+    configName, mode, highCPRAThreshold, strategy, opts.surv,
+  );
 
   // Try the primary (live) prefix first; fall back to the pre-rerun backup
-  // if the new viz hasn't landed yet for this config.
+  // if the new viz hasn't landed yet for this config (replacement mode
+  // only — bridge has no pre-rerun backup).
   try {
-    console.log(`[Config Finder] Loading viz data from: ${primaryUrl} (cPRA ${highCPRAThreshold}%)`);
+    console.log(`[Config Finder] Loading viz data from: ${primaryUrl} (cPRA ${highCPRAThreshold}%${mode === 'bridge' ? `, surv ${opts.surv}mo` : ''})`);
     const response = await fetch(primaryUrl);
     if (response.ok) {
       const data = await response.json();
-      console.log('[Config Finder] ✓ loaded fresh viz data:', configName, `(cPRA ${highCPRAThreshold}%)`,
+      console.log('[Config Finder] ✓ loaded fresh viz data:', configName, `(cPRA ${highCPRAThreshold}%, mode=${mode})`,
                   'Series count:', data.waitlist_sizes?.series?.length);
       return data;
     }
@@ -256,15 +363,21 @@ export async function loadVisualizationData(configName: string, highCPRAThreshol
     if (!missing) {
       throw new Error(`Failed to load viz data for ${configName} (cPRA ${highCPRAThreshold}%) from primary path: HTTP ${response.status}`);
     }
-    console.log(`[Config Finder] primary missing (HTTP ${response.status}), trying backup: ${backupUrl}`);
-    const backupResp = await fetch(backupUrl);
-    if (backupResp.ok) {
-      const data = await backupResp.json();
-      console.log('[Config Finder] ✓ loaded BACKUP viz data (re-run not finished for this config):', configName);
-      return data;
+
+    if (backupUrl) {
+      console.log(`[Config Finder] primary missing (HTTP ${response.status}), trying backup: ${backupUrl}`);
+      const backupResp = await fetch(backupUrl);
+      if (backupResp.ok) {
+        const data = await backupResp.json();
+        console.log('[Config Finder] ✓ loaded BACKUP viz data (re-run not finished for this config):', configName);
+        return data;
+      }
+    } else {
+      console.log(`[Config Finder] primary missing (HTTP ${response.status}); no backup configured for mode=${mode}`);
     }
+
     throw new Error(
-      `Visualization data for ${configName} (cPRA ${highCPRAThreshold}%) is not yet available — re-run in progress.`
+      `Visualization data for ${configName} (cPRA ${highCPRAThreshold}%${mode === 'bridge' ? `, surv ${opts.surv}mo` : ''}) is not yet available — re-run in progress.`
     );
   } catch (error) {
     console.error('Error loading visualization data:', error);
