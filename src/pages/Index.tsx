@@ -5,6 +5,7 @@ import SimulationControls from '@/components/SimulationControls';
 import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
 import MarkovChainVisualization from '@/components/MarkovChainVisualization';
+import ModeNav from '@/components/ModeNav';
 import { findConfigName, loadVisualizationData } from '@/utils/configFinder';
 import { transformVizDataToSimulationData, calculateSummaryMetrics, getXenoBaseRate } from '@/utils/dataTransformer';
 
@@ -153,6 +154,8 @@ const Index = () => {
           </div>
         </div>
       </header>
+
+      <ModeNav />
 
       {/* Main Content */}
       <main className="container mx-auto px-0 py-8">
