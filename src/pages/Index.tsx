@@ -6,6 +6,7 @@ import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
 import MarkovChainVisualization from '@/components/MarkovChainVisualization';
 import ModeNav from '@/components/ModeNav';
+import ReplacementPareto from '@/components/ReplacementPareto';
 import { findConfigName, loadVisualizationData } from '@/utils/configFinder';
 import { transformVizDataToSimulationData, calculateSummaryMetrics, getXenoBaseRate } from '@/utils/dataTransformer';
 
@@ -254,6 +255,16 @@ const Index = () => {
                 </div>
               </>
             )}
+
+            {/* Tradeoff (Pareto) Curves */}
+            <ReplacementPareto
+              xeno_proportion={params.xeno_proportion}
+              xenoGraftFailureRate={params.xenoGraftFailureRate}
+              postTransplantDeathRate={params.postTransplantDeathRate}
+              highCPRAThreshold={params.highCPRAThreshold}
+              targetingStrategy={params.targetingStrategy}
+              simulationHorizon={params.simulationHorizon}
+            />
 
             {/* Model Structure & Assumptions */}
             <div>

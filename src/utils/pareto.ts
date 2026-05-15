@@ -328,6 +328,16 @@ export interface ParetoDataset {
  * Spec for a single point in the Pareto sweep. The `(strategy, mode, surv)`
  * triple lets the same loader compose names for both the standard and
  * targeted strategies.
+ *
+ * For BRIDGE mode the relist/death multipliers are always 1.0 (baked into
+ * the input pickle) so the only varying axes are `xeno_proportion` and
+ * `surv`.
+ *
+ * For REPLACEMENT mode the relist/death multipliers ARE part of the config
+ * name, so a Pareto sweep over e.g. graft-failure multiplier needs to vary
+ * `xenoGraftFailureRate` per point while holding the others fixed at the
+ * user's currently-selected values. The optional fields default to 1.0
+ * when omitted (matching the canonical "no-multiplier" baseline).
  */
 export interface ParetoPointSpec {
   /** Display label (e.g. "0.5x" or "12 mo"). */
@@ -335,7 +345,12 @@ export interface ParetoPointSpec {
   /** Numeric x-axis value associated with this point. */
   x: number;
   xeno_proportion: number;
-  surv?: BridgeSurvivalMonths; // omit for replacement-mode datasets
+  /** Bridge-only: graft survival in months. Required when mode='bridge'. */
+  surv?: BridgeSurvivalMonths;
+  /** Replacement-only: relisting/graft-failure multiplier. Defaults to 1. */
+  xenoGraftFailureRate?: number;
+  /** Replacement-only: post-transplant death multiplier. Defaults to 1. */
+  postTransplantDeathRate?: number;
   /** Optional override for the strategy used in name composition. */
   strategy?: string;
 }
@@ -376,14 +391,28 @@ export async function loadParetoDataset(opts: LoadParetoOptions): Promise<Pareto
   const tasks = points.map(async (spec): Promise<ParetoPoint | null> => {
     const effectiveStrategy = spec.strategy ?? strategy;
     try {
+      // Per-point relist/death multipliers (replacement-only). Bridge
+      // mode ignores these because composeConfigName hard-codes them.
+      const xrate = spec.xenoGraftFailureRate ?? 1;
+      const drate = spec.postTransplantDeathRate ?? 1;
       const scenarioName = composeConfigName(
         mode,
-        { xeno_proportion: spec.xeno_proportion },
+        {
+          xeno_proportion: spec.xeno_proportion,
+          xenoGraftFailureRate: xrate,
+          postTransplantDeathRate: drate,
+        },
         effectiveStrategy,
       );
+      // Base case is always prop=0 with the canonical "no-multiplier"
+      // baseline (1.0/1.0). At prop=0 there are no xeno transplants so
+      // the xeno multipliers don't affect the simulation, which means
+      // every point in the sweep can compare against the same base —
+      // important for keeping "lives saved" / "waitlist reduction"
+      // self-consistent across the curve.
       const baseName = composeConfigName(
         mode,
-        { xeno_proportion: 0 },
+        { xeno_proportion: 0, xenoGraftFailureRate: 1, postTransplantDeathRate: 1 },
         effectiveStrategy,
       );
 
