@@ -30,6 +30,23 @@ describe('composeConfigName — bridge mode', () => {
     ).toBe('age45_cpraAll_prop2p0_relist1p0_death1p0');
   });
 
+  it('handles extended supply proportions (3×, 4×) added for asymptote visibility', () => {
+    // Backend's str(3.0)="3.0" → "3p0" must match the frontend's
+    // formatTargeting(3) = (3).toFixed(1).replace('.', 'p') = "3p0".
+    expect(
+      composeConfigName('bridge', { xeno_proportion: 3 }, 'standard'),
+    ).toBe('xeno_age_prop3p0_relist1p0_death1p0');
+    expect(
+      composeConfigName('bridge', { xeno_proportion: 4 }, 'standard'),
+    ).toBe('xeno_age_prop4p0_relist1p0_death1p0');
+    expect(
+      composeConfigName('bridge', { xeno_proportion: 3 }, 'age60_cpraHigh'),
+    ).toBe('age60_cpraHigh_prop3p0_relist1p0_death1p0');
+    expect(
+      composeConfigName('bridge', { xeno_proportion: 4 }, 'age45_cpraAll'),
+    ).toBe('age45_cpraAll_prop4p0_relist1p0_death1p0');
+  });
+
   it('ignores xenoGraftFailureRate / postTransplantDeathRate when in bridge mode', () => {
     expect(
       composeConfigName(
