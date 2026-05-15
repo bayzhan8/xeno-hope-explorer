@@ -2,10 +2,12 @@
  * Two-tab navigation for switching between Replacement Therapy (`/`) and
  * Bridge Therapy (`/bridge`).
  *
- * The Bridge tab only renders when the `VITE_FEATURE_BRIDGE` env var is set
- * to `"true"` so we can ship the route to production *before* the
- * Supabase data has finished landing — flip the flag once the backend
- * sweep completes and the tab appears for everyone.
+ * The Bridge tab is enabled by default now that all 375 Supabase configs
+ * (3 cPRA thresholds × 5 strategies × 5 graft-survival values × 5 supply
+ * proportions) have landed. To temporarily hide the tab in a deployment
+ * (e.g. while debugging or running a staged demo), set the env var
+ * `VITE_FEATURE_BRIDGE=false` — anything other than the literal string
+ * "false" keeps it on.
  *
  * Use as a sibling of the page header, e.g. directly above `<main>`.
  */
@@ -13,7 +15,8 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowRightLeft, Hourglass, Beaker } from 'lucide-react';
 
-export const BRIDGE_FEATURE_FLAG_ENABLED = import.meta.env.VITE_FEATURE_BRIDGE === 'true';
+export const BRIDGE_FEATURE_FLAG_ENABLED =
+  import.meta.env.VITE_FEATURE_BRIDGE !== 'false';
 
 const TABS: Array<{
   to: string;
