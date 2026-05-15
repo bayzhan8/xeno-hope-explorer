@@ -312,4 +312,46 @@ describe('loadParetoDataset', () => {
     expect(ds.points).toHaveLength(0);
     expect(ds.inflectionIndex).toBeNull();
   });
+
+  it('threads replacement-mode multipliers (relist/death) through to config names', async () => {
+    // Capture every URL the loader fetches so we can assert the per-point
+    // multiplier overrides reach composeConfigName.
+    const urls: string[] = [];
+    fetchSpy.mockImplementation(async (input) => {
+      const url = String(input);
+      urls.push(url);
+      const xDays = [0, 1825, 3650];
+      return new Response(
+        JSON.stringify({
+          total_days: 3650,
+          waitlist_sizes: { x: xDays, series: [{ label: 'wl', y: [200, 150, 100] }] },
+          cumulative_waitlist_deaths: { x: xDays, series: [{ label: 'd', y: [0, 50, 100] }] },
+          cumulative_post_tx_deaths: { x: xDays, series: [{ label: 't', y: [0, 0, 0] }] },
+        }),
+        { status: 200 },
+      );
+    });
+
+    await loadParetoDataset({
+      mode: 'replacement',
+      highCPRAThreshold: 95,
+      strategy: 'standard',
+      targetYear: 10,
+      metric: livesSavedFromViz,
+      // Sweep relist multiplier ∈ {0.5, 1, 2} at fixed prop=1 and death=1
+      points: [
+        { label: '0.5x', x: 0.5, xeno_proportion: 1, xenoGraftFailureRate: 0.5, postTransplantDeathRate: 1 },
+        { label: '1x',   x: 1,   xeno_proportion: 1, xenoGraftFailureRate: 1,   postTransplantDeathRate: 1 },
+        { label: '2x',   x: 2,   xeno_proportion: 1, xenoGraftFailureRate: 2,   postTransplantDeathRate: 1 },
+      ],
+    });
+
+    // Each scenario name encodes the per-point relist multiplier:
+    //   prop1_relist0p5_death1, prop1_relist1_death1, prop1_relist2_death1
+    expect(urls.some((u) => u.includes('xeno_age_prop1_relist0p5_death1.json'))).toBe(true);
+    expect(urls.some((u) => u.includes('xeno_age_prop1_relist1_death1.json'))).toBe(true);
+    expect(urls.some((u) => u.includes('xeno_age_prop1_relist2_death1.json'))).toBe(true);
+    // Base case is always prop0_relist1_death1 regardless of per-point overrides.
+    expect(urls.some((u) => u.includes('xeno_age_prop0_relist1_death1.json'))).toBe(true);
+  });
 });
