@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip, ScatterChart, Scatter, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, Legend, Tooltip, ReferenceLine } from 'recharts';
 import { ChartSeriesToggle } from './ChartSeriesToggle';
 import { AgeGroupToggle, AGE_GROUPS } from './AgeGroupToggle';
 
@@ -945,13 +945,38 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 ))}
               </LineChart>
             ) : (
-              <ScatterChart
+              // Switched from <ScatterChart> + 6 separate <Scatter> series to
+              // a <LineChart> over a unified wide-format dataset (one row per
+              // year, one column per series). This is purely so the default
+              // vertical-cursor tooltip can list every visible series for the
+              // hovered year — ScatterChart's tooltip is single-point because
+              // each <Scatter> is its own dataset, which made it impossible
+              // to compare e.g. "Total (Xeno)" vs "Total (Base)" at the
+              // same year without hovering each dot individually.
+              //
+              // The visual stays "scatter-like" because each <Line> uses
+              // strokeOpacity=0 (no connecting segment) and a custom dot
+              // renderer that draws the same circle/square/triangle shapes
+              // the ScatterChart was using. A small invisible stroke is
+              // needed (instead of strokeWidth=0) so Recharts still tracks
+              // the line for hover detection even at years where this
+              // particular series happens to be missing.
+              <LineChart
+                data={filteredData.waitlistDeathsPerYearData.map(d => ({
+                  year: d.year,
+                  total: d.waitlistDeaths,
+                  lowCPRA: d.lowWaitlistDeaths,
+                  highCPRA: d.highWaitlistDeaths,
+                  baseTotal: d.baseWaitlistDeaths,
+                  baseLowCPRA: d.baseLowWaitlistDeaths,
+                  baseHighCPRA: d.baseHighWaitlistDeaths,
+                }))}
                 margin={{ top: 10, right: 10, bottom: 20, left: 20 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--chart-grid))" />
                 <XAxis
                   type="number"
-                  dataKey="x"
+                  dataKey="year"
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 12 }}
                   domain={xAxisDomain}
@@ -960,111 +985,115 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({ data, highCPRAThres
                 />
                 <YAxis
                   type="number"
-                  dataKey="y"
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 12 }}
                   tickFormatter={fmtCount}
                   domain={[0, 'auto']}
                   label={{ value: 'Deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
-                <Tooltip
-                  cursor={{ strokeDasharray: '3 3' }}
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const point = payload[0].payload;
-                      return (
-                        <div className="bg-card border border-medical-border rounded-lg p-3 shadow-[var(--shadow-medium)]">
-                          <p className="text-sm font-medium text-foreground mb-1">{`Year: ${point.year?.toFixed(1) || point.x?.toFixed(1) || 'N/A'}`}</p>
-                          {payload.map((entry: any, idx: number) => (
-                            <p key={idx} className="text-sm" style={{ color: entry.color }}>
-                              {`${entry.name}: ${typeof entry.value === 'number' ? entry.value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : entry.value}`}
-                            </p>
-                          ))}
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                {/* Xeno scenario */}
+                <Tooltip content={<CustomTooltip />} />
+                {/* Xeno scenario — filled circle, square, triangle */}
                 {waitlistDeathsPerYearSeriesVisible.total && (
-                  <Scatter
-                    data={filteredData.waitlistDeathsPerYearData.map(d => ({ x: d.year, y: d.waitlistDeaths, year: d.year }))}
-                    fill="#8b0000"
+                  <Line
+                    type="monotone"
+                    dataKey="total"
                     name="Total (Xeno)"
-                    shape={(props: any) => {
-                      const { cx, cy } = props;
-                      return <circle cx={cx} cy={cy} r={3.5} fill="#8b0000" />;
-                    }}
+                    stroke="#8b0000"
+                    strokeOpacity={0}
+                    isAnimationActive={false}
+                    dot={(props: any) => (
+                      <circle key={`d-total-${props.index}`} cx={props.cx} cy={props.cy} r={3.5} fill="#8b0000" />
+                    )}
+                    activeDot={{ r: 6, fill: '#8b0000' }}
                   />
                 )}
                 {waitlistDeathsPerYearSeriesVisible.lowCPRA && (
-                  <Scatter
-                    data={filteredData.waitlistDeathsPerYearData
-                      .filter(d => d.lowWaitlistDeaths !== undefined)
-                      .map(d => ({ x: d.year, y: d.lowWaitlistDeaths!, year: d.year }))}
-                    fill="#ef4444"
+                  <Line
+                    type="monotone"
+                    dataKey="lowCPRA"
                     name="Low cPRA (Xeno)"
-                    shape={(props: any) => {
-                      const { cx, cy } = props;
-                      return <rect x={cx - 3} y={cy - 3} width={6} height={6} fill="#ef4444" />;
-                    }}
+                    stroke="#ef4444"
+                    strokeOpacity={0}
+                    isAnimationActive={false}
+                    connectNulls={false}
+                    dot={(props: any) => (
+                      <rect key={`d-lo-${props.index}`} x={props.cx - 3} y={props.cy - 3} width={6} height={6} fill="#ef4444" />
+                    )}
+                    activeDot={{ r: 6, fill: '#ef4444' }}
                   />
                 )}
                 {waitlistDeathsPerYearSeriesVisible.highCPRA && (
-                  <Scatter
-                    data={filteredData.waitlistDeathsPerYearData
-                      .filter(d => d.highWaitlistDeaths !== undefined)
-                      .map(d => ({ x: d.year, y: d.highWaitlistDeaths!, year: d.year }))}
-                    fill="#f59e0b"
+                  <Line
+                    type="monotone"
+                    dataKey="highCPRA"
                     name="High cPRA (Xeno)"
-                    shape={(props: any) => {
-                      const { cx, cy } = props;
-                      return <polygon points={`${cx},${cy - 4} ${cx + 3.5},${cy + 2.5} ${cx - 3.5},${cy + 2.5}`} fill="#f59e0b" />;
-                    }}
+                    stroke="#f59e0b"
+                    strokeOpacity={0}
+                    isAnimationActive={false}
+                    connectNulls={false}
+                    dot={(props: any) => (
+                      <polygon
+                        key={`d-hi-${props.index}`}
+                        points={`${props.cx},${props.cy - 4} ${props.cx + 3.5},${props.cy + 2.5} ${props.cx - 3.5},${props.cy + 2.5}`}
+                        fill="#f59e0b"
+                      />
+                    )}
+                    activeDot={{ r: 6, fill: '#f59e0b' }}
                   />
                 )}
-                {/* Base case */}
+                {/* Base case — hollow circle, square, triangle */}
                 {waitlistDeathsPerYearSeriesVisible.baseTotal && (
-                  <Scatter
-                    data={filteredData.waitlistDeathsPerYearData
-                      .filter(d => d.baseWaitlistDeaths !== undefined)
-                      .map(d => ({ x: d.year, y: d.baseWaitlistDeaths!, year: d.year }))}
-                    fill="#3b82f6"
+                  <Line
+                    type="monotone"
+                    dataKey="baseTotal"
                     name="Total (Base Case)"
-                    shape={(props: any) => {
-                      const { cx, cy } = props;
-                      return <circle cx={cx} cy={cy} r={3.5} stroke="#3b82f6" strokeWidth={1.5} fill="none" />;
-                    }}
+                    stroke="#3b82f6"
+                    strokeOpacity={0}
+                    isAnimationActive={false}
+                    connectNulls={false}
+                    dot={(props: any) => (
+                      <circle key={`d-bt-${props.index}`} cx={props.cx} cy={props.cy} r={3.5} stroke="#3b82f6" strokeWidth={1.5} fill="none" />
+                    )}
+                    activeDot={{ r: 6, stroke: '#3b82f6', strokeWidth: 2, fill: 'none' }}
                   />
                 )}
                 {waitlistDeathsPerYearSeriesVisible.baseLowCPRA && (
-                  <Scatter
-                    data={filteredData.waitlistDeathsPerYearData
-                      .filter(d => d.baseLowWaitlistDeaths !== undefined)
-                      .map(d => ({ x: d.year, y: d.baseLowWaitlistDeaths!, year: d.year }))}
-                    fill="#60a5fa"
+                  <Line
+                    type="monotone"
+                    dataKey="baseLowCPRA"
                     name="Low cPRA (Base Case)"
-                    shape={(props: any) => {
-                      const { cx, cy } = props;
-                      return <rect x={cx - 3} y={cy - 3} width={6} height={6} stroke="#60a5fa" strokeWidth={1.5} fill="none" />;
-                    }}
+                    stroke="#60a5fa"
+                    strokeOpacity={0}
+                    isAnimationActive={false}
+                    connectNulls={false}
+                    dot={(props: any) => (
+                      <rect key={`d-blo-${props.index}`} x={props.cx - 3} y={props.cy - 3} width={6} height={6} stroke="#60a5fa" strokeWidth={1.5} fill="none" />
+                    )}
+                    activeDot={{ r: 6, stroke: '#60a5fa', strokeWidth: 2, fill: 'none' }}
                   />
                 )}
                 {waitlistDeathsPerYearSeriesVisible.baseHighCPRA && (
-                  <Scatter
-                    data={filteredData.waitlistDeathsPerYearData
-                      .filter(d => d.baseHighWaitlistDeaths !== undefined)
-                      .map(d => ({ x: d.year, y: d.baseHighWaitlistDeaths!, year: d.year }))}
-                    fill="#7dd3fc"
+                  <Line
+                    type="monotone"
+                    dataKey="baseHighCPRA"
                     name="High cPRA (Base Case)"
-                    shape={(props: any) => {
-                      const { cx, cy } = props;
-                      return <polygon points={`${cx},${cy - 4} ${cx + 3.5},${cy + 2.5} ${cx - 3.5},${cy + 2.5}`} stroke="#7dd3fc" strokeWidth={1.5} fill="none" />;
-                    }}
+                    stroke="#7dd3fc"
+                    strokeOpacity={0}
+                    isAnimationActive={false}
+                    connectNulls={false}
+                    dot={(props: any) => (
+                      <polygon
+                        key={`d-bhi-${props.index}`}
+                        points={`${props.cx},${props.cy - 4} ${props.cx + 3.5},${props.cy + 2.5} ${props.cx - 3.5},${props.cy + 2.5}`}
+                        stroke="#7dd3fc"
+                        strokeWidth={1.5}
+                        fill="none"
+                      />
+                    )}
+                    activeDot={{ r: 6, stroke: '#7dd3fc', strokeWidth: 2, fill: 'none' }}
                   />
                 )}
-              </ScatterChart>
+              </LineChart>
             )}
           </ResponsiveContainer>
 
