@@ -69,6 +69,37 @@ describe('kneedle', () => {
   it('returns null on a flat / degenerate curve (yrange = 0)', () => {
     expect(kneedle([1, 2, 3, 4], [5, 5, 5, 5])).toBeNull();
   });
+
+  it('returns null on a curve that is still rising linearly (no diminishing returns)', () => {
+    // Real-world bridge data: 95 % xeno_age 12 mo @ x = supply (kidneys/yr),
+    // y = lives saved by year 10. Increments per +0.5x supply step are
+    // 175 → 248 → 169 → 268 → 467 (the 1.5→2 drop is MC noise, the 2→3
+    // jump is +1.0x covering double the x-span). The curve is essentially
+    // straight / mildly convex, so labelling 1,723/yr as a "diminishing
+    // returns inflection" is misleading. Pin: kneedle returns null.
+    const x = [862, 1723, 2585, 3446, 5169];
+    const y = [175, 423, 592, 860, 1327];
+    expect(kneedle(x, y)).toBeNull();
+  });
+
+  it('returns null on a mild-noise concave curve with high post-knee slope ratio', () => {
+    // 4-point curve where the kink is mathematically present but the
+    // marginal returns barely slow down. Pre-knee slope ≈ post-knee slope.
+    const x = [0, 1, 2, 3];
+    const y = [0, 50, 95, 140];
+    // slopes: 50, 45, 45 → tiny concavity, post/pre ≈ 0.95 → no real knee
+    expect(kneedle(x, y)).toBeNull();
+  });
+
+  it('still finds the knee on a strong concave curve (post-knee slope < 70 % of pre-knee)', () => {
+    // Pre-knee slope (idx 0→2) is 50/unit; post-knee slope (idx 2→4) is
+    // 5/unit → ratio 0.1 ≪ 0.7 → knee accepted.
+    const x = [0, 1, 2, 3, 4];
+    const y = [0, 50, 100, 105, 110];
+    const knee = kneedle(x, y);
+    expect(knee).not.toBeNull();
+    expect(knee).toBe(2);
+  });
 });
 
 describe('viz extractors (totalDeathsAtYear / livesSavedFromViz / waitlistAtYearFromViz)', () => {

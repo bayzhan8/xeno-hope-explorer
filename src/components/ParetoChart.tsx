@@ -197,10 +197,49 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
       </ResponsiveContainer>
 
       {dataset.inflectionIndex === null ? (
-        <p className="text-xs text-muted-foreground italic px-2">
-          No clear inflection point detected in this range — curve is approximately
-          linear, or non-monotonic.
-        </p>
+        (() => {
+          // Distinguish "curve is still rising" from "data is noisy /
+          // non-monotonic" so the caption tells the user what they're
+          // actually looking at instead of just "no inflection".
+          const ys = data.map((d) => d.y);
+          const first = ys[0];
+          const last = ys[ys.length - 1];
+          const range = Math.max(...ys) - Math.min(...ys);
+          const tol = 0.05 * range;
+          let nUp = 0, nDown = 0;
+          for (let i = 1; i < ys.length; i += 1) {
+            const d = ys[i] - ys[i - 1];
+            if (d > tol) nUp += 1;
+            else if (d < -tol) nDown += 1;
+          }
+          const isRising = nUp > 0 && nDown === 0 && last > first;
+          const isFalling = nDown > 0 && nUp === 0 && last < first;
+          if (isRising) {
+            return (
+              <p className="text-xs text-muted-foreground italic px-2">
+                No saturation point in this range — {yLabel.toLowerCase()} keeps
+                growing as you increase {xLabel.toLowerCase()}. The curve hasn't
+                started flattening yet, so going further along this axis still
+                pays off.
+              </p>
+            );
+          }
+          if (isFalling) {
+            return (
+              <p className="text-xs text-muted-foreground italic px-2">
+                No saturation point in this range — {yLabel.toLowerCase()} keeps
+                decreasing as you increase {xLabel.toLowerCase()}.
+              </p>
+            );
+          }
+          return (
+            <p className="text-xs text-muted-foreground italic px-2">
+              Data is non-monotonic in this range — likely Monte Carlo noise
+              dominating any underlying trend. Consider running more trials
+              per config to tighten the curve.
+            </p>
+          );
+        })()
       ) : (
         knee && (
           <p className="text-xs text-muted-foreground px-2">
