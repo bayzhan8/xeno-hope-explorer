@@ -258,9 +258,49 @@ export function kneedle(x: number[], y: number[]): number | null {
     }
   }
   if (bestIdx === -1) return null;
-  // Demand at least a small positive deviation — otherwise the curve is
-  // basically a straight line and there's no knee to highlight.
-  if (bestDev <= 1e-6) return null;
+
+  // Two-stage strictness filter — the original 1e-6 threshold accepted any
+  // tiny mathematical kink (e.g. 175 → 423 → 592 → 860 returns a "knee" at
+  // index 1 even though every subsequent point keeps adding lives at the
+  // same rate, so the chart caption claims diminishing returns where none
+  // exist). We now require BOTH:
+  //
+  //   (a) the chord deviation is at least 5 % of the normalised y-range —
+  //       i.e. the knee actually pokes meaningfully above the straight line
+  //       between the endpoints; and
+  //   (b) the average per-x-unit slope AFTER the knee is at most 70 % of
+  //       the average per-x-unit slope BEFORE the knee — i.e. real
+  //       diminishing returns, not "the curve is still rising at the same
+  //       pace and we just happened to pick a slightly above-chord point".
+  //
+  // Together (a)+(b) reject the near-linear / convex / supply-still-paying
+  // -off cases that previously got mislabelled as inflections.
+  const DEV_MIN = 0.05;
+  const SLOPE_RATIO_MAX = 0.7;
+  if (bestDev < DEV_MIN) return null;
+
+  // Slope check uses the ORIGINAL (un-flipped, un-normalised) y values so
+  // the ratio reflects real "lives saved per kidney/year" units. We need
+  // at least one slope on each side of the knee, hence the index guard
+  // (already enforced by the i ∈ {1, …, n-2} loop above).
+  let preNum = 0, preDen = 0;
+  for (let i = 1; i <= bestIdx; i += 1) {
+    preNum += y[i] - y[i - 1];
+    preDen += x[i] - x[i - 1];
+  }
+  let postNum = 0, postDen = 0;
+  for (let i = bestIdx + 1; i < n; i += 1) {
+    postNum += y[i] - y[i - 1];
+    postDen += x[i] - x[i - 1];
+  }
+  if (preDen === 0 || postDen === 0) return null;
+  const preSlope = preNum / preDen;
+  const postSlope = postNum / postDen;
+  // For decreasing curves the slope ratio test still holds because we
+  // compare absolute magnitudes — flipping signs in both terms cancels.
+  const ratio = Math.abs(postSlope) / Math.abs(preSlope);
+  if (!Number.isFinite(ratio) || ratio > SLOPE_RATIO_MAX) return null;
+
   return bestIdx;
 }
 
