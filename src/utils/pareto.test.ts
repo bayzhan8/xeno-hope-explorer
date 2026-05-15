@@ -123,6 +123,37 @@ describe('viz extractors (totalDeathsAtYear / livesSavedFromViz / waitlistAtYear
     expect(livesSavedFromViz(scen, base, 10)).toBe(400);
   });
 
+  it('livesSavedFromViz uses WAITLIST deaths only — bridge-mode regression', () => {
+    // Bridge therapy with prop>0 reliably reduces waitlist deaths but
+    // increases post-tx deaths (more transplant recipients = more
+    // exposure to the post-tx hazard during the bridge window). If we
+    // used total = waitlist + post-tx, the small reduction is washed
+    // out and even sometimes negated by MC noise — exactly the bug
+    // that produced negative Pareto points before this fix. Pin the
+    // semantics: lives saved == waitlist-deaths reduction, IGNORE
+    // post-tx death deltas.
+    //
+    // Numbers below mirror the 95 %+, 12-mo, prop=1 production data:
+    //   base wl=43636, scen wl=43216, base tx=112854, scen tx=113297.
+    //   waitlist-only diff: 43636 − 43216 = +420  (positive — correct)
+    //   total diff:        156490 − 156513 = −23  (negative — wrong)
+    const base = buildViz({
+      wlDeaths: [0, 4364, 8727, 13091, 17454, 21818, 26181, 30545, 34908, 39272, 43636],
+      txDeaths: [0, 11285, 22571, 33856, 45142, 56427, 67712, 78998, 90283, 101569, 112854],
+    });
+    const scen = buildViz({
+      wlDeaths: [0, 4322, 8643, 12965, 17286, 21608, 25930, 30251, 34573, 38894, 43216],
+      txDeaths: [0, 11330, 22659, 33989, 45319, 56649, 67978, 79308, 90638, 101967, 113297],
+    });
+    expect(livesSavedFromViz(scen, base, 10)).toBe(420);
+  });
+
+  it('livesSavedFromViz falls back to total when waitlist split absent', () => {
+    const base = buildViz({ total: [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000] });
+    const scen = buildViz({ total: [0, 60, 120, 180, 240, 300, 360, 420, 480, 540, 600] });
+    expect(livesSavedFromViz(scen, base, 10)).toBe(400);
+  });
+
   it('waitlistAtYearFromViz returns the Total waitlist value at the requested year', () => {
     const v = buildViz({});
     // Default wl = [1000, 990, 980, ..., 900]
