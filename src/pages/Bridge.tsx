@@ -69,6 +69,13 @@ const Bridge: React.FC = () => {
   // ── Main viz load (matches Index.tsx flow) ────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    // Clear the previous metrics + simulation data the moment params
+    // change so that, while the new viz JSON is in flight, the Key
+    // Outcomes Summary doesn't keep flashing the previous threshold's
+    // Lives-Saved / Waitlist-Reduction numbers next to a header that
+    // already says "99 %+".
+    setSimulationData(null);
+    setMetrics(null);
     async function loadData() {
       setLoading(true);
       setError(null);
@@ -146,6 +153,12 @@ const Bridge: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
+    // Drop the previous dataset *atomically* with the param change so the
+    // chart can't render a stale "Inflection at 1,723/yr" caption while the
+    // new threshold's data is still in flight (the new sweeps caption
+    // updates synchronously from `params.*`, so the Inflection label has
+    // to follow it).
+    setSupplyCurve(null);
     async function loadSupply() {
       setSupplyLoading(true);
       setSupplyError(null);
@@ -192,6 +205,10 @@ const Bridge: React.FC = () => {
   // nothing to plot so we surface a friendly message instead.
   useEffect(() => {
     let cancelled = false;
+    // See note in the supply-curve effect above: clear the prior dataset
+    // synchronously so the inflection caption can't out-live the params it
+    // was computed from.
+    setSurvivalCurve(null);
     async function loadSurvival() {
       setSurvivalLoading(true);
       setSurvivalError(null);
