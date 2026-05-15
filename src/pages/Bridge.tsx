@@ -143,9 +143,13 @@ const Bridge: React.FC = () => {
   ]);
 
   // ── Pareto: xeno supply (kidneys/year) vs lives saved ────────────────
-  // Sweep xeno_proportion ∈ {0.5, 1, 1.5, 2} at the user's currently-
+  // Sweep xeno_proportion ∈ {0.5, 1, 1.5, 2, 3, 4} at the user's currently-
   // selected survival/threshold/strategy. We deliberately omit prop=0 from
   // the curve because at prop=0 the answer is trivially 0 lives saved.
+  // The 3× and 4× points are extra-wide so the curve's saturation point is
+  // visible: at the 99 % threshold the patient pool is small enough that
+  // 2× already consumes ~99.6 % of supply, so without 3-4× the chart can
+  // never show the asymptote where extra supply stops adding lives.
   const xenoBaseRate = useMemo(
     () => getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold),
     [params.targetingStrategy, params.highCPRAThreshold],
@@ -170,7 +174,12 @@ const Bridge: React.FC = () => {
           strategy,
           targetYear: params.simulationHorizon,
           metric: livesSavedFromViz,
-          points: [0.5, 1, 1.5, 2].map((p) => ({
+          // 0.5 → 4× span the supply Pareto over an order of magnitude:
+          //   * 0.5/1/1.5/2× covers the realistic-now → realistic-soon range
+          //   * 3× and 4× push past the saturation point so the curve's
+          //     asymptote becomes visible (especially for tighter pools
+          //     like 99 %+ where 2× already consumes ~99.6 % of supply).
+          points: [0.5, 1, 1.5, 2, 3, 4].map((p) => ({
             label: `${Math.round(xenoBaseRate * p).toLocaleString()}/yr`,
             x: Math.round(xenoBaseRate * p),
             xeno_proportion: p,
@@ -424,7 +433,7 @@ const Bridge: React.FC = () => {
                       Xeno supply &nbsp;↔&nbsp; Lives saved
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Sweeps {[0.5, 1, 1.5, 2]
+                      Sweeps {[0.5, 1, 1.5, 2, 3, 4]
                         .map((m) => `${Math.round(xenoBaseRate * m).toLocaleString()}/yr`)
                         .join(' · ')}{' '}
                       at {params.survivalMonths}-mo bridge, {params.highCPRAThreshold}%+

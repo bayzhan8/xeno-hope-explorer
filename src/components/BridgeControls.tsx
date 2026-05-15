@@ -154,15 +154,18 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
             <Slider
               value={[params.xeno_proportion]}
               onValueChange={(value) =>
-                updateParam('xeno_proportion', snapTo(value[0], [0, 0.5, 1, 1.5, 2]))
+                updateParam(
+                  'xeno_proportion',
+                  snapTo(value[0], [0, 0.5, 1, 1.5, 2, 3, 4]),
+                )
               }
-              max={2}
+              max={4}
               min={0}
               step={0.5}
               className="w-full"
             />
             <div className="flex justify-between text-xs text-muted-foreground">
-              {[0, 0.5, 1, 1.5, 2].map((m) => (
+              {[0, 0.5, 1, 1.5, 2, 3, 4].map((m) => (
                 <span key={m}>{Math.round(xenoBaseRate * m).toLocaleString()}</span>
               ))}
             </div>
