@@ -271,7 +271,12 @@ const Index = () => {
                       down by cPRA group or age cohort.
                     </p>
                   </div>
-                  <WaitTimeChart data={simulationData} />
+                  <WaitTimeChart
+                    data={simulationData.waitingTimeData}
+                    dataByAge={simulationData.waitingTimeDataByAge}
+                    highCPRAThreshold={params.highCPRAThreshold}
+                    simulationHorizon={params.simulationHorizon}
+                  />
                 </div>
 
                 {/* Charts */}

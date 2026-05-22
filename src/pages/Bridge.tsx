@@ -411,7 +411,12 @@ const Bridge: React.FC = () => {
                       benefits most.
                     </p>
                   </div>
-                  <WaitTimeChart data={simulationData} />
+                  <WaitTimeChart
+                    data={simulationData.waitingTimeData}
+                    dataByAge={simulationData.waitingTimeDataByAge}
+                    highCPRAThreshold={params.highCPRAThreshold}
+                    simulationHorizon={params.simulationHorizon}
+                  />
                 </div>
 
                 <div>
