@@ -88,7 +88,28 @@ interface SimulationData {
   graftFailuresData: Array<{ year: number; xenoGraftFailures: number; humanGraftFailures: number }>;
   transplantsData: Array<{ year: number; human: number; xeno: number }>;
   penetrationData: Array<{ year: number; proportion: number }>;
-  waitingTimeData: Array<{ year: number; averageWaitingTime: number }>;
+  // Wait time (analytic estimate via Little's Law from waitlist size and
+  // transplant/death outflows; see computeWaitTimeByYear below). Units: months.
+  // `averageWaitingTime` is retained as a legacy alias for back-compat with
+  // older readers; all real values live in `*Months` fields.
+  waitingTimeData: Array<{
+    year: number;
+    averageWaitingTime: number;             // legacy alias = averageWaitingTimeMonths
+    averageWaitingTimeMonths: number;       // overall (all subgroups, this scenario)
+    baseAverageWaitingTimeMonths?: number;  // same year, base case (xeno_proportion = 0)
+    reductionMonths?: number;               // base − xeno (positive = xeno reduces wait)
+    lowCPRA: number;
+    highCPRA: number;
+    baseLowCPRA?: number;
+    baseHighCPRA?: number;
+  }>;
+  waitingTimeDataByAge?: Array<{
+    year: number;
+    lowCPRA: Record<string, number>;        // age key ("age0_18" | "age18_45" | ...) → months
+    highCPRA: Record<string, number>;
+    baseLowCPRA?: Record<string, number>;
+    baseHighCPRA?: Record<string, number>;
+  }>;
   recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number; lowXeno: number }>;
   cumulativeDeathsData: Array<{ year: number; lowWaitlist: number; highWaitlist: number; lowPostTx: number; highPostTx: number; total: number }>;
   deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
@@ -103,8 +124,16 @@ interface SimulationData {
     baseLowWaitlistDeaths?: number;
     baseHighWaitlistDeaths?: number;
   }>;
+  // Legacy scalar fields: end-of-series cumulative procedure count for
+  // backwards compatibility. Prefer the *Series fields below + horizon
+  // slicing via interpolateCumulative; these legacy values can over-report
+  // for shorter horizons.
   cumulativeXenoTransplants: number;
   cumulativeStdTransplants: number;
+  // Full cumulative procedure timeseries (x in DAYS, y monotone non-decreasing).
+  // Use interpolateCumulative(xDays, y, horizon*365) to slice at any horizon.
+  cumulativeXenoTransplantsSeries?: { xDays: number[]; y: number[] };
+  cumulativeStdTransplantsSeries?: { xDays: number[]; y: number[] };
   // Age-specific data (optional)
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
@@ -263,6 +292,227 @@ function findFirstIndex<T>(array: T[], predicate: (item: T) => boolean): number 
     if (predicate(array[i])) return i;
   }
   return array.length;
+}
+
+// ─── Wait time computation (Little's Law) ──────────────────────────────
+//
+// The CTMC simulator tracks compartment counts, not per-patient timestamps,
+// so we don't have an empirical wait-time time-series in the viz JSON.
+// However at quasi-steady state (which our system is over a year-long
+// window) Little's Law gives an excellent analytic estimate:
+//
+//   W = L / λ_out
+//
+// where L is the mean waitlist size during the period and λ_out is the
+// outflow rate (transplants + deaths + removals). Per-(cPRA × age) cell:
+//
+//   mean_L_year_y    = mean of waitlist_size[i] for x[i] ∈ [(y-1)·365, y·365]
+//   Δ_cum_tx_year_y  = cum_tx at year_y − cum_tx at year_{y-1}
+//                        (cum_xeno + cum_std, interpolated at boundaries)
+//   deaths_year_y    = waitlist_deaths_per_year[y - 1]   (x is 0-indexed)
+//   outflow_year_y   = Δ_cum_tx_year_y + deaths_year_y
+//   W_year_y_months  = mean_L_year_y / outflow_year_y * 12
+//
+// CRITICAL: For per-cPRA and overall aggregates we sum the flows first and
+// then divide. Averaging per-subgroup wait times directly would be wrong
+// (Simpson's-paradox flavor — small subgroups with long waits would
+// distort the aggregate).
+//
+// Returns null when the viz lacks the required series so callers can
+// gracefully no-op without polluting downstream consumers.
+
+const WT_AGE_PATTERNS: Array<{ key: string; pattern: string }> = [
+  { key: 'age0_18', pattern: 'age 0-18' },
+  { key: 'age18_45', pattern: 'age 18-45' },
+  { key: 'age45_60', pattern: 'age 45-60' },
+  { key: 'age60plus', pattern: 'age 60+' },
+];
+
+interface WaitTimeYear {
+  year: number;                 // 1-indexed
+  totalMonths: number;          // NaN if outflow=0
+  lowCPRAMonths: number;
+  highCPRAMonths: number;
+  lowCPRAByAge: Record<string, number>;
+  highCPRAByAge: Record<string, number>;
+}
+
+// Linear-interpolate cumulative series y at time t (days). Cumulative
+// series are monotone non-decreasing so this is well-defined and accurate.
+function interpolateCumulative(x: number[], y: number[], t: number): number {
+  if (!x.length || !y.length) return 0;
+  if (t <= x[0]) return y[0];
+  if (t >= x[x.length - 1]) return y[y.length - 1];
+  // Binary search would be marginally faster but x has ~123 points so
+  // linear scan is plenty.
+  for (let i = 1; i < x.length; i++) {
+    if (x[i] >= t) {
+      const x0 = x[i - 1];
+      const x1 = x[i];
+      if (x1 === x0) return y[i];
+      const frac = (t - x0) / (x1 - x0);
+      return y[i - 1] + frac * (y[i] - y[i - 1]);
+    }
+  }
+  return y[y.length - 1];
+}
+
+// Mean of y[i] for x[i] ∈ [tStart, tEnd] (inclusive). Returns NaN if no
+// samples fall in the window.
+function meanInWindow(x: number[], y: number[], tStart: number, tEnd: number): number {
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < x.length; i++) {
+    if (x[i] >= tStart && x[i] <= tEnd) {
+      sum += y[i] || 0;
+      n += 1;
+    }
+  }
+  return n > 0 ? sum / n : NaN;
+}
+
+// Compute months = L / outflow * 12, returning NaN on div-by-zero or
+// any non-finite input so downstream consumers can hide the value.
+function waitTimeMonths(meanL: number, outflow: number): number {
+  if (!Number.isFinite(meanL) || !Number.isFinite(outflow) || outflow <= 0) {
+    return NaN;
+  }
+  return (meanL / outflow) * 12;
+}
+
+// Find a series whose label contains the cPRA pattern AND age pattern.
+function findCellSeries(
+  series: Array<{ label: string; y: number[] }> | undefined,
+  cpraPattern: string,
+  agePattern: string,
+  extraToken?: string,
+): number[] | null {
+  if (!series || !Array.isArray(series)) return null;
+  const cpraLc = cpraPattern.toLowerCase();
+  const ageLc = agePattern.toLowerCase();
+  const extraLc = extraToken?.toLowerCase();
+  const hit = series.find((s) => {
+    if (!s || !s.label) return false;
+    const lbl = s.label.toLowerCase();
+    if (!lbl.includes(cpraLc) || !lbl.includes(ageLc)) return false;
+    if (extraLc && !lbl.includes(extraLc)) return false;
+    return true;
+  });
+  return hit?.y && Array.isArray(hit.y) ? hit.y : null;
+}
+
+export function computeWaitTimeByYear(vizData: VizData): WaitTimeYear[] | null {
+  const wl = vizData.waitlist_sizes;
+  const wlDeaths = (vizData as VizData & {
+    waitlist_deaths_per_year?: {
+      x: number[];
+      series: Array<{ label: string; y: number[] }>;
+    };
+  }).waitlist_deaths_per_year;
+  const cumXeno = vizData.cumulative_xeno_transplants;
+  const cumStd = vizData.cumulative_std_transplants;
+  if (!wl || !wl.x || !wl.series || wl.x.length === 0) return null;
+  if (!wlDeaths || !wlDeaths.x || !wlDeaths.series || wlDeaths.x.length === 0) {
+    return null;
+  }
+
+  const xDays = wl.x;
+  const maxDays = xDays[xDays.length - 1];
+  // wlDeaths.x is the 0-indexed year list (e.g. [0..9]); number of years
+  // = length of that array, capped by waitlist_sizes horizon.
+  const maxYears = Math.min(
+    wlDeaths.x.length,
+    Math.floor(maxDays / 365),
+  );
+  if (maxYears <= 0) return null;
+
+  const cpraGroups: Array<{ key: 'low' | 'high'; pattern: string }> = [
+    { key: 'low', pattern: 'low cpra' },
+    { key: 'high', pattern: 'high cpra' },
+  ];
+
+  // For each (cPRA × age) cell, pull the L, tx, deaths series once.
+  type Cell = {
+    cpra: 'low' | 'high';
+    ageKey: string;
+    L: number[];
+    cumTx: number[];                  // cum_std + cum_xeno (combined)
+    deathsPerYear: number[];          // length = wlDeaths.x.length
+  };
+  const cells: Cell[] = [];
+  for (const { key, pattern } of cpraGroups) {
+    for (const { key: ageKey, pattern: agePattern } of WT_AGE_PATTERNS) {
+      const L = findCellSeries(wl.series, pattern, agePattern);
+      if (!L) continue;
+      const xenoTx = findCellSeries(cumXeno?.series, pattern, agePattern, 'xeno');
+      const stdTx = findCellSeries(cumStd?.series, pattern, agePattern, 'human');
+      // Sum the two cumulative series pointwise (one may be missing).
+      const len = L.length;
+      const cumTx = new Array<number>(len).fill(0);
+      for (let i = 0; i < len; i++) {
+        cumTx[i] = (xenoTx?.[i] || 0) + (stdTx?.[i] || 0);
+      }
+      const deathsAge = findCellSeries(wlDeaths.series, pattern, agePattern);
+      const deathsPerYear = deathsAge || new Array<number>(wlDeaths.x.length).fill(0);
+      cells.push({ cpra: key, ageKey, L, cumTx, deathsPerYear });
+    }
+  }
+  if (cells.length === 0) return null;
+
+  const out: WaitTimeYear[] = [];
+  for (let y = 1; y <= maxYears; y++) {
+    const tStart = (y - 1) * 365;
+    const tEnd = y * 365;
+    const deathsIdx = y - 1;
+
+    // Per-cell wait times (used only for the age-stratified view).
+    const lowByAge: Record<string, number> = {};
+    const highByAge: Record<string, number> = {};
+
+    // Sums for flow-weighted aggregation.
+    let sumLLow = 0;
+    let sumOutLow = 0;
+    let sumLHigh = 0;
+    let sumOutHigh = 0;
+
+    for (const cell of cells) {
+      const meanL = meanInWindow(xDays, cell.L, tStart, tEnd);
+      const txStart = interpolateCumulative(xDays, cell.cumTx, tStart);
+      const txEnd = interpolateCumulative(xDays, cell.cumTx, tEnd);
+      const dTx = Math.max(0, txEnd - txStart);
+      const dDeaths = cell.deathsPerYear[deathsIdx] || 0;
+      const outflow = dTx + dDeaths;
+      const months = waitTimeMonths(meanL, outflow);
+
+      if (cell.cpra === 'low') {
+        lowByAge[cell.ageKey] = months;
+        if (Number.isFinite(meanL) && outflow > 0) {
+          sumLLow += meanL;
+          sumOutLow += outflow;
+        }
+      } else {
+        highByAge[cell.ageKey] = months;
+        if (Number.isFinite(meanL) && outflow > 0) {
+          sumLHigh += meanL;
+          sumOutHigh += outflow;
+        }
+      }
+    }
+
+    const lowMonths = waitTimeMonths(sumLLow, sumOutLow);
+    const highMonths = waitTimeMonths(sumLHigh, sumOutHigh);
+    const totalMonths = waitTimeMonths(sumLLow + sumLHigh, sumOutLow + sumOutHigh);
+
+    out.push({
+      year: y,
+      totalMonths,
+      lowCPRAMonths: lowMonths,
+      highCPRAMonths: highMonths,
+      lowCPRAByAge: lowByAge,
+      highCPRAByAge: highByAge,
+    });
+  }
+  return out;
 }
 
 export function transformVizDataToSimulationData(vizData: VizData, baseVizData: VizData | null = null): SimulationData {
@@ -522,11 +772,19 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     }
   }
 
-  // 2b. Cumulative xeno transplants (actual procedures, not living recipients)
+  // 2b. Cumulative xeno transplants (actual procedures, not living recipients).
+  // Store BOTH the legacy end-of-series scalar (back-compat) and the full
+  // (x_days, y) timeseries so callers can slice at any horizon. The scalar
+  // is the 10y final value and silently over-reports on shorter horizons —
+  // prefer the series.
   if (vizData.cumulative_xeno_transplants && vizData.cumulative_xeno_transplants.series && vizData.cumulative_xeno_transplants.x && vizData.cumulative_xeno_transplants.x.length > 0) {
     const totalSeries = findSeries(vizData.cumulative_xeno_transplants.series, ['total xeno transplants', 'total']);
     if (totalSeries && totalSeries.length > 0) {
       result.cumulativeXenoTransplants = totalSeries[totalSeries.length - 1] || 0;
+      result.cumulativeXenoTransplantsSeries = {
+        xDays: [...vizData.cumulative_xeno_transplants.x],
+        y: [...totalSeries],
+      };
     }
   }
 
@@ -535,6 +793,10 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     const totalSeries = findSeries(vizData.cumulative_std_transplants.series, ['total human transplants', 'total']);
     if (totalSeries && totalSeries.length > 0) {
       result.cumulativeStdTransplants = totalSeries[totalSeries.length - 1] || 0;
+      result.cumulativeStdTransplantsSeries = {
+        xDays: [...vizData.cumulative_std_transplants.x],
+        y: [...totalSeries],
+      };
     }
   }
 
@@ -1248,20 +1510,24 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
       });
     }
 
-    // Transplants (derive from recipients via closest-year match)
+    // Transplants per year = cumulative_*_transplants(year) − cumulative_*_transplants(year-1).
+    // These are true procedure counts. (The previous implementation diffed
+    // living-recipient stocks, which subtracts out post-tx deaths and
+    // relistings — that is "Δ stock", NOT "procedures performed". Bug fix.)
     if (!result.transplantsData.find(d => d.year === year)) {
-      const closestTo = (target: number) =>
-        result.recipientsData.length > 0
-          ? result.recipientsData.reduce((best, d) =>
-              Math.abs(d.year - target) < Math.abs(best.year - target) ? d : best)
-          : undefined;
-      const recipients = closestTo(year);
-      const prevRecipients = closestTo(year - 1);
-      if (recipients && prevRecipients && Math.abs(recipients.year - year) < 0.5 && Math.abs(prevRecipients.year - (year - 1)) < 0.5) {
+      const xenoSeries = result.cumulativeXenoTransplantsSeries;
+      const stdSeries = result.cumulativeStdTransplantsSeries;
+      if (xenoSeries && stdSeries) {
+        const tEnd = year * 365;
+        const tStart = Math.max(0, (year - 1) * 365);
+        const xenoEnd = interpolateCumulative(xenoSeries.xDays, xenoSeries.y, tEnd);
+        const xenoStart = interpolateCumulative(xenoSeries.xDays, xenoSeries.y, tStart);
+        const stdEnd = interpolateCumulative(stdSeries.xDays, stdSeries.y, tEnd);
+        const stdStart = interpolateCumulative(stdSeries.xDays, stdSeries.y, tStart);
         result.transplantsData.push({
           year,
-          human: (recipients.lowHuman + recipients.highHuman) - (prevRecipients.lowHuman + prevRecipients.highHuman),
-          xeno: (recipients.highXeno + recipients.lowXeno) - (prevRecipients.highXeno + prevRecipients.lowXeno),
+          human: Math.max(0, stdEnd - stdStart),
+          xeno: Math.max(0, xenoEnd - xenoStart),
         });
       } else {
         result.transplantsData.push({ year, human: 0, xeno: 0 });
@@ -1273,9 +1539,17 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
       result.penetrationData.push({ year, proportion: 0 });
     }
 
-    // Waiting time
+    // Waiting time - populated in a dedicated pass below from
+    // computeWaitTimeByYear; we still ensure a row exists per year here
+    // so other consumers that iterate by year don't trip over gaps.
     if (!result.waitingTimeData.find(d => d.year === year)) {
-      result.waitingTimeData.push({ year, averageWaitingTime: 0 });
+      result.waitingTimeData.push({
+        year,
+        averageWaitingTime: NaN,
+        averageWaitingTimeMonths: NaN,
+        lowCPRA: NaN,
+        highCPRA: NaN,
+      });
     }
   }
 
@@ -1378,6 +1652,53 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
     }
   }
 
+  // 9. Wait time (analytic, via Little's Law). Computed in a single pass
+  // from the raw viz JSON (rather than the already-downsampled
+  // result.waitlistData) so we don't lose precision to the monthly
+  // resampling. Both xeno and base-case scenarios use identical math so
+  // the reduction = base − xeno is apples-to-apples.
+  const xenoWT = computeWaitTimeByYear(vizData);
+  const baseWT = baseVizData ? computeWaitTimeByYear(baseVizData) : null;
+  if (xenoWT && xenoWT.length > 0) {
+    // Replace the placeholder year-by-year list built in pass #7 above.
+    result.waitingTimeData = xenoWT.map((row) => {
+      const baseRow = baseWT?.find((b) => b.year === row.year);
+      const reduction =
+        baseRow && Number.isFinite(baseRow.totalMonths) && Number.isFinite(row.totalMonths)
+          ? baseRow.totalMonths - row.totalMonths
+          : undefined;
+      return {
+        year: row.year,
+        averageWaitingTime: row.totalMonths,            // legacy alias
+        averageWaitingTimeMonths: row.totalMonths,
+        baseAverageWaitingTimeMonths: baseRow?.totalMonths,
+        reductionMonths: reduction,
+        lowCPRA: row.lowCPRAMonths,
+        highCPRA: row.highCPRAMonths,
+        baseLowCPRA: baseRow?.lowCPRAMonths,
+        baseHighCPRA: baseRow?.highCPRAMonths,
+      };
+    });
+
+    // Per-age view (only meaningful if we actually got per-age cells back).
+    const hasAnyAgeData = xenoWT.some(
+      (r) =>
+        Object.keys(r.lowCPRAByAge).length > 0 || Object.keys(r.highCPRAByAge).length > 0,
+    );
+    if (hasAnyAgeData) {
+      result.waitingTimeDataByAge = xenoWT.map((row) => {
+        const baseRow = baseWT?.find((b) => b.year === row.year);
+        return {
+          year: row.year,
+          lowCPRA: row.lowCPRAByAge,
+          highCPRA: row.highCPRAByAge,
+          baseLowCPRA: baseRow?.lowCPRAByAge,
+          baseHighCPRA: baseRow?.highCPRAByAge,
+        };
+      });
+    }
+  }
+
   return result;
 }
 
@@ -1392,6 +1713,10 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
       totalTransplants: 0,
       xenoTransplants: 0,
       penetrationRate: 0,
+      averageWaitTimeMonths: NaN,
+      baseAverageWaitTimeMonths: NaN,
+      waitTimeReductionMonths: NaN,
+      waitTimeReductionPct: NaN,
     };
   }
 
@@ -1416,14 +1741,40 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
   
   // Use actual cumulative procedure counts (a flow) when the backend provides
   // them; otherwise fall back to end-of-horizon living recipients (a stock).
+  //
+  // C2 fix: prefer the full timeseries sliced at the user's horizon. The
+  // legacy scalar fields (cumulativeXenoTransplants / cumulativeStdTransplants)
+  // are the full-series final point and silently over-report cumulative
+  // procedures whenever horizon < total_days/365 (a ~2x overstatement on a
+  // 5y view of a 10y sim). Fall back to those scalars only when the series
+  // is unavailable.
   const totalXenoRecipients = (finalRecipients?.highXeno || 0) + (finalRecipients?.lowXeno || 0);
   const totalHumanRecipients = (finalRecipients?.lowHuman || 0) + (finalRecipients?.highHuman || 0);
-  const xenoTransplants = data.cumulativeXenoTransplants > 0
-    ? data.cumulativeXenoTransplants
-    : totalXenoRecipients;
-  const humanTransplants = data.cumulativeStdTransplants > 0
-    ? data.cumulativeStdTransplants
-    : totalHumanRecipients;
+  const horizonDays = horizon * 365;
+  let xenoTransplants: number;
+  if (data.cumulativeXenoTransplantsSeries) {
+    xenoTransplants = interpolateCumulative(
+      data.cumulativeXenoTransplantsSeries.xDays,
+      data.cumulativeXenoTransplantsSeries.y,
+      horizonDays,
+    );
+  } else if (data.cumulativeXenoTransplants > 0) {
+    xenoTransplants = data.cumulativeXenoTransplants;
+  } else {
+    xenoTransplants = totalXenoRecipients;
+  }
+  let humanTransplants: number;
+  if (data.cumulativeStdTransplantsSeries) {
+    humanTransplants = interpolateCumulative(
+      data.cumulativeStdTransplantsSeries.xDays,
+      data.cumulativeStdTransplantsSeries.y,
+      horizonDays,
+    );
+  } else if (data.cumulativeStdTransplants > 0) {
+    humanTransplants = data.cumulativeStdTransplants;
+  } else {
+    humanTransplants = totalHumanRecipients;
+  }
   const totalTransplants = humanTransplants + xenoTransplants;
 
   // Penetration rate: xeno share of all transplants performed
@@ -1431,12 +1782,41 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     ? xenoTransplants / totalTransplants
     : 0;
 
+  // Wait time at the horizon year. We prefer an exact-year match but fall
+  // back to the closest available year if the simulator's grid happens to
+  // skip the requested horizon.
+  const waitRows = (data.waitingTimeData || []).filter(
+    (d) => d.year <= horizon && Number.isFinite(d.averageWaitingTimeMonths),
+  );
+  let avgWaitMonths = NaN;
+  let baseAvgWaitMonths = NaN;
+  let waitReductionMonths = NaN;
+  let waitReductionPct = NaN;
+  if (waitRows.length > 0) {
+    const horizonRow =
+      waitRows.find((d) => d.year === horizon) ?? waitRows[waitRows.length - 1];
+    avgWaitMonths = horizonRow.averageWaitingTimeMonths;
+    if (
+      horizonRow.baseAverageWaitingTimeMonths !== undefined &&
+      Number.isFinite(horizonRow.baseAverageWaitingTimeMonths)
+    ) {
+      baseAvgWaitMonths = horizonRow.baseAverageWaitingTimeMonths;
+      waitReductionMonths = baseAvgWaitMonths - avgWaitMonths;
+      waitReductionPct =
+        baseAvgWaitMonths > 0 ? (waitReductionMonths / baseAvgWaitMonths) * 100 : NaN;
+    }
+  }
+
   return {
     waitlistReduction: waitlistReductionVsBase,
     deathsPrevented: totalDeathsPrevented,
     totalTransplants,
     xenoTransplants,
     penetrationRate,
+    averageWaitTimeMonths: avgWaitMonths,
+    baseAverageWaitTimeMonths: baseAvgWaitMonths,
+    waitTimeReductionMonths: waitReductionMonths,
+    waitTimeReductionPct: waitReductionPct,
   };
 }
 
