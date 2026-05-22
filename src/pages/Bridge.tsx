@@ -16,7 +16,6 @@ import { Activity, Beaker, Loader2, Hourglass, TrendingDown } from 'lucide-react
 import BridgeControls, { type BridgeParams } from '@/components/BridgeControls';
 import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
-import WaitTimeChart from '@/components/WaitTimeChart';
 import ParetoChart from '@/components/ParetoChart';
 import ModeNav from '@/components/ModeNav';
 
@@ -392,28 +391,6 @@ const Bridge: React.FC = () => {
                     metrics={metrics}
                     horizon={params.simulationHorizon}
                     xenoIntendedPerYear={Math.round(xenoBaseRate * params.xeno_proportion)}
-                  />
-                </div>
-
-                {/* Wait Time — clinically the most intuitive bridge-therapy
-                    outcome (xeno's primary value-add is buying time on the
-                    waitlist), so it sits above the broader population
-                    dynamics block. */}
-                <div>
-                  <div className="mb-6 pb-4 border-b border-medical-border">
-                    <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
-                      Wait Time
-                    </h2>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      How long patients wait from listing to (any) transplant under your
-                      selected bridge configuration
-                    </p>
-                  </div>
-                  <WaitTimeChart
-                    data={simulationData.waitingTimeData}
-                    dataByAge={simulationData.waitingTimeDataByAge}
-                    highCPRAThreshold={params.highCPRAThreshold}
-                    simulationHorizon={params.simulationHorizon}
                   />
                 </div>
 

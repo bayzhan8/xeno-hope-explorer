@@ -4,7 +4,6 @@ import { Activity, Beaker, Loader2 } from 'lucide-react';
 import SimulationControls from '@/components/SimulationControls';
 import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
-import WaitTimeChart from '@/components/WaitTimeChart';
 import MarkovChainVisualization from '@/components/MarkovChainVisualization';
 import ModeNav from '@/components/ModeNav';
 import ReplacementPareto from '@/components/ReplacementPareto';
@@ -256,27 +255,6 @@ const Index = () => {
                     xenoIntendedPerYear={Math.round(
                       getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold) * params.xeno_proportion
                     )}
-                  />
-                </div>
-
-                {/* Wait Time — primary clinical metric. Placed above the
-                    population-dynamics grid because the group flagged it
-                    as the clearest indicator of bridge / pressure-relief
-                    value. */}
-                <div>
-                  <div className="mb-6 pb-4 border-b border-medical-border">
-                    <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
-                      Wait Time
-                    </h2>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      How long patients wait from listing to transplant across the simulation horizon
-                    </p>
-                  </div>
-                  <WaitTimeChart
-                    data={simulationData.waitingTimeData}
-                    dataByAge={simulationData.waitingTimeDataByAge}
-                    highCPRAThreshold={params.highCPRAThreshold}
-                    simulationHorizon={params.simulationHorizon}
                   />
                 </div>
 
