@@ -401,10 +401,14 @@ const Bridge: React.FC = () => {
                       Wait Time on the List
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Average time a candidate spends on the waitlist, estimated each year via
-                      Little's Law (W = L / λ_out). Bridge therapy targets sickest/longest-waiting
-                      patients first, so this metric is the most direct readout of clinical
-                      benefit. Toggle cPRA group or age cohort to see who benefits most.
+                      Average time a candidate spends on the waitlist <em>per list-spell</em>,
+                      estimated each year via Little's Law (W = L / λ_out). Bridge patients may
+                      have multiple spells if their xenograft fails — this measures each spell,
+                      not lifetime waiting. The dip-and-plateau you may see in waitlist size
+                      (patients cycling back after graft failure) shows up here as a{' '}
+                      <em>sustained</em> reduction in per-spell wait time, because xeno
+                      throughput stays elevated. Toggle cPRA group or age cohort to see who
+                      benefits most.
                     </p>
                   </div>
                   <WaitTimeChart data={simulationData} />
