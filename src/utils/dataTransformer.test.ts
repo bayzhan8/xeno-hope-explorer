@@ -220,6 +220,13 @@ describe('computeWaitTimeByYear (Little\'s Law)', () => {
 });
 
 describe('transformVizDataToSimulationData wait-time integration', () => {
+  // Production calls the transformer without `opts`, so it auto-picks
+  // wl_removal rates from the threshold (which is correct). These
+  // integration tests pass `{wlRemovalRates: {0,0}}` to isolate the
+  // transplant + death components — there's a separate `describe` block
+  // below that exercises the wl_removal-included path end-to-end.
+  const NO_REMOVALS = { wlRemovalRates: { low: 0, high: 0 } };
+
   it('populates waitingTimeData with months + base comparison + reduction', () => {
     const xenoViz = makeViz({
       years: 4,
@@ -234,7 +241,11 @@ describe('transformVizDataToSimulationData wait-time integration', () => {
       txPerYearCell: { low: { age18_45: 100 }, high: { age60plus: 50 } },
       deathsPerYearCell: { low: { age18_45: 0 }, high: { age60plus: 0 } },
     });
-    const result = transformVizDataToSimulationData(xenoViz as any, baseViz as any);
+    const result = transformVizDataToSimulationData(
+      xenoViz as any,
+      baseViz as any,
+      NO_REMOVALS,
+    );
     expect(result.waitingTimeData.length).toBeGreaterThan(0);
     const y3 = result.waitingTimeData.find((r) => r.year === 3)!;
     expect(y3).toBeDefined();
@@ -256,13 +267,96 @@ describe('transformVizDataToSimulationData wait-time integration', () => {
       txPerYearCell: { low: { age0_18: 50, age18_45: 50 }, high: {} },
       deathsPerYearCell: { low: { age0_18: 0, age18_45: 0 }, high: {} },
     });
-    const result = transformVizDataToSimulationData(viz as any);
+    const result = transformVizDataToSimulationData(viz as any, null, NO_REMOVALS);
     expect(result.waitingTimeDataByAge).toBeDefined();
     const y2 = result.waitingTimeDataByAge!.find((r) => r.year === 2)!;
     // age0_18:  W = 100/50 * 12 = 24 mo
     // age18_45: W = 200/50 * 12 = 48 mo
     expect(y2.lowCPRA.age0_18).toBeCloseTo(24, 1);
     expect(y2.lowCPRA.age18_45).toBeCloseTo(48, 1);
+  });
+});
+
+describe('wl_removal inclusion in outflow (the bias fix)', () => {
+  // Concrete fact this test pins down: the wl_removal hazard is the
+  // **second-largest** waitlist outflow channel in the default model
+  // (~9.9%/yr vs ~5.1%/yr for waitlist death). Forgetting it inflates
+  // Ŵ by ~25-35%. We assert both the magnitude of the correction and
+  // that the reduction story (base − xeno) stays directionally intact.
+  it('shortens Ŵ when removals are added (matches L/(tx + deaths + rate·L·365)·12)', () => {
+    const viz = makeViz({
+      years: 4,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 50 }, high: {} },
+    });
+    const rate = 0.0003; // per-person-day → 0.0003*365 = 10.95%/yr of L
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: rate, high: rate },
+    });
+    const y2 = rows!.find((r) => r.year === 2)!;
+    // outflow = 100 tx + 50 deaths + 0.0003 * 1000 * 365 = 259.5 / yr
+    //   W = 1000 / 259.5 * 12 ≈ 46.24 mo (vs 80 mo without removals).
+    const expected = (1000 / (100 + 50 + 0.0003 * 1000 * 365)) * 12;
+    expect(y2.totalMonths).toBeCloseTo(expected, 1);
+    expect(y2.totalMonths).toBeLessThan(80); // would be 80 without removals
+    // Also pin the cPRA-level row (single cell in low) to the same value
+    // so the flow-weighted aggregation path is exercised.
+    expect(y2.lowCPRAMonths).toBeCloseTo(expected, 1);
+  });
+
+  it('production transformer auto-resolves rates from highCPRAThreshold (no override needed)', () => {
+    // makeViz pins highCPRAThreshold=95 → getWlRemovalRates(95) ≈
+    // {low: 2.7206e-4, high: 2.886e-4} per person-day. We don't hard-
+    // code those rates in the assertion (they live in configFinder and
+    // we want the test to follow if the pickle is regenerated). Instead
+    // we verify the *bound*: Ŵ with removals must be strictly less than
+    // Ŵ without removals (same numerator, larger denominator), and the
+    // delta must be material (≥10% drop).
+    const viz = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 5000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 500 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const withRemovals = transformVizDataToSimulationData(viz as any);
+    const withoutRemovals = transformVizDataToSimulationData(viz as any, null, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y2With = withRemovals.waitingTimeData.find((r) => r.year === 2)!;
+    const y2Without = withoutRemovals.waitingTimeData.find((r) => r.year === 2)!;
+    expect(y2Without.averageWaitingTimeMonths).toBeCloseTo(120, 1); // 5000/500*12
+    expect(y2With.averageWaitingTimeMonths).toBeLessThan(
+      y2Without.averageWaitingTimeMonths,
+    );
+    // Bias was claimed at ~25-35%; expect at least a 15% drop here (the
+    // exact rate depends on threshold but is comfortably above floor).
+    const dropPct =
+      (y2Without.averageWaitingTimeMonths -
+        y2With.averageWaitingTimeMonths) /
+      y2Without.averageWaitingTimeMonths;
+    expect(dropPct).toBeGreaterThan(0.15);
+  });
+
+  it('reduction (base − xeno) stays positive after removal correction', () => {
+    const xenoViz = makeViz({
+      years: 4,
+      Lcell: { low: { age18_45: 1500 }, high: {} },
+      txPerYearCell: { low: { age18_45: 1000 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const baseViz = makeViz({
+      years: 4,
+      Lcell: { low: { age18_45: 1500 }, high: {} },
+      txPerYearCell: { low: { age18_45: 750 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const result = transformVizDataToSimulationData(xenoViz as any, baseViz as any);
+    const y3 = result.waitingTimeData.find((r) => r.year === 3)!;
+    expect(y3.averageWaitingTimeMonths).toBeLessThan(
+      y3.baseAverageWaitingTimeMonths!,
+    );
+    expect(y3.reductionMonths!).toBeGreaterThan(0);
   });
 });
 
@@ -294,7 +388,7 @@ describe('calculateSummaryMetrics wait-time fields', () => {
     expect(m.waitTimeReductionPct).toBeNaN();
   });
 
-  it('reduction math: base=24mo, xeno=18mo → reduction=6mo, pct=25%', () => {
+  it('reduction math: base=24mo, xeno=18mo → reduction=6mo, pct=25% (no removals)', () => {
     const xenoViz = makeViz({
       years: 4,
       // L=1500, tx=1000/yr → W = 1500/1000 * 12 = 18 mo.
@@ -309,7 +403,12 @@ describe('calculateSummaryMetrics wait-time fields', () => {
       txPerYearCell: { low: { age18_45: 750 }, high: {} },
       deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
     });
-    const result = transformVizDataToSimulationData(xenoViz as any, baseViz as any);
+    // Pass {0,0} removals so the assertion math stays simple. The
+    // production path (with removals) is exercised in the dedicated
+    // "wl_removal inclusion" describe block above.
+    const result = transformVizDataToSimulationData(xenoViz as any, baseViz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
     const m = calculateSummaryMetrics(result, 3);
     expect(m.averageWaitTimeMonths).toBeCloseTo(18, 1);
     expect(m.baseAverageWaitTimeMonths).toBeCloseTo(24, 1);

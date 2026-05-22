@@ -402,13 +402,15 @@ const Bridge: React.FC = () => {
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
                       Average time a candidate spends on the waitlist <em>per list-spell</em>,
-                      estimated each year via Little's Law (W = L / λ_out). Bridge patients may
-                      have multiple spells if their xenograft fails — this measures each spell,
-                      not lifetime waiting. The dip-and-plateau you may see in waitlist size
-                      (patients cycling back after graft failure) shows up here as a{' '}
+                      estimated each year via Little's Law (W = L / λ_out). Outflow includes
+                      transplants, waitlist deaths, and waitlist removals. Bridge patients
+                      may have multiple spells if their xenograft fails — this measures each
+                      spell, not lifetime waiting. The dip-and-plateau you may see in waitlist
+                      size (patients cycling back after graft failure) shows up here as a{' '}
                       <em>sustained</em> reduction in per-spell wait time, because xeno
-                      throughput stays elevated. Toggle cPRA group or age cohort to see who
-                      benefits most.
+                      throughput stays elevated. Exact in steady state, approximate during
+                      transients (especially years 1–5). Toggle cPRA group or age cohort to
+                      see who benefits most.
                     </p>
                   </div>
                   <WaitTimeChart
