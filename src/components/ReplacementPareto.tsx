@@ -28,6 +28,7 @@ import {
   loadParetoDataset,
   livesSavedFromViz,
   waitlistReductionFromViz,
+  waitTimeReductionFromViz,
   type ParetoDataset,
 } from '@/utils/pareto';
 import { getXenoBaseRate } from '@/utils/dataTransformer';
@@ -71,6 +72,13 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
   const [graftLoading, setGraftLoading] = useState(true);
   const [graftError, setGraftError] = useState<string | null>(null);
 
+  // Wait-time-vs-supply Pareto. Same x-axis sweep as the lives-saved
+  // curve (so the two cards line up visually), but y is base − scenario
+  // wait time per list-spell at year H.
+  const [waitTimeCurve, setWaitTimeCurve] = useState<ParetoDataset | null>(null);
+  const [waitTimeLoading, setWaitTimeLoading] = useState(true);
+  const [waitTimeError, setWaitTimeError] = useState<string | null>(null);
+
   // ── Supply Pareto ────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +111,63 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
         }
       } finally {
         if (!cancelled) setSupplyLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    highCPRAThreshold,
+    strategy,
+    simulationHorizon,
+    xenoGraftFailureRate,
+    postTransplantDeathRate,
+    xenoBaseRate,
+  ]);
+
+  // ── Wait-time-vs-supply Pareto ───────────────────────────────────────
+  // Sweeps the same SUPPLY_PROPS as the lives-saved card so the two
+  // curves are read against an identical x-axis. The y is wait-time
+  // reduction (months saved per list-spell), pulled via Little's Law
+  // from the same viz JSONs the WaitTimeChart uses; the shared helper
+  // (`waitTimeReductionFromViz`) guarantees the Pareto y-value at any
+  // point equals the year-H value the user sees if they drill into the
+  // dedicated wait-time chart.
+  useEffect(() => {
+    let cancelled = false;
+    setWaitTimeCurve(null);
+    async function load() {
+      setWaitTimeLoading(true);
+      setWaitTimeError(null);
+      try {
+        const ds = await loadParetoDataset({
+          mode: 'replacement',
+          highCPRAThreshold,
+          strategy,
+          targetYear: simulationHorizon,
+          // Curry the threshold into the metric so we don't have to
+          // widen `LoadParetoOptions.metric` for one extractor.
+          metric: (scen, base, target) =>
+            waitTimeReductionFromViz(scen, base, target, highCPRAThreshold),
+          points: SUPPLY_PROPS.map((p) => ({
+            label: `${Math.round(xenoBaseRate * p).toLocaleString()}/yr`,
+            x: Math.round(xenoBaseRate * p),
+            xeno_proportion: p,
+            xenoGraftFailureRate,
+            postTransplantDeathRate,
+          })),
+        });
+        if (!cancelled) setWaitTimeCurve(ds);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[Replacement:waitTime Pareto] failed:', err);
+          setWaitTimeError(
+            err instanceof Error ? err.message : 'Could not build wait-time curve',
+          );
+        }
+      } finally {
+        if (!cancelled) setWaitTimeLoading(false);
       }
     }
     load();
@@ -182,13 +247,13 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
         </h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
           How additional xeno supply and better xeno graft survival convert
-          to lives saved and waitlist reduction at year {simulationHorizon}.
-          Both sweeps hold your other multipliers fixed at the values
-          selected on the left.
+          to lives saved, waitlist reduction, and wait-time reduction at
+          year {simulationHorizon}. Each sweep holds your other multipliers
+          fixed at the values selected on the left.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="border-medical-border shadow-md">
           <CardHeader>
             <CardTitle className="text-base font-semibold text-foreground">
@@ -213,6 +278,31 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               yLabel={`Lives saved by year ${simulationHorizon}`}
               formatX={(v) => v.toLocaleString()}
               formatY={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="border-medical-border shadow-md">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold text-foreground">
+              Xeno supply &nbsp;↔&nbsp; Wait-time reduction
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Sweeps the same supply rates as the Lives-saved card.
+              y = base − scenario wait time per list-spell at year{' '}
+              {simulationHorizon} (months saved), via Little's Law on the
+              same viz JSONs that drive the Wait-Time chart above.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ParetoChart
+              dataset={waitTimeCurve}
+              loading={waitTimeLoading}
+              error={waitTimeError}
+              xLabel="Xeno supply rate (procedures / yr, intended)"
+              yLabel={`Wait time reduction at year ${simulationHorizon} (mo)`}
+              formatX={(v) => v.toLocaleString()}
+              formatY={(v) => `${v.toFixed(1)} mo`}
             />
           </CardContent>
         </Card>

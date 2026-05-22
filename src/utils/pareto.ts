@@ -1,15 +1,18 @@
 /**
- * Pareto / tradeoff utilities for the Bridge Therapy mode.
+ * Pareto / tradeoff utilities, shared by the Replacement and Bridge pages.
  *
- * Two charts are powered by these helpers:
+ * Three metrics are exposed for use as a Pareto y-axis:
  *
- *   1. Xeno supply (kidneys/year) vs lives saved (cumulative deaths
- *      prevented at end of horizon)
- *   2. Graft survival (months) vs waitlist reduction (Δ waitlist size at
- *      end of horizon, scenario − base)
+ *   1. `livesSavedFromViz`           — base − scenario waitlist deaths
+ *      at year H (the headline "did the intervention save lives" number).
+ *   2. `waitlistReductionFromViz`    — base − scenario waitlist size at
+ *      year H (does the intervention shrink the queue).
+ *   3. `waitTimeReductionFromViz`    — base − scenario wait time per
+ *      list-spell (months) at year H, derived via Little's Law from the
+ *      same viz JSONs the WaitTimeChart uses (NEW — closes Problem 6.3).
  *
- * For both, we compute the relevant metric from each viz JSON the runner
- * produced and surface the inflection point ("knee") so the user sees where
+ * For each, we compute the metric from every viz JSON the runner produced
+ * and surface the inflection point ("knee") so the user sees where
  * additional supply / longer survival yields diminishing returns.
  */
 import {
@@ -17,7 +20,9 @@ import {
   type TherapyMode,
   composeConfigName,
   loadVisualizationData,
+  getWlRemovalRates,
 } from './configFinder';
+import { computeWaitTimeByYear } from './dataTransformer';
 
 // ─── Shape helpers ──────────────────────────────────────────────────────────
 
@@ -39,6 +44,12 @@ interface VizLike {
   cumulative_waitlist_deaths?: ChartLike;
   cumulative_post_tx_deaths?: ChartLike;
   cumulative_deaths?: ChartLike;
+  // `computeWaitTimeByYear` reads these for the Little's-Law wait-time
+  // metric. They're optional because the existing lives-saved /
+  // waitlist-reduction extractors don't need them.
+  cumulative_xeno_transplants?: ChartLike;
+  cumulative_std_transplants?: ChartLike;
+  waitlist_deaths_per_year?: ChartLike;
 }
 
 /**
@@ -175,6 +186,85 @@ export function waitlistReductionFromViz(
 ): number | null {
   const scen = waitlistAtYearFromViz(scenarioViz, targetYear);
   const base = waitlistAtYearFromViz(baseViz, targetYear);
+  if (scen === null || base === null) return null;
+  return base - scen;
+}
+
+// ─── Wait-time extractor (Little's Law) ────────────────────────────────────
+//
+// Re-uses `computeWaitTimeByYear` from dataTransformer so the Pareto curve
+// is computed from EXACTLY the same numbers the WaitTimeChart shows for
+// any individual point. That coupling matters: if a user clicks a point on
+// the curve, drills into the "Wait Time on the List" chart, and reads off
+// the year-H value, it MUST match the y-coordinate they just clicked. The
+// only way to guarantee that is for both surfaces to call the same
+// transformer with the same wlRemovalRates.
+
+/**
+ * Wait time at the requested year (months), computed from the viz JSON via
+ * Little's Law (W = L / outflow), with `outflow = transplants + waitlist
+ * deaths + waitlist removals`. Returns `null` if the underlying transformer
+ * has no row for the target year — this happens when the frozen-tail
+ * defense in `computeWaitTimeByYear` drops the boundary year (the backend's
+ * `common_times` grid sometimes runs past the simulator's actual stop
+ * time, which would otherwise inflate Ŵ at year H). When the requested
+ * year is dropped we fall back to the largest emitted year ≤ targetYear so
+ * the Pareto chart still gets a y-value.
+ *
+ * Threshold is required because per-(threshold, cPRA) waitlist-removal
+ * hazards are looked up from the simulator input pickle's tables — the
+ * SAME tables that drive the WaitTimeChart, via the shared
+ * `getWlRemovalRates` helper.
+ */
+export function waitTimeAtYearFromViz(
+  viz: VizLike,
+  targetYear: number,
+  highCPRAThreshold: number,
+): number | null {
+  // computeWaitTimeByYear's signature requires a `highCPRAThreshold` field
+  // on the viz, but only uses it for the wlRemovalRates lookup which we
+  // do explicitly here. Fill it in defensively so a future signature
+  // tightening doesn't silently break this caller.
+  const wlRemovalRates = getWlRemovalRates(highCPRAThreshold);
+  const enriched = { ...viz, highCPRAThreshold } as Parameters<
+    typeof computeWaitTimeByYear
+  >[0];
+  const rows = computeWaitTimeByYear(enriched, { wlRemovalRates });
+  if (!rows || rows.length === 0) return null;
+
+  // Prefer the exact year if present; otherwise the largest emitted year
+  // ≤ targetYear (handles the frozen-tail case where year H got dropped).
+  const targetInt = Math.floor(targetYear);
+  let best: { year: number; totalMonths: number } | null = null;
+  for (const r of rows) {
+    if (!Number.isFinite(r.totalMonths)) continue;
+    if (r.year <= targetInt && (best === null || r.year > best.year)) {
+      best = { year: r.year, totalMonths: r.totalMonths };
+    }
+  }
+  if (best === null) return null;
+  return best.totalMonths;
+}
+
+/**
+ * Wait-time reduction = baseWaitTime − scenarioWaitTime (months, positive
+ * = xeno helps). Returns `null` if EITHER side is undefined at the target
+ * year, so the Pareto loader's null-filter drops the point gracefully.
+ *
+ * Curried at the call site so the existing `metric` signature in
+ * `LoadParetoOptions` (3 args, no context) doesn't have to change:
+ *
+ *     metric: (scen, base, target) =>
+ *       waitTimeReductionFromViz(scen, base, target, params.highCPRAThreshold)
+ */
+export function waitTimeReductionFromViz(
+  scenarioViz: VizLike,
+  baseViz: VizLike,
+  targetYear: number,
+  highCPRAThreshold: number,
+): number | null {
+  const scen = waitTimeAtYearFromViz(scenarioViz, targetYear, highCPRAThreshold);
+  const base = waitTimeAtYearFromViz(baseViz, targetYear, highCPRAThreshold);
   if (scen === null || base === null) return null;
   return base - scen;
 }
