@@ -177,7 +177,8 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
           Average Wait Time Over Time
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-1.5">
-          Estimated mean wait from listing to transplant (Little's Law: L / outflow), stratified by cPRA and age
+          Estimated mean wait per list-spell (Little's Law: L / outflow),
+          stratified by cPRA and age
         </p>
       </CardHeader>
       <CardContent className="px-4 pt-4 pb-1">
@@ -387,9 +388,12 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
 
         <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
           Estimated via Little's Law (W = L / λ_out) per year using mean waitlist size
-          and combined transplant + waitlist-death outflow. Per-subgroup values are
-          flow-weighted aggregates of their constituent (cPRA × age) cells. Years
-          with zero outflow (typically high-cPRA cells at year&nbsp;1) are omitted.
+          and total outflow (transplants + waitlist deaths + waitlist removals).
+          Per-subgroup values are flow-weighted aggregates of their constituent
+          (cPRA × age) cells. Years with zero outflow (typically high-cPRA cells at
+          year&nbsp;1) are omitted, as is the final year when the simulator's
+          time grid extends past its last event time (a backend-side boundary
+          artifact that would otherwise show as a spurious uptick).
         </p>
       </CardContent>
     </Card>

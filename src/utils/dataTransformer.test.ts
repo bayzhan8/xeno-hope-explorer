@@ -277,6 +277,63 @@ describe('transformVizDataToSimulationData wait-time integration', () => {
   });
 });
 
+describe('frozen-tail defense (the year-10 uptick fix)', () => {
+  // When the backend's `common_times` grid extends past the simulator's
+  // actual stop time, the cumulative transplant series goes flat for
+  // the last segment(s). Linear interpolation at the year-H boundary
+  // then under-counts transplants and inflates Ŵ for the final year —
+  // exactly the spurious upward tick observed on a real dashboard
+  // screenshot. computeWaitTimeByYear should detect this and drop the
+  // affected year(s).
+  //
+  // To simulate the artifact we monkey-patch the synthetic viz to clamp
+  // the LAST sample of every cumulative tx series to its second-to-last
+  // value (zero growth in the last segment).
+  function freezeLastCumSegment(viz: any) {
+    for (const s of viz.cumulative_xeno_transplants.series) {
+      if (s.y.length >= 2) s.y[s.y.length - 1] = s.y[s.y.length - 2];
+    }
+    for (const s of viz.cumulative_std_transplants.series) {
+      if (s.y.length >= 2) s.y[s.y.length - 1] = s.y[s.y.length - 2];
+    }
+  }
+
+  it('drops the final year when the cumulative series has a frozen tail', () => {
+    const viz = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 200 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    // Sanity: without the freeze, all 5 years emit.
+    const rowsClean = computeWaitTimeByYear(viz as any);
+    expect(rowsClean!.map((r) => r.year)).toEqual([1, 2, 3, 4, 5]);
+
+    // Now corrupt the tail and re-run.
+    freezeLastCumSegment(viz);
+    const rowsFrozen = computeWaitTimeByYear(viz as any);
+    // Year 5 should be omitted because its tEnd interpolates into the
+    // frozen segment.
+    expect(rowsFrozen!.map((r) => r.year)).not.toContain(5);
+    // Earlier years should still emit and match the clean values.
+    expect(rowsFrozen!.length).toBeGreaterThan(0);
+    const cleanY3 = rowsClean!.find((r) => r.year === 3)!;
+    const frozenY3 = rowsFrozen!.find((r) => r.year === 3)!;
+    expect(frozenY3.totalMonths).toBeCloseTo(cleanY3.totalMonths, 1);
+  });
+
+  it('does NOT drop the last year when growth is healthy through to x[-1]', () => {
+    const viz = makeViz({
+      years: 4,
+      Lcell: { low: { age18_45: 500 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any);
+    expect(rows!.map((r) => r.year)).toEqual([1, 2, 3, 4]);
+  });
+});
+
 describe('wl_removal inclusion in outflow (the bias fix)', () => {
   // Concrete fact this test pins down: the wl_removal hazard is the
   // **second-largest** waitlist outflow channel in the default model
