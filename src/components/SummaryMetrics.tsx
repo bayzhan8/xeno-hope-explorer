@@ -302,17 +302,44 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
         </CardContent>
       </Card>
 
-      {/* Wait-time row — promoted to a primary metric per clinical feedback.
-          Xeno's value-add is largely as a bridge / waitlist-pressure relief
-          mechanism, so "how long do patients wait?" is the most intuitive
-          outcome. Numbers are an analytic estimate from Little's Law
-          (W = L / outflow) computed at year {horizon}. */}
+      {/* Wait-time row — promoted to a primary metric per clinical
+          feedback. Xeno's value-add is largely as a bridge / waitlist-
+          pressure relief mechanism, so "how long do patients wait?" is
+          the most intuitive outcome.
+
+          What we report: a single-year snapshot estimator of mean
+          per-list-spell waiting via Little's Law, evaluated at the
+          horizon year. Outflow includes transplants + waitlist deaths +
+          waitlist removals (all four channels in the model). The
+          metric is exact in steady state and approximate during
+          transients; by the 20-yr horizon most configs have
+          re-equilibrated. Per-spell, not lifetime — a patient with a
+          short xeno graft who relists is counted as multiple spells. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="bg-card shadow-[var(--shadow-soft)] border-medical-border hover:shadow-[var(--shadow-medium)] transition-shadow duration-200">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Hourglass className="w-5 h-5 text-primary" />
-              {getTrendIcon(hasReductionData && waitReduction! > 0 ? 1 : hasReductionData && waitReduction! < 0 ? -1 : 0)}
+              <div className="flex items-center gap-1">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                      Snapshot estimate via Little's Law (W = L / outflow)
+                      at year {horizon} of the xeno scenario. Outflow =
+                      transplants + waitlist deaths + waitlist removals.
+                      Measures mean time <em>per list-spell</em>; a
+                      patient who relists after a short xeno graft is
+                      counted as multiple spells. Exact in steady state,
+                      approximate during transients (especially years 1–5
+                      of any new scenario).
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                {getTrendIcon(hasReductionData && waitReduction! > 0 ? 1 : hasReductionData && waitReduction! < 0 ? -1 : 0)}
+              </div>
             </div>
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -323,7 +350,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
               </p>
               <p className="text-xs text-muted-foreground">
                 {hasWaitData
-                  ? `At year ${horizon} in the xeno scenario (Little's Law estimate)`
+                  ? `Per list-spell, year ${horizon} (Little's Law estimate)`
                   : 'Insufficient outflow at horizon — wait time undefined'}
               </p>
             </div>
@@ -334,7 +361,24 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Clock className="w-5 h-5 text-success" />
-              {getTrendIcon(hasReductionData && waitReduction! > 0 ? 1 : hasReductionData && waitReduction! < 0 ? -1 : 0)}
+              <div className="flex items-center gap-1">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                      Difference between base-case (no xeno) and xeno-
+                      scenario wait time at year {horizon}, both estimated
+                      via Little's Law from the same outflow channels.
+                      Absolute reduction shifts if the underlying rates
+                      change; the percentage is robust because both
+                      numerator and denominator move together.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                {getTrendIcon(hasReductionData && waitReduction! > 0 ? 1 : hasReductionData && waitReduction! < 0 ? -1 : 0)}
+              </div>
             </div>
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

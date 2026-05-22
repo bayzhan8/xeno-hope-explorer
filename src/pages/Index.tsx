@@ -266,9 +266,13 @@ const Index = () => {
                       Wait Time on the List
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Average time a candidate spends on the waitlist, estimated each year via
-                      Little's Law (W = L / λ_out). Compare scenario vs base case, and break
-                      down by cPRA group or age cohort.
+                      Average time a candidate spends on the waitlist <em>per list-spell</em>,
+                      estimated each year via Little's Law (W = L / λ_out). Outflow includes
+                      transplants, waitlist deaths, and waitlist removals. A patient whose
+                      xenograft fails and who relists is counted as multiple spells — this
+                      measures each spell, not lifetime waiting. Exact in steady state,
+                      approximate during transients (especially years 1–5 of any new scenario).
+                      Compare scenario vs base case, and break down by cPRA group or age cohort.
                     </p>
                   </div>
                   <WaitTimeChart

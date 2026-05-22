@@ -1,3 +1,5 @@
+import { getWlRemovalRates } from './configFinder';
+
 // Yearly transplant rates for targeted populations (SRTR 2022 data).
 // Used to compute how many xeno kidneys are "intended" for a given scenario.
 export const STANDARD_BASE_RATES: Record<number, number> = {
@@ -298,25 +300,49 @@ function findFirstIndex<T>(array: T[], predicate: (item: T) => boolean): number 
 //
 // The CTMC simulator tracks compartment counts, not per-patient timestamps,
 // so we don't have an empirical wait-time time-series in the viz JSON.
-// However at quasi-steady state (which our system is over a year-long
-// window) Little's Law gives an excellent analytic estimate:
+// What we report is the *rate-form* (snapshot) estimator from Little's Law:
 //
-//   W = L / λ_out
+//   Ŵ(y) = L̄(y) / λ_out(y)
 //
-// where L is the mean waitlist size during the period and λ_out is the
-// outflow rate (transplants + deaths + removals). Per-(cPRA × age) cell:
+// where L̄(y) is the mean waitlist size over year y and λ_out(y) is the
+// total outflow during that year. This estimator is **exact** in steady
+// state and is otherwise an approximation: boundary terms (residual
+// inventory at year start/end) and composition shifts (who exits vs who
+// just arrived) bias it during transients. Treat year-1 of any new
+// scenario as a transient snapshot, not a cohort wait time; by year 5–10
+// the system has typically re-equilibrated and Ŵ becomes a reliable
+// estimate of mean wait per list-spell.
 //
-//   mean_L_year_y    = mean of waitlist_size[i] for x[i] ∈ [(y-1)·365, y·365]
-//   Δ_cum_tx_year_y  = cum_tx at year_y − cum_tx at year_{y-1}
-//                        (cum_xeno + cum_std, interpolated at boundaries)
-//   deaths_year_y    = waitlist_deaths_per_year[y - 1]   (x is 0-indexed)
-//   outflow_year_y   = Δ_cum_tx_year_y + deaths_year_y
-//   W_year_y_months  = mean_L_year_y / outflow_year_y * 12
+// Outflow channels in this model (must include ALL of them or Ŵ is
+// systematically inflated):
+//   - Standard (human) transplants            (Δ cumulative_std_transplants)
+//   - Xeno transplants                        (Δ cumulative_xeno_transplants)
+//   - Waitlist deaths                         (waitlist_deaths_per_year[y-1])
+//   - Waitlist removals (too sick / dropped)  (wl_removal_rate × L̄ × 365)
+//
+// The waitlist-removal channel is not in the viz JSON, so we reconstruct it
+// analytically from the per-(cPRA) `wl_removal` rate baked into the
+// simulator's input rates and the year's mean L. In the default 85%
+// threshold config, removals are ~9.9%/yr of L — the **second-largest**
+// outflow channel after transplants — so omitting them would overstate Ŵ
+// by ~25-35%.
 //
 // CRITICAL: For per-cPRA and overall aggregates we sum the flows first and
-// then divide. Averaging per-subgroup wait times directly would be wrong
-// (Simpson's-paradox flavor — small subgroups with long waits would
-// distort the aggregate).
+// then divide ("flow-weighted aggregation"). Averaging per-subgroup wait
+// times directly would be wrong — small subgroups with very long waits
+// would distort the aggregate (a Simpson's-paradox flavor).
+//
+// Per-(cPRA × age) cell, for year y ∈ [1..max_years]:
+//
+//   t_start          = (y - 1) · 365
+//   t_end            = y · 365
+//   mean_L_y         = mean of waitlist_size samples in [t_start, t_end]
+//   Δ_cum_tx_y       = interp(cum_tx, t_end) − interp(cum_tx, t_start)
+//                        (cum_xeno + cum_std combined)
+//   deaths_y         = waitlist_deaths_per_year[y - 1]   (x is 0-indexed)
+//   removals_y       = wl_removal_rate(cpra) · mean_L_y · 365
+//   outflow_y        = Δ_cum_tx_y + deaths_y + removals_y
+//   Ŵ_y_months       = (mean_L_y / outflow_y) · 12
 //
 // Returns null when the viz lacks the required series so callers can
 // gracefully no-op without polluting downstream consumers.
@@ -401,7 +427,21 @@ function findCellSeries(
   return hit?.y && Array.isArray(hit.y) ? hit.y : null;
 }
 
-export function computeWaitTimeByYear(vizData: VizData): WaitTimeYear[] | null {
+export interface WaitTimeOptions {
+  // Per-person-day waitlist-removal hazards (the "wl_removal" channel of
+  // the simulator). Omitted → defaults to {low: 0, high: 0}, which
+  // reproduces the OLD (biased) behavior and is intentionally exposed for
+  // tests that want to isolate the transplant + death components.
+  // Production callers (`transformVizDataToSimulationData`) MUST pass real
+  // rates from `configFinder.getWlRemovalRates` or Ŵ will be overstated
+  // by ~25-35%.
+  wlRemovalRates?: { low: number; high: number };
+}
+
+export function computeWaitTimeByYear(
+  vizData: VizData,
+  opts: WaitTimeOptions = {},
+): WaitTimeYear[] | null {
   const wl = vizData.waitlist_sizes;
   const wlDeaths = (vizData as VizData & {
     waitlist_deaths_per_year?: {
@@ -411,6 +451,7 @@ export function computeWaitTimeByYear(vizData: VizData): WaitTimeYear[] | null {
   }).waitlist_deaths_per_year;
   const cumXeno = vizData.cumulative_xeno_transplants;
   const cumStd = vizData.cumulative_std_transplants;
+  const wlRem = opts.wlRemovalRates ?? { low: 0, high: 0 };
   if (!wl || !wl.x || !wl.series || wl.x.length === 0) return null;
   if (!wlDeaths || !wlDeaths.x || !wlDeaths.series || wlDeaths.x.length === 0) {
     return null;
@@ -481,7 +522,15 @@ export function computeWaitTimeByYear(vizData: VizData): WaitTimeYear[] | null {
       const txEnd = interpolateCumulative(xDays, cell.cumTx, tEnd);
       const dTx = Math.max(0, txEnd - txStart);
       const dDeaths = cell.deathsPerYear[deathsIdx] || 0;
-      const outflow = dTx + dDeaths;
+      // wl_removal is a per-person-day hazard; over one year and an
+      // average load of meanL, the expected removals are rate × meanL ×
+      // 365. NaN-guard so we don't pollute outflow when meanL is missing.
+      const wlRemovalRate = cell.cpra === 'low' ? wlRem.low : wlRem.high;
+      const dRemovals =
+        Number.isFinite(meanL) && wlRemovalRate > 0
+          ? wlRemovalRate * meanL * 365
+          : 0;
+      const outflow = dTx + dDeaths + dRemovals;
       const months = waitTimeMonths(meanL, outflow);
 
       if (cell.cpra === 'low') {
@@ -515,7 +564,20 @@ export function computeWaitTimeByYear(vizData: VizData): WaitTimeYear[] | null {
   return out;
 }
 
-export function transformVizDataToSimulationData(vizData: VizData, baseVizData: VizData | null = null): SimulationData {
+export interface TransformOptions {
+  // Override the waitlist-removal hazards used in the Little's-Law
+  // outflow correction. Defaults to lookup from `vizData.highCPRAThreshold`
+  // via `configFinder.getWlRemovalRates`. Tests use this to inject {0,0}
+  // and isolate the transplant + death components when verifying core
+  // math. Production callers should leave this unset.
+  wlRemovalRates?: { low: number; high: number };
+}
+
+export function transformVizDataToSimulationData(
+  vizData: VizData,
+  baseVizData: VizData | null = null,
+  opts: TransformOptions = {},
+): SimulationData {
   const result: SimulationData = {
     waitlistData: [],
     waitlistDeathsData: [],
@@ -1657,8 +1719,21 @@ export function transformVizDataToSimulationData(vizData: VizData, baseVizData: 
   // result.waitlistData) so we don't lose precision to the monthly
   // resampling. Both xeno and base-case scenarios use identical math so
   // the reduction = base − xeno is apples-to-apples.
-  const xenoWT = computeWaitTimeByYear(vizData);
-  const baseWT = baseVizData ? computeWaitTimeByYear(baseVizData) : null;
+  //
+  // CRITICAL: pass the wl_removal hazards so outflow includes all four
+  // waitlist-exit channels. Without this Ŵ is overstated by ~25-35% in
+  // the default config because removals are ~9.9%/yr of L vs ~5.1%/yr
+  // for waitlist deaths. We resolve the rates from the high-cPRA
+  // threshold the page injected into vizData; both xeno and base scenarios
+  // use the same threshold (same input pickle) so the reduction stays
+  // apples-to-apples.
+  const threshold = (vizData as VizData & { highCPRAThreshold?: number })
+    .highCPRAThreshold ?? 85;
+  const wlRemovalRates = opts.wlRemovalRates ?? getWlRemovalRates(threshold);
+  const xenoWT = computeWaitTimeByYear(vizData, { wlRemovalRates });
+  const baseWT = baseVizData
+    ? computeWaitTimeByYear(baseVizData, { wlRemovalRates })
+    : null;
   if (xenoWT && xenoWT.length > 0) {
     // Replace the placeholder year-by-year list built in pass #7 above.
     result.waitingTimeData = xenoWT.map((row) => {

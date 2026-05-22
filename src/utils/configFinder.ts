@@ -158,6 +158,45 @@ export type TherapyMode = 'replacement' | 'bridge';
 
 // Allowed graft-survival targets for Bridge Therapy (must mirror the values
 // in run_bridge_experiments.py SURVIVALS / make_bridge_inputs.py).
+// Per-person-day waitlist-removal hazards, by high-cPRA threshold and cPRA
+// group. Mirrors the per-(cPRA × age) rates inside the simulator input
+// pickles, aggregated to the cPRA level (per-age variation is ≤5%, so the
+// cPRA-level rate is a faithful summary for the front-end Little's-Law
+// outflow correction in `computeWaitTimeByYear`).
+//
+// Source: identical to the FIXED_PARAMS_* tables above (which the backend
+// loader exports). Keep these in sync if the pickle is ever regenerated.
+export const WL_REMOVAL_RATES_PER_PERSON_DAY: Record<
+  number,
+  { low: number; high: number }
+> = {
+  85: {
+    low: FIXED_PARAMS_85.rates_cpra['0-85'].wl_removal,
+    high: FIXED_PARAMS_85.rates_cpra['85-100'].wl_removal,
+  },
+  95: {
+    low: FIXED_PARAMS_95.rates_cpra['0-95'].wl_removal,
+    high: FIXED_PARAMS_95.rates_cpra['95-100'].wl_removal,
+  },
+  99: {
+    low: FIXED_PARAMS_99.rates_cpra['0-99'].wl_removal,
+    high: FIXED_PARAMS_99.rates_cpra['99-100'].wl_removal,
+  },
+};
+
+// Pick the wl_removal rates for a given high-cPRA threshold. Falls back to
+// the 85% bin (the most commonly used) if the caller passes a threshold
+// we don't have rates for, rather than zeroing out the correction (which
+// would silently re-introduce the ~30% upward bias).
+export function getWlRemovalRates(
+  highCPRAThreshold: number,
+): { low: number; high: number } {
+  return (
+    WL_REMOVAL_RATES_PER_PERSON_DAY[highCPRAThreshold] ??
+    WL_REMOVAL_RATES_PER_PERSON_DAY[85]
+  );
+}
+
 export const BRIDGE_SURVIVAL_MONTHS = [6, 12, 18, 24, 36] as const;
 export type BridgeSurvivalMonths = (typeof BRIDGE_SURVIVAL_MONTHS)[number];
 
