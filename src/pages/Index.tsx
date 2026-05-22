@@ -7,6 +7,7 @@ import SummaryMetrics from '@/components/SummaryMetrics';
 import MarkovChainVisualization from '@/components/MarkovChainVisualization';
 import ModeNav from '@/components/ModeNav';
 import ReplacementPareto from '@/components/ReplacementPareto';
+import WaitTimeChart from '@/components/WaitTimeChart';
 import { findConfigName, loadVisualizationData } from '@/utils/configFinder';
 import { transformVizDataToSimulationData, calculateSummaryMetrics, getXenoBaseRate } from '@/utils/dataTransformer';
 
@@ -256,6 +257,21 @@ const Index = () => {
                       getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold) * params.xeno_proportion
                     )}
                   />
+                </div>
+
+                {/* Wait Time (primary clinical metric — sits above the rest) */}
+                <div>
+                  <div className="mb-6 pb-4 border-b border-medical-border">
+                    <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
+                      Wait Time on the List
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Average time a candidate spends on the waitlist, estimated each year via
+                      Little's Law (W = L / λ_out). Compare scenario vs base case, and break
+                      down by cPRA group or age cohort.
+                    </p>
+                  </div>
+                  <WaitTimeChart data={simulationData} />
                 </div>
 
                 {/* Charts */}

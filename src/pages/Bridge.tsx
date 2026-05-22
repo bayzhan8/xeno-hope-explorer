@@ -18,6 +18,7 @@ import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
 import ParetoChart from '@/components/ParetoChart';
 import ModeNav from '@/components/ModeNav';
+import WaitTimeChart from '@/components/WaitTimeChart';
 
 import {
   composeConfigName,
@@ -392,6 +393,21 @@ const Bridge: React.FC = () => {
                     horizon={params.simulationHorizon}
                     xenoIntendedPerYear={Math.round(xenoBaseRate * params.xeno_proportion)}
                   />
+                </div>
+
+                <div>
+                  <div className="mb-6 pb-4 border-b border-medical-border">
+                    <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
+                      Wait Time on the List
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Average time a candidate spends on the waitlist, estimated each year via
+                      Little's Law (W = L / λ_out). Bridge therapy targets sickest/longest-waiting
+                      patients first, so this metric is the most direct readout of clinical
+                      benefit. Toggle cPRA group or age cohort to see who benefits most.
+                    </p>
+                  </div>
+                  <WaitTimeChart data={simulationData} />
                 </div>
 
                 <div>
