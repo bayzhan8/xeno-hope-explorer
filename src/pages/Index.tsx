@@ -4,6 +4,7 @@ import { Activity, Beaker, Loader2 } from 'lucide-react';
 import SimulationControls from '@/components/SimulationControls';
 import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
+import WaitTimeChart from '@/components/WaitTimeChart';
 import MarkovChainVisualization from '@/components/MarkovChainVisualization';
 import ModeNav from '@/components/ModeNav';
 import ReplacementPareto from '@/components/ReplacementPareto';
@@ -27,7 +28,24 @@ interface SimulationData {
   graftFailuresData: Array<{ year: number; xenoGraftFailures: number; humanGraftFailures: number }>;
   transplantsData: Array<{ year: number; human: number; xeno: number }>;
   penetrationData: Array<{ year: number; proportion: number }>;
-  waitingTimeData: Array<{ year: number; averageWaitingTime: number }>;
+  waitingTimeData: Array<{
+    year: number;
+    averageWaitingTime: number;
+    averageWaitingTimeMonths: number;
+    baseAverageWaitingTimeMonths?: number;
+    reductionMonths?: number;
+    lowCPRA: number;
+    highCPRA: number;
+    baseLowCPRA?: number;
+    baseHighCPRA?: number;
+  }>;
+  waitingTimeDataByAge?: Array<{
+    year: number;
+    lowCPRA: Record<string, number>;
+    highCPRA: Record<string, number>;
+    baseLowCPRA?: Record<string, number>;
+    baseHighCPRA?: Record<string, number>;
+  }>;
   recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number; lowXeno: number }>;
   cumulativeDeathsData: Array<{ year: number; lowWaitlist: number; highWaitlist: number; lowPostTx: number; highPostTx: number; total: number }>;
   deathsPerYearData: Array<{ year: number; low: number; high: number; total: number }>;
@@ -241,6 +259,27 @@ const Index = () => {
                   />
                 </div>
 
+                {/* Wait Time — primary clinical metric. Placed above the
+                    population-dynamics grid because the group flagged it
+                    as the clearest indicator of bridge / pressure-relief
+                    value. */}
+                <div>
+                  <div className="mb-6 pb-4 border-b border-medical-border">
+                    <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
+                      Wait Time
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      How long patients wait from listing to transplant across the simulation horizon
+                    </p>
+                  </div>
+                  <WaitTimeChart
+                    data={simulationData.waitingTimeData}
+                    dataByAge={simulationData.waitingTimeDataByAge}
+                    highCPRAThreshold={params.highCPRAThreshold}
+                    simulationHorizon={params.simulationHorizon}
+                  />
+                </div>
+
                 {/* Charts */}
                 <div>
                   <div className="mb-6 pb-4 border-b border-medical-border">
@@ -251,7 +290,17 @@ const Index = () => {
                       Visualization of waitlist trends, transplant volumes, and mortality impacts
                     </p>
                   </div>
-                  <SimulationCharts data={simulationData} highCPRAThreshold={params.highCPRAThreshold} simulationHorizon={params.simulationHorizon} />
+                  <SimulationCharts
+                    data={simulationData}
+                    highCPRAThreshold={params.highCPRAThreshold}
+                    simulationHorizon={params.simulationHorizon}
+                    xenoBaseRate={getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold)}
+                    xenoProportion={params.xeno_proportion}
+                    xenoIntendedPerYear={Math.round(
+                      getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold) * params.xeno_proportion
+                    )}
+                    targetingStrategy={params.targetingStrategy || 'standard'}
+                  />
                 </div>
               </>
             )}
