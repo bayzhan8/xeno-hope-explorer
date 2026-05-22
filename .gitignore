@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Dev server pid file (written by local dev wrapper, never source)
+.dev_pid
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
