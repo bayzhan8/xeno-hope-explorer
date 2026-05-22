@@ -17,6 +17,8 @@ import {
   livesSavedFromViz,
   waitlistAtYearFromViz,
   waitlistReductionFromViz,
+  waitTimeAtYearFromViz,
+  waitTimeReductionFromViz,
   loadParetoDataset,
   type ParetoPointSpec,
 } from './pareto';
@@ -197,6 +199,110 @@ describe('viz extractors (totalDeathsAtYear / livesSavedFromViz / waitlistAtYear
     const base = buildViz({ wl: Array.from({ length: 11 }, (_, i) => 1000 + 50 * i) });
     const scen = buildViz({ wl: Array.from({ length: 11 }, (_, i) => 1000 + 30 * i) });
     expect(waitlistReductionFromViz(scen, base, 10)).toBe(200);
+  });
+});
+
+describe('wait-time extractors (Little\'s Law)', () => {
+  // Build a viz that satisfies computeWaitTimeByYear's input contract:
+  //   - waitlist_sizes (cPRA × age cells, daily x grid)
+  //   - cumulative_xeno_transplants + cumulative_std_transplants (same shape)
+  //   - waitlist_deaths_per_year (yearly)
+  //
+  // Single-cell shape: low-cPRA × age 18-45, with constant L, linear cum
+  // tx, and zero waitlist deaths. With L=1000, dTx=200 per year, and
+  // wl_removal=0, Ŵ = 1000 / 200 * 12 = 60 mo. With wl_removal active
+  // the yearly removals at low-95 (≈0.0003/d) add ~110/yr and Ŵ drops
+  // accordingly.
+  const xDays = [0, 365, 730, 1095, 1460, 1825];
+  const buildWtViz = (overrides: {
+    L?: number;
+    txPerYear?: number;
+    deathsPerYear?: number;
+  } = {}) => {
+    const L = overrides.L ?? 1000;
+    const tx = overrides.txPerYear ?? 200;
+    const deaths = overrides.deathsPerYear ?? 0;
+    const cumTx = xDays.map((d) => (d / 365) * tx);
+    return {
+      total_days: 1825,
+      waitlist_sizes: {
+        x: xDays,
+        series: [{ label: 'Low cPRA Age 18-45', y: xDays.map(() => L) }],
+      },
+      cumulative_xeno_transplants: {
+        x: xDays,
+        series: [{ label: 'Low cPRA Age 18-45 (xeno)', y: cumTx.map(() => 0) }],
+      },
+      cumulative_std_transplants: {
+        x: xDays,
+        series: [{ label: 'Low cPRA Age 18-45 (human)', y: cumTx }],
+      },
+      waitlist_deaths_per_year: {
+        x: [0, 1, 2, 3, 4],
+        series: [{ label: 'Low cPRA Age 18-45', y: [deaths, deaths, deaths, deaths, deaths] }],
+      },
+    };
+  };
+
+  it('waitTimeAtYearFromViz returns L / outflow * 12 in months at the target year', () => {
+    // L=1000, tx=200/yr, deaths=0, wl_removal=0 (we override at 95%
+    // because that threshold's wl_removal is small enough that the
+    // expected Ŵ is dominated by tx — easier to assert exactly).
+    // At the 95% threshold low-cPRA wl_removal ≈ 0.000272/d → 0.0993/yr
+    // → 99.3 removals/yr against L=1000 → outflow = 200+0+99.3 = 299.3
+    // → Ŵ = 1000/299.3*12 ≈ 40.1 mo.
+    const v = buildWtViz();
+    const w = waitTimeAtYearFromViz(v as any, 3, 95);
+    expect(w).not.toBeNull();
+    expect(w!).toBeCloseTo(40.1, 0);
+  });
+
+  it('waitTimeAtYearFromViz returns null when the viz lacks waitlist_deaths_per_year (missing essential input)', () => {
+    // computeWaitTimeByYear bails on missing waitlist_sizes OR
+    // waitlist_deaths_per_year — both are essential for the per-year
+    // outflow calculation. Missing cumulative tx series, by contrast,
+    // is gracefully degraded (treated as zero throughput) because
+    // deaths + removals alone can still describe a queue's outflow.
+    const v: any = {
+      total_days: 1825,
+      waitlist_sizes: { x: xDays, series: [{ label: 'Low cPRA Age 18-45', y: xDays.map(() => 1000) }] },
+      // No waitlist_deaths_per_year → computeWaitTimeByYear bails.
+    };
+    expect(waitTimeAtYearFromViz(v, 3, 95)).toBeNull();
+  });
+
+  it('waitTimeReductionFromViz: positive when scenario has higher throughput (faster outflow → shorter wait)', () => {
+    // Base case: 100 tx/yr → high Ŵ. Scenario: 300 tx/yr → low Ŵ.
+    // Reduction = base − scenario should be POSITIVE.
+    const base = buildWtViz({ txPerYear: 100 });
+    const scen = buildWtViz({ txPerYear: 300 });
+    const reduction = waitTimeReductionFromViz(scen as any, base as any, 3, 95);
+    expect(reduction).not.toBeNull();
+    expect(reduction!).toBeGreaterThan(0);
+  });
+
+  it('waitTimeReductionFromViz: zero when scenario and base are identical', () => {
+    const v = buildWtViz({ txPerYear: 200 });
+    const reduction = waitTimeReductionFromViz(v as any, v as any, 3, 95);
+    expect(reduction).not.toBeNull();
+    expect(reduction!).toBeCloseTo(0, 6);
+  });
+
+  it('threshold parameter actually flows through to wl_removal lookup (95 vs 99 give different Ŵ)', () => {
+    // Same viz, two different thresholds → different wl_removal rates →
+    // different outflow → different Ŵ. The 99% high-cPRA wl_removal
+    // (~0.000280/d) is fractionally larger than 95% (~0.000272/d), so Ŵ
+    // shrinks slightly when we pass 99 instead of 95.
+    const v = buildWtViz();
+    const w95 = waitTimeAtYearFromViz(v as any, 3, 95);
+    const w99 = waitTimeAtYearFromViz(v as any, 3, 99);
+    expect(w95).not.toBeNull();
+    expect(w99).not.toBeNull();
+    // Values are close but distinct — pin that the threshold actually
+    // routes to a different rate table rather than being silently
+    // ignored.
+    expect(Math.abs(w95! - w99!)).toBeGreaterThan(0);
+    expect(Math.abs(w95! - w99!)).toBeLessThan(2);
   });
 });
 

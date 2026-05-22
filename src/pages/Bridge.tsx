@@ -35,6 +35,7 @@ import {
   loadParetoDataset,
   livesSavedFromViz,
   waitlistReductionFromViz,
+  waitTimeReductionFromViz,
   type ParetoDataset,
 } from '@/utils/pareto';
 
@@ -66,6 +67,13 @@ const Bridge: React.FC = () => {
   const [survivalCurve, setSurvivalCurve] = useState<ParetoDataset | null>(null);
   const [survivalLoading, setSurvivalLoading] = useState(true);
   const [survivalError, setSurvivalError] = useState<string | null>(null);
+
+  // Wait-time-vs-survival Pareto. Same x-axis as the waitlist-reduction
+  // card so the two read against an identical sweep; y is base − scenario
+  // wait time per list-spell at year H, derived via Little's Law.
+  const [waitTimeCurve, setWaitTimeCurve] = useState<ParetoDataset | null>(null);
+  const [waitTimeLoading, setWaitTimeLoading] = useState(true);
+  const [waitTimeError, setWaitTimeError] = useState<string | null>(null);
 
   // ── Main viz load (matches Index.tsx flow) ────────────────────────────
   useEffect(() => {
@@ -270,6 +278,70 @@ const Bridge: React.FC = () => {
     params.simulationHorizon,
   ]);
 
+  // ── Pareto: graft survival ↔ wait-time reduction ─────────────────────
+  // Same survival sweep as the waitlist-reduction card so the two
+  // x-axes are identical and the curves can be read against each other.
+  // y = months saved per list-spell at year H, computed via the shared
+  // `waitTimeReductionFromViz` so the value at any point matches the
+  // year-H value the user sees in the WaitTimeChart at the same
+  // (xeno_proportion, survival, threshold, strategy).
+  useEffect(() => {
+    let cancelled = false;
+    setWaitTimeCurve(null);
+    async function loadWaitTime() {
+      setWaitTimeLoading(true);
+      setWaitTimeError(null);
+      if (params.xeno_proportion === 0) {
+        if (!cancelled) {
+          setWaitTimeCurve({ points: [], inflectionIndex: null });
+          setWaitTimeLoading(false);
+        }
+        return;
+      }
+      try {
+        const strategy = params.targetingStrategy || 'standard';
+        const ds = await loadParetoDataset({
+          mode: 'bridge',
+          highCPRAThreshold: params.highCPRAThreshold,
+          strategy,
+          targetYear: params.simulationHorizon,
+          metric: (scen, base, target) =>
+            waitTimeReductionFromViz(scen, base, target, params.highCPRAThreshold),
+          points: BRIDGE_SURVIVAL_MONTHS.map((m): {
+            label: string;
+            x: number;
+            xeno_proportion: number;
+            surv: BridgeSurvivalMonths;
+          } => ({
+            label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
+            x: m,
+            xeno_proportion: params.xeno_proportion,
+            surv: m,
+          })),
+        });
+        if (!cancelled) setWaitTimeCurve(ds);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[Bridge:waitTime Pareto] failed:', err);
+          setWaitTimeError(
+            err instanceof Error ? err.message : 'Could not build wait-time curve',
+          );
+        }
+      } finally {
+        if (!cancelled) setWaitTimeLoading(false);
+      }
+    }
+    loadWaitTime();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    params.highCPRAThreshold,
+    params.targetingStrategy,
+    params.xeno_proportion,
+    params.simulationHorizon,
+  ]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -452,12 +524,13 @@ const Bridge: React.FC = () => {
                   Tradeoff Curves
                 </h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  How additional xeno supply and longer graft survival convert to
-                  lives saved and waitlist reduction at year {params.simulationHorizon}
+                  How additional xeno supply and longer graft survival convert
+                  to lives saved, waitlist reduction, and wait-time reduction
+                  at year {params.simulationHorizon}.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="border-medical-border shadow-md">
                   <CardHeader>
                     <CardTitle className="text-base font-semibold text-foreground">
@@ -515,6 +588,40 @@ const Bridge: React.FC = () => {
                         formatY={(v) =>
                           v.toLocaleString(undefined, { maximumFractionDigits: 0 })
                         }
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-medical-border shadow-md">
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold text-foreground">
+                      Graft survival &nbsp;↔&nbsp; Wait-time reduction
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Same {[6, 12, 18, 24, 36].map((m) => (m % 12 === 0 ? `${m / 12} yr` : `${m} mo`)).join(' · ')}{' '}
+                      survival sweep at {Math.round(xenoBaseRate * params.xeno_proportion).toLocaleString()}/yr
+                      ({params.xeno_proportion}× supply). y = months saved per list-spell at year{' '}
+                      {params.simulationHorizon} (Little's Law on the same viz JSONs).
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    {params.xeno_proportion === 0 ? (
+                      <div
+                        className="flex items-center justify-center text-sm text-muted-foreground italic"
+                        style={{ height: 320 }}
+                      >
+                        Set xeno proportion &gt; 0 to see how graft survival affects wait time.
+                      </div>
+                    ) : (
+                      <ParetoChart
+                        dataset={waitTimeCurve}
+                        loading={waitTimeLoading}
+                        error={waitTimeError}
+                        xLabel="Mean graft survival (months)"
+                        yLabel={`Wait time reduction at year ${params.simulationHorizon} (mo)`}
+                        formatX={(v) => `${v} mo`}
+                        formatY={(v) => `${v.toFixed(1)} mo`}
                       />
                     )}
                   </CardContent>
