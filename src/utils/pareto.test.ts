@@ -19,8 +19,11 @@ import {
   waitlistReductionFromViz,
   waitTimeAtYearFromViz,
   waitTimeReductionFromViz,
+  classifyCurveShape,
+  toMarginalDataset,
   loadParetoDataset,
   type ParetoPointSpec,
+  type ParetoDataset,
 } from './pareto';
 
 describe('kneedle', () => {
@@ -303,6 +306,129 @@ describe('wait-time extractors (Little\'s Law)', () => {
     // ignored.
     expect(Math.abs(w95! - w99!)).toBeGreaterThan(0);
     expect(Math.abs(w95! - w99!)).toBeLessThan(2);
+  });
+});
+
+describe('classifyCurveShape', () => {
+  it('returns "unknown" for fewer than 3 points', () => {
+    expect(classifyCurveShape([1, 2], [3, 4])).toBe('unknown');
+    expect(classifyCurveShape([], [])).toBe('unknown');
+  });
+
+  it('returns "unknown" for length-mismatched inputs', () => {
+    expect(classifyCurveShape([1, 2, 3], [1, 2])).toBe('unknown');
+  });
+
+  it('returns "unknown" for a flat curve (yRange = 0)', () => {
+    expect(classifyCurveShape([1, 2, 3, 4], [5, 5, 5, 5])).toBe('unknown');
+  });
+
+  it('classifies a strictly linear curve as "linear"', () => {
+    const x = [0, 1, 2, 3, 4, 5];
+    const y = [0, 10, 20, 30, 40, 50];
+    expect(classifyCurveShape(x, y)).toBe('linear');
+  });
+
+  it('classifies a clear concave-down increasing curve as "saturating"', () => {
+    // Diminishing returns: each step adds less.
+    const x = [0, 1, 2, 3, 4, 5];
+    const y = [0, 50, 80, 95, 99, 100];
+    expect(classifyCurveShape(x, y)).toBe('saturating');
+  });
+
+  it('classifies a decreasing-with-diminishing-returns curve as "saturating"', () => {
+    // The waitlist-vs-supply shape: drops fast then plateaus. After
+    // canonicalisation (flip y) it's a clear saturating curve.
+    const x = [1, 2, 3, 4, 5, 6];
+    const y = [100, 60, 40, 30, 25, 22];
+    expect(classifyCurveShape(x, y)).toBe('saturating');
+  });
+
+  it('classifies a strictly convex increasing curve as "accelerating"', () => {
+    // Each step adds MORE than the previous one.
+    const x = [0, 1, 2, 3, 4, 5];
+    const y = [0, 1, 4, 9, 16, 25]; // y = x²
+    expect(classifyCurveShape(x, y)).toBe('accelerating');
+  });
+
+  it('classifies a sigmoid (decel→accel→decel) as "s-shape"', () => {
+    // Mildly s-shaped 5-point curve: slopes go small, large, large,
+    // small. Mixed signs in second difference → s-shape.
+    const x = [0, 1, 2, 3, 4];
+    const y = [0, 5, 50, 95, 100];
+    expect(classifyCurveShape(x, y)).toBe('s-shape');
+  });
+
+  it('classifies a zig-zag curve as "non-monotonic"', () => {
+    const x = [0, 1, 2, 3, 4];
+    const y = [0, 100, 20, 90, 30];
+    expect(classifyCurveShape(x, y)).toBe('non-monotonic');
+  });
+
+  it('classifies a real-world bridge supply sweep (essentially linear) as "linear"', () => {
+    // The data that broke the kneedle test earlier: an essentially
+    // straight line should NOT be flagged as saturating.
+    const x = [862, 1723, 2585, 3446, 5169];
+    const y = [175, 423, 592, 860, 1327];
+    expect(classifyCurveShape(x, y)).toBe('linear');
+  });
+});
+
+describe('toMarginalDataset', () => {
+  const makeDataset = (xs: number[], ys: number[]): ParetoDataset => ({
+    points: xs.map((x, i) => ({
+      x,
+      y: ys[i],
+      label: `${x}`,
+      configName: `cfg_${i}`,
+      inflection: false,
+    })),
+    inflectionIndex: null,
+  });
+
+  it('returns null for fewer than 2 points', () => {
+    expect(toMarginalDataset(makeDataset([0], [0]))).toBeNull();
+    expect(
+      toMarginalDataset({ points: [], inflectionIndex: null }),
+    ).toBeNull();
+  });
+
+  it('produces N-1 points each at Δy/Δx of the corresponding segment', () => {
+    // y = x² → marginal at index i (between x[i] and x[i+1]) =
+    // (x[i+1]² − x[i]²) / Δx = x[i+1] + x[i] when Δx = 1.
+    const ds = makeDataset([0, 1, 2, 3, 4], [0, 1, 4, 9, 16]);
+    const marg = toMarginalDataset(ds);
+    expect(marg).not.toBeNull();
+    expect(marg!.points).toHaveLength(4);
+    expect(marg!.points.map((p) => p.y)).toEqual([1, 3, 5, 7]);
+    // Marginal x values live at the upper x of each segment so the
+    // chart can read "the marginal return when we went from x[i] to
+    // x[i+1]" at x[i+1].
+    expect(marg!.points.map((p) => p.x)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('skips zero-Δx segments instead of producing NaN/Infinity', () => {
+    const ds = makeDataset([0, 1, 1, 2], [0, 5, 5, 10]);
+    const marg = toMarginalDataset(ds);
+    expect(marg).not.toBeNull();
+    // Expect 2 points (the two real segments); the duplicate-x segment is dropped.
+    expect(marg!.points).toHaveLength(2);
+    for (const p of marg!.points) expect(Number.isFinite(p.y)).toBe(true);
+  });
+
+  it('runs Kneedle on the marginal series so the marginal chart can highlight a knee', () => {
+    // Cumulative curve with a sharp diminishing-returns shape →
+    // marginal slopes drop sharply then plateau → marginal Kneedle
+    // should detect a knee.
+    const xs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const ys = [0, 100, 180, 230, 260, 280, 295, 305, 312, 315];
+    const ds = makeDataset(xs, ys);
+    const marg = toMarginalDataset(ds);
+    expect(marg).not.toBeNull();
+    // The marginal series is [100, 80, 50, 30, 20, 15, 10, 7, 3] — a
+    // clear concave-decreasing curve. After Kneedle's sign flip it
+    // becomes increasing-saturating, which is the canonical shape.
+    expect(marg!.inflectionIndex).not.toBeNull();
   });
 });
 

@@ -394,6 +394,161 @@ export function kneedle(x: number[], y: number[]): number | null {
   return bestIdx;
 }
 
+// ─── Curve-shape classification ────────────────────────────────────────────
+//
+// Closes the explicit Problem 6.4 ask ("systematic analysis of curve
+// morphology under different assumptions"). Each Pareto curve gets
+// classified into one of five shape categories that the chart card
+// surfaces as a small chip on the legend, so the user can see at a
+// glance whether a subgroup's response is saturating, still
+// accelerating, etc., without having to eyeball the line.
+//
+// Categories (see `CurveShape`):
+//   linear         — slope ≈ constant, no meaningful concavity
+//   saturating     — slope decreases monotonically (concave-down on
+//                    increasing curves; this is the diminishing-returns
+//                    shape kneedle is designed for)
+//   accelerating   — slope increases monotonically (convex on
+//                    increasing curves; "the more we add, the more we
+//                    save per unit added" — uncommon but appears in
+//                    bridge mode at low survival)
+//   s-shape        — slope changes sign once (acceleration then
+//                    deceleration, or vice versa); produces an
+//                    inflection point in the *first* derivative
+//   non-monotonic  — y itself zig-zags; "the concept of curvature is
+//                    undefined here, MC noise probably dominates"
+//   unknown        — too few points (< 3) or degenerate input
+//
+// Implementation note: this is intentionally a small heuristic, not a
+// full statistical model. We canonicalise decreasing curves to
+// increasing (by flipping y), compute first differences (slopes) and
+// second differences (accelerations), and bucket on the *signs* of
+// those differences with a small tolerance derived from the slope
+// magnitude. The thresholds here are tuned for the 4-7 point Pareto
+// curves the dashboard actually produces — for longer time series a
+// proper Loess + curvature integral would be more robust.
+
+export type CurveShape =
+  | 'linear'
+  | 'saturating'
+  | 'accelerating'
+  | 's-shape'
+  | 'non-monotonic'
+  | 'unknown';
+
+export function classifyCurveShape(xs: number[], ys: number[]): CurveShape {
+  if (!xs || !ys || xs.length !== ys.length || xs.length < 3) return 'unknown';
+  const n = xs.length;
+
+  // Step 1 — overall monotonicity on y.
+  const yRange = Math.max(...ys) - Math.min(...ys);
+  if (yRange === 0) return 'unknown';
+  const yTol = 0.05 * yRange;
+  let nUp = 0;
+  let nDown = 0;
+  for (let i = 1; i < n; i++) {
+    const d = ys[i] - ys[i - 1];
+    if (d > yTol) nUp += 1;
+    else if (d < -yTol) nDown += 1;
+  }
+  if (nUp > 0 && nDown > 0) return 'non-monotonic';
+
+  // Step 2 — slopes. Bail on duplicate x (degenerate).
+  const slopes: number[] = [];
+  for (let i = 1; i < n; i++) {
+    if (xs[i] === xs[i - 1]) return 'unknown';
+    slopes.push((ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1]));
+  }
+  // Canonicalise to "increasing" so the rest of the logic doesn't have
+  // to special-case decreasing curves. Flipping y → flipping every
+  // slope's sign, which preserves all curvature relationships.
+  const flipped = nDown > 0;
+  const canonSlopes = flipped ? slopes.map((s) => -s) : slopes;
+
+  // Step 3 — "essentially linear" pre-filter. If the curve's max slope
+  // is less than 1.7× its min slope (in absolute value), the line is
+  // straight enough that the per-segment fluctuations are almost
+  // certainly Monte-Carlo noise rather than real curvature. Without
+  // this filter, real bridge data — e.g. supply ∈ {0.5, 1, 1.5, 2, 3}
+  // with slopes ≈ {0.29, 0.20, 0.31, 0.27} — gets mis-labelled as
+  // s-shape because two of its acceleration wobbles squeak past the
+  // 10 %-of-mean-slope threshold below. 1.7 was chosen empirically:
+  // it forgives ±25 % per-segment noise but still distinguishes a
+  // genuine concave curve (saturating shapes have slope ratio ≥ 3).
+  const absSlopes = canonSlopes.map(Math.abs).filter((s) => s > 0);
+  if (absSlopes.length > 0) {
+    const sMin = Math.min(...absSlopes);
+    const sMax = Math.max(...absSlopes);
+    if (sMin > 0 && sMax / sMin < 1.7) return 'linear';
+  }
+
+  // Step 4 — accelerations (second differences of y, scaled by Δx).
+  // For uniform x-spacing these are exactly the second differences;
+  // for non-uniform spacing they're a reasonable proxy.
+  const accel: number[] = [];
+  for (let i = 1; i < canonSlopes.length; i++) {
+    accel.push(canonSlopes[i] - canonSlopes[i - 1]);
+  }
+  if (accel.length === 0) return 'linear';
+
+  // Step 5 — bucket. Tolerance for "this acceleration is meaningful"
+  // is 10 % of the average absolute slope — i.e. the curvature has to
+  // be at least 10 % of the magnitude of the curve's overall climb to
+  // count as a real shape change vs. measurement noise.
+  const meanAbsSlope =
+    canonSlopes.reduce((a, b) => a + Math.abs(b), 0) / canonSlopes.length;
+  const accTol = 0.1 * meanAbsSlope;
+  let nAcc = 0;
+  let nDec = 0;
+  for (const a of accel) {
+    if (a > accTol) nAcc += 1;
+    else if (a < -accTol) nDec += 1;
+  }
+  if (nAcc === 0 && nDec === 0) return 'linear';
+  if (nDec > 0 && nAcc === 0) return 'saturating';
+  if (nAcc > 0 && nDec === 0) return 'accelerating';
+  // Mixed signs in the second difference → s-shape (one regime change)
+  // OR noisy. We don't try to distinguish further; the user can see
+  // both possibilities visually once the chip flags it as an s-shape.
+  return 's-shape';
+}
+
+/**
+ * Convert a (cumulative) Pareto dataset into a "marginal" version where
+ * each y is the per-x-unit slope of the original curve at that step.
+ * Length goes from N points → N-1 points; the marginal y at index i
+ * lives at the original x[i+1] ("the marginal return when we went from
+ * x[i] to x[i+1]"). Inflection annotation is recomputed against the
+ * marginal series — the marginal-curve's "knee" is where the curve's
+ * acceleration peaks (often a more clinically useful inflection than
+ * the cumulative knee).
+ *
+ * Returns null if the input has fewer than 2 points (no segments).
+ */
+export function toMarginalDataset(ds: ParetoDataset): ParetoDataset | null {
+  if (!ds || ds.points.length < 2) return null;
+  const out: ParetoPoint[] = [];
+  for (let i = 1; i < ds.points.length; i++) {
+    const a = ds.points[i - 1];
+    const b = ds.points[i];
+    const dx = b.x - a.x;
+    if (dx === 0) continue;
+    out.push({
+      x: b.x,
+      y: (b.y - a.y) / dx,
+      label: `${a.label} → ${b.label}`,
+      configName: b.configName,
+      inflection: false,
+    });
+  }
+  if (out.length < 2) return { points: out, inflectionIndex: null };
+  const xs = out.map((p) => p.x);
+  const ys = out.map((p) => p.y);
+  const knee = kneedle(xs, ys);
+  if (knee !== null) out[knee].inflection = true;
+  return { points: out, inflectionIndex: knee };
+}
+
 // ─── Pareto dataset loader ──────────────────────────────────────────────────
 
 /**
