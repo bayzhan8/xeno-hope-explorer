@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Info, ChevronDown, ChevronUp, Target } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getXenoBaseRate } from '@/utils/dataTransformer';
+import { fmtMeanTime, fmtAnnualRate } from '@/utils/chartFormat';
 import {
   Select,
   SelectContent,
@@ -58,35 +59,27 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
   const xenoBaseRate = getXenoBaseRate(strategy, params.highCPRAThreshold);
   const xenoKidneysPerYear = Math.round(xenoBaseRate * params.xeno_proportion);
 
-  // Graft failure / death base rates by cPRA threshold
+  // Graft failure / death base rates by cPRA threshold. Stored at the
+  // precision they were estimated, but only ever displayed to one
+  // decimal — anything beyond that is pseudo-precision given the
+  // Monte Carlo noise in the underlying simulator.
   const baseRates = {
-    85: { transplantsPerYear: 2841, graftFailureRate: 5.60, postTxDeathRate: 4.12 },
-    95: { transplantsPerYear: 1723, graftFailureRate: 6.81, postTxDeathRate: 3.96 },
-    99: { transplantsPerYear: 974, graftFailureRate: 8.36, postTxDeathRate: 3.96 },
+    85: { transplantsPerYear: 2841, graftFailureRate: 5.6, postTxDeathRate: 4.1 },
+    95: { transplantsPerYear: 1723, graftFailureRate: 6.8, postTxDeathRate: 4.0 },
+    99: { transplantsPerYear: 974, graftFailureRate: 8.4, postTxDeathRate: 4.0 },
   };
 
   const currentRates = baseRates[params.highCPRAThreshold as keyof typeof baseRates] || baseRates[85];
-  
-  // Calculate actual rates based on multipliers
-  const actualGraftFailureRate = (currentRates.graftFailureRate * params.xenoGraftFailureRate).toFixed(2);
-  const actualPostTxDeathRate = (currentRates.postTxDeathRate * params.postTransplantDeathRate).toFixed(2);
 
-  // Convert an annual % rate (under a constant hazard) into a human-readable
-  // mean time to event. r years⁻¹ → 1/r years. Falls back to "never" at 0.
-  const formatMeanTime = (annualPctRate: number): string => {
-    if (!isFinite(annualPctRate) || annualPctRate <= 0) return 'never (no failures)';
-    const years = 100 / annualPctRate;
-    if (years >= 2) return `~${years.toFixed(1)} years on avg`;
-    const months = years * 12;
-    return `~${months.toFixed(0)} months on avg`;
-  };
+  const actualGraftFailureAnnual = currentRates.graftFailureRate * params.xenoGraftFailureRate;
+  const actualPostTxDeathAnnual = currentRates.postTxDeathRate * params.postTransplantDeathRate;
+  const meanTimeToGraftFailure = fmtMeanTime(actualGraftFailureAnnual);
+  const meanTimeToPostTxDeath = fmtMeanTime(actualPostTxDeathAnnual);
 
-  const meanTimeToGraftFailure = formatMeanTime(
-    currentRates.graftFailureRate * params.xenoGraftFailureRate
-  );
-  const meanTimeToPostTxDeath = formatMeanTime(
-    currentRates.postTxDeathRate * params.postTransplantDeathRate
-  );
+  // Multipliers are user-selected on a 0.5 grid (0, 0.5, 1, 1.5, 2),
+  // so showing one decimal is exact and avoids the trailing zero that
+  // confused readers ("Why is it 1.00x? Is there hidden precision?").
+  const fmtMultiplier = (m: number) => `${m.toFixed(1)}×`;
 
   return (
     <TooltipProvider>
@@ -174,10 +167,10 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
           </div>
 
-          {/* Xeno Kidneys Per Year */}
+          {/* Xeno Supply Rate */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Xeno Kidneys Per Year</Label>
+              <Label className="text-sm font-medium">Xeno Supply Rate (intended, per year)</Label>
               <span className="text-sm font-semibold text-primary">{xenoKidneysPerYear.toLocaleString()}</span>
             </div>
             <Slider
@@ -195,8 +188,9 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">
-                {xenoKidneysPerYear.toLocaleString()} xeno kidneys added per year on top of existing human transplants
-                {' '}({params.xeno_proportion}x of {xenoBaseRate.toLocaleString()} base rate)
+                {xenoKidneysPerYear.toLocaleString()} xeno procedures/year offered on top of existing human transplants
+                {' '}({params.xeno_proportion}x of {xenoBaseRate.toLocaleString()} base rate).
+                Actual delivered count may be lower if the eligible waitlist drains (see Throughput card).
               </p>
               <button
                 type="button"
@@ -240,7 +234,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Xeno Graft Failure Rate (Kidney Rejection)</Label>
               <div className="text-right">
-                <div className="text-sm text-muted-foreground">{params.xenoGraftFailureRate.toFixed(2)}x standard kidney</div>
+                <div className="text-sm text-muted-foreground">{fmtMultiplier(params.xenoGraftFailureRate)} standard kidney</div>
                 <div className="text-xs text-muted-foreground">{meanTimeToGraftFailure} until rejection</div>
               </div>
             </div>
@@ -277,9 +271,9 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 <p className="font-medium text-foreground">Xeno Graft Failure Rate (Kidney Rejection)</p>
                 <p>We model a xeno kidney as a <strong>standard human kidney scaled by a multiplier</strong>. At 1.0x, xeno graft failure matches the SRTR-derived rate for a standard human kidney in the same cPRA bin. Below are those reference (1.0x) rates by cPRA threshold &mdash; with the corresponding mean time until the graft fails and the recipient is re-listed back on the waiting list:</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>85+ cPRA: 5.60 % / yr → {formatMeanTime(5.60)} until rejection</li>
-                  <li>95+ cPRA: 6.81 % / yr → {formatMeanTime(6.81)} until rejection</li>
-                  <li>99+ cPRA: 8.36 % / yr → {formatMeanTime(8.36)} until rejection</li>
+                  <li>85+ cPRA: {fmtAnnualRate(5.6)} → {fmtMeanTime(5.6)} until rejection</li>
+                  <li>95+ cPRA: {fmtAnnualRate(6.8)} → {fmtMeanTime(6.8)} until rejection</li>
+                  <li>99+ cPRA: {fmtAnnualRate(8.4)} → {fmtMeanTime(8.4)} until rejection</li>
                 </ul>
                 <div className="mt-2 pt-2 border-t border-medical-border">
                   <p className="font-medium text-foreground mb-1">Understanding the Multipliers</p>
@@ -292,8 +286,8 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                     <li>0x → no rejection modeled</li>
                   </ul>
                   <p className="mt-2">
-                    Currently selected: <strong>{params.xenoGraftFailureRate.toFixed(2)}x</strong> on {params.highCPRAThreshold}+ cPRA<br />
-                    = {actualGraftFailureRate} % per year ({meanTimeToGraftFailure})
+                    Currently selected: <strong>{fmtMultiplier(params.xenoGraftFailureRate)}</strong> on {params.highCPRAThreshold}+ cPRA<br />
+                    = {fmtAnnualRate(actualGraftFailureAnnual)} ({meanTimeToGraftFailure})
                   </p>
                 </div>
               </div>
@@ -305,7 +299,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Xeno Post-Transplant Death Rate</Label>
               <div className="text-right">
-                <div className="text-sm text-muted-foreground">{params.postTransplantDeathRate.toFixed(2)}x standard kidney</div>
+                <div className="text-sm text-muted-foreground">{fmtMultiplier(params.postTransplantDeathRate)} standard kidney</div>
                 <div className="text-xs text-muted-foreground">{meanTimeToPostTxDeath} until death</div>
               </div>
             </div>
@@ -342,9 +336,9 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 <p className="font-medium text-foreground">Xeno Post-Transplant Death Rate</p>
                 <p>Same idea as graft failure: a xeno recipient's post-transplant death hazard is modeled as a <strong>standard human kidney recipient's hazard scaled by a multiplier</strong>. At 1.0x, the rate equals the SRTR-derived value for a standard human kidney recipient in the same cPRA bin. Reference (1.0x) rates by cPRA threshold:</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>85+ cPRA: 4.12 % / yr → {formatMeanTime(4.12)} until death</li>
-                  <li>95+ cPRA: 3.96 % / yr → {formatMeanTime(3.96)} until death</li>
-                  <li>99+ cPRA: 3.96 % / yr → {formatMeanTime(3.96)} until death</li>
+                  <li>85+ cPRA: {fmtAnnualRate(4.1)} → {fmtMeanTime(4.1)} until death</li>
+                  <li>95+ cPRA: {fmtAnnualRate(4.0)} → {fmtMeanTime(4.0)} until death</li>
+                  <li>99+ cPRA: {fmtAnnualRate(4.0)} → {fmtMeanTime(4.0)} until death</li>
                 </ul>
                 <div className="mt-2 pt-2 border-t border-medical-border">
                   <p className="font-medium text-foreground mb-1">Understanding the Multipliers</p>
@@ -357,8 +351,8 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                     <li>0x → no post-transplant deaths modeled</li>
                   </ul>
                   <p className="mt-2">
-                    Currently selected: <strong>{params.postTransplantDeathRate.toFixed(2)}x</strong> on {params.highCPRAThreshold}+ cPRA<br />
-                    = {actualPostTxDeathRate} % per year ({meanTimeToPostTxDeath})
+                    Currently selected: <strong>{fmtMultiplier(params.postTransplantDeathRate)}</strong> on {params.highCPRAThreshold}+ cPRA<br />
+                    = {fmtAnnualRate(actualPostTxDeathAnnual)} ({meanTimeToPostTxDeath})
                   </p>
                 </div>
               </div>
