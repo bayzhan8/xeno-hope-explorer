@@ -62,6 +62,16 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
   // Helpers for the survival button-group: friendly label + duration label.
   const survivalLabel = (m: number): string => (m % 12 === 0 ? `${m / 12} yr` : `${m} mo`);
 
+  // Compact number formatter for the slider tick labels. The any-cPRA
+  // allocation strategies push the max value into the tens of thousands,
+  // and seven 5-digit comma-formatted labels collide under a ~280px slider.
+  // Render thousands as "k" so all seven ticks fit without overlapping.
+  const formatCompact = (n: number): string => {
+    if (n < 1000) return n.toLocaleString();
+    if (n < 10000) return `${(n / 1000).toFixed(1)}k`;
+    return `${Math.round(n / 1000)}k`;
+  };
+
   return (
     <TooltipProvider>
       <Card className="w-full bg-card shadow-[var(--shadow-medium)] border-medical-border flex flex-col max-h-[calc(100vh-4rem)]">
@@ -164,9 +174,11 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
               step={0.5}
               className="w-full"
             />
-            <div className="flex justify-between text-xs text-muted-foreground">
+            <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
               {[0, 0.5, 1, 1.5, 2, 3, 4].map((m) => (
-                <span key={m}>{Math.round(xenoBaseRate * m).toLocaleString()}</span>
+                <span key={m} className="whitespace-nowrap">
+                  {formatCompact(Math.round(xenoBaseRate * m))}
+                </span>
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
