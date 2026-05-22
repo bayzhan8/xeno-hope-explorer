@@ -328,14 +328,15 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
   // that we look the row up by year directly from the underlying
   // dataset (`rows`) instead of relying on Recharts' `payload`.
   //
-  // Each chart instantiates its own tooltip via `makeChartTooltip`
-  // below, passing in:
-  //   - rows:        the dataset the chart is actually plotting
-  //   - cohorts:     { key, baseKey?, label, accent? } per series row
-  //   - yearLabel:   how to render the x-axis value ("Year 5", "Year 5 (end)")
-  //   - measureLabel:short label for the y-axis quantity ("patients",
-  //                  "deaths", "lives saved/yr")
-  //   - extraNote:   optional one-liner appended above the supply tag
+  // **Layout** (revised after user flagged the v1 card was so large it
+  // covered the chart): one COMPACT row per cohort,
+  //
+  //     ● Total waitlist     84,231  ← 87,544   −3.8%
+  //
+  // Header is the year, footer keeps the unit + supply tag. The whole
+  // card is pinned to the top-right corner of the chart via
+  // TOOLTIP_BASE_PROPS so it never sits on top of the data points the
+  // user is trying to read.
   // ───────────────────────────────────────────────────────────────────
   type TooltipCohort = {
     /** Field name on the row for the intervention value. */
@@ -375,11 +376,11 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
       const yearLabel = `End of year ${typeof label === 'number' ? label : Number(label).toFixed(0)}`;
 
       return (
-        <div className="bg-card border border-medical-border rounded-lg p-3 shadow-[var(--shadow-medium)] min-w-[260px]">
-          <p className="text-sm font-semibold text-foreground mb-2 pb-1.5 border-b border-medical-border">
+        <div className="bg-card/95 backdrop-blur-sm border border-medical-border rounded-md p-2 shadow-md text-[11px] leading-tight max-w-[320px]">
+          <p className="text-xs font-semibold text-foreground pb-1 mb-1 border-b border-medical-border">
             {yearLabel}
           </p>
-          <div className="space-y-2">
+          <div className="space-y-0.5">
             {cohorts.map((c) => {
               const raw = row[c.key];
               const baseRaw = c.baseKey ? row[c.baseKey] : undefined;
@@ -387,55 +388,46 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
               const base = typeof baseRaw === 'number' ? baseRaw : undefined;
               const formatVal = c.format ?? fmtCount;
               const haveBase = base !== undefined;
-              const delta = haveBase && value !== undefined ? value - base : undefined;
+              const deltaColor =
+                !haveBase || value === undefined || value === base
+                  ? 'text-muted-foreground'
+                  : value < base
+                    ? 'text-success'
+                    : 'text-destructive';
 
               return (
-                <div key={c.key} className="text-xs leading-snug">
-                  <div className="flex items-center gap-1.5 font-medium text-foreground">
-                    {c.color && (
-                      <span
-                        className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                        style={{ backgroundColor: c.color }}
-                        aria-hidden
-                      />
-                    )}
-                    <span>{c.label}</span>
-                  </div>
-                  <div className="ml-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 mt-0.5">
-                    <span className="text-muted-foreground">Intervention</span>
-                    <span className="text-foreground tabular-nums text-right">
+                <div
+                  key={c.key}
+                  className="grid grid-cols-[8px_minmax(0,1fr)_auto] gap-x-2 items-center"
+                >
+                  <span
+                    className="inline-block w-2 h-2 rounded-sm"
+                    style={{ backgroundColor: c.color }}
+                    aria-hidden
+                  />
+                  <span className="text-foreground truncate">{c.label}</span>
+                  <span className="tabular-nums text-right whitespace-nowrap">
+                    <span className="font-medium text-foreground">
                       {value !== undefined ? formatVal(value) : '—'}
-                    </span>
-                    <span className="text-muted-foreground">Baseline</span>
-                    <span className="text-foreground tabular-nums text-right">
-                      {haveBase ? formatVal(base) : 'n/a'}
                     </span>
                     {haveBase && (
                       <>
-                        <span className="text-muted-foreground">Δ vs. baseline</span>
-                        <span
-                          className={
-                            'tabular-nums text-right ' +
-                            (delta === undefined || delta === 0
-                              ? 'text-muted-foreground'
-                              : delta < 0
-                                ? 'text-success'
-                                : 'text-destructive')
-                          }
-                        >
-                          {delta !== undefined ? `${fmtDelta(delta)} (${fmtDeltaPct(value!, base)})` : '—'}
+                        <span className="text-muted-foreground"> ← </span>
+                        <span className="text-muted-foreground">{formatVal(base)}</span>
+                        <span className={'ml-2 ' + deltaColor}>
+                          {fmtDeltaPct(value!, base)}
                         </span>
                       </>
                     )}
-                  </div>
+                  </span>
                 </div>
               );
             })}
           </div>
-          <div className="mt-2 pt-1.5 border-t border-medical-border text-[10px] text-muted-foreground leading-snug">
-            <p className="mb-0.5"><span className="font-medium text-foreground">Unit:</span> {measureLabel}</p>
-            {extraNote && <p className="mb-0.5">{extraNote}</p>}
-            <p><span className="font-medium text-foreground">Supply:</span> {supplyTag}</p>
+          <div className="mt-1 pt-1 border-t border-medical-border text-[10px] text-muted-foreground leading-tight">
+            <p className="truncate">{measureLabel}</p>
+            {extraNote && <p className="truncate">{extraNote}</p>}
+            <p className="truncate">{supplyTag}</p>
           </div>
         </div>
       );
@@ -463,51 +455,71 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
       if (!row) return null;
       const yearLabel = `End of year ${typeof label === 'number' ? label : Number(label).toFixed(0)}`;
       return (
-        <div className="bg-card border border-medical-border rounded-lg p-3 shadow-[var(--shadow-medium)] min-w-[240px]">
-          <p className="text-sm font-semibold text-foreground mb-2 pb-1.5 border-b border-medical-border">
+        <div className="bg-card/95 backdrop-blur-sm border border-medical-border rounded-md p-2 shadow-md text-[11px] leading-tight max-w-[260px]">
+          <p className="text-xs font-semibold text-foreground pb-1 mb-1 border-b border-medical-border">
             {yearLabel}
           </p>
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {cohorts.map((c) => {
               const v = row[c.key];
               const value = typeof v === 'number' ? v : undefined;
+              const colorClass =
+                value === undefined || value === 0
+                  ? 'text-muted-foreground'
+                  : value > 0
+                    ? 'text-success font-medium'
+                    : 'text-destructive font-medium';
               return (
-                <div key={c.key} className="flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    {c.color && (
-                      <span
-                        className="inline-block w-2.5 h-2.5 rounded-sm"
-                        style={{ backgroundColor: c.color }}
-                        aria-hidden
-                      />
-                    )}
-                    <span className="text-foreground">{c.label}</span>
-                  </div>
+                <div
+                  key={c.key}
+                  className="grid grid-cols-[8px_minmax(0,1fr)_auto] gap-x-2 items-center"
+                >
                   <span
-                    className={
-                      'tabular-nums ' +
-                      (value === undefined || value === 0
-                        ? 'text-muted-foreground'
-                        : value > 0
-                          ? 'text-success font-medium'
-                          : 'text-destructive font-medium')
-                    }
-                  >
+                    className="inline-block w-2 h-2 rounded-sm"
+                    style={{ backgroundColor: c.color }}
+                    aria-hidden
+                  />
+                  <span className="text-foreground truncate">{c.label}</span>
+                  <span className={'tabular-nums text-right whitespace-nowrap ' + colorClass}>
                     {value !== undefined ? fmtDelta(value) : '—'}
                   </span>
                 </div>
               );
             })}
           </div>
-          <div className="mt-2 pt-1.5 border-t border-medical-border text-[10px] text-muted-foreground leading-snug">
-            <p className="mb-0.5">
-              <span className="font-medium text-foreground">Unit:</span> lives saved per year (positive = fewer deaths vs. baseline)
-            </p>
-            <p><span className="font-medium text-foreground">Supply:</span> {supplyTag}</p>
+          <div className="mt-1 pt-1 border-t border-medical-border text-[10px] text-muted-foreground leading-tight">
+            <p className="truncate">lives saved/yr · positive = fewer deaths vs. baseline</p>
+            <p className="truncate">{supplyTag}</p>
           </div>
         </div>
       );
     };
+  };
+
+  // ───────────────────────────────────────────────────────────────────
+  // Tooltip placement — pin to chart's top-right corner so the card
+  // never sits on top of the data the user is hovering. Cursor X is
+  // still tracked via Recharts' vertical guideline (cursor prop); only
+  // the card itself is anchored.
+  //
+  // `position={{ x: 0, y: 0 }}` zeroes Recharts' internal placement
+  // math; `wrapperStyle` overrides the inline `top/left/transform` the
+  // wrapper div would otherwise carry so right-anchoring actually wins.
+  // `pointerEvents: 'none'` prevents the card from trapping hover and
+  // causing flicker as the cursor moves near it.
+  // ───────────────────────────────────────────────────────────────────
+  const TOOLTIP_BASE_PROPS = {
+    position: { x: 0, y: 0 },
+    allowEscapeViewBox: { x: true, y: false },
+    wrapperStyle: {
+      top: 4,
+      right: 4,
+      left: 'auto',
+      bottom: 'auto',
+      transform: 'none',
+      pointerEvents: 'none' as const,
+      zIndex: 10,
+    } as React.CSSProperties,
   };
 
   return (
@@ -544,7 +556,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   tickFormatter={fmtCount}
                   label={{ value: 'Patients waiting', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
-                <Tooltip content={makeChartTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                   prepareAgeDataForChart(filteredData.waitlistDataByAge),
                   AGE_GROUPS.filter(g => ageGroupsPerChart.waitlist[g.key]).flatMap(g => [
                     { key: `total_${g.key}`, label: `Total · age ${g.label}y`, color: g.color },
@@ -609,7 +621,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   tickFormatter={fmtCount}
                   label={{ value: 'Patients waiting', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
-                <Tooltip content={makeChartTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                   filteredData.waitlistData,
                   [
                     { key: 'total', baseKey: 'baseTotal', label: 'Total waitlist', color: COLORS.primary },
@@ -761,7 +773,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                     label={{ value: 'Simulation year', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                   />
                   <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={fmtCount} label={{ value: 'Living recipients', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
-                  <Tooltip content={makeChartTooltip(
+                  <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                     prepareAgeDataForChart(filteredData.recipientsDataByAge),
                     AGE_GROUPS.filter(g => ageGroupsPerChart.recipients[g.key]).map(g => (
                       { key: `total_${g.key}`, label: `Total · age ${g.label}y`, color: g.color }
@@ -873,7 +885,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   label={{ value: 'Simulation year', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={fmtCount} label={{ value: 'Living recipients', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
-                <Tooltip content={makeChartTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                   filteredData.recipientsData,
                   [
                     { key: 'highXeno', label: `${highCpraLabel} · xeno`, color: COLORS.quaternary },
@@ -968,7 +980,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                     label={{ value: 'Simulation year', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                   />
                   <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={fmtCount} label={{ value: 'Cumulative deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
-                  <Tooltip content={makeChartTooltip(
+                  <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                     prepareAgeDataForChart(filteredData.cumulativeDeathsDataByAge),
                     AGE_GROUPS.filter(g => ageGroupsPerChart.cumulativeDeaths[g.key]).map(g => (
                       { key: `total_${g.key}`, label: `Total · age ${g.label}y`, color: g.color }
@@ -1086,7 +1098,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   label={{ value: 'Simulation year', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
                 <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} tickFormatter={fmtCount} label={{ value: 'Cumulative deaths', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }} />
-                <Tooltip content={makeChartTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                   filteredData.cumulativeDeathsData,
                   [
                     { key: 'total', label: 'Total deaths', color: COLORS.primary },
@@ -1176,7 +1188,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   tickFormatter={fmtCount}
                   label={{ value: 'Deaths during year', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
-                <Tooltip content={makeChartTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                   prepareAgeDataForChart(filteredData.waitlistDeathsPerYearDataByAge),
                   AGE_GROUPS.filter(g => ageGroupsPerChart.waitlistDeathsPerYear[g.key]).map(g => (
                     { key: `total_${g.key}`, label: `Total · age ${g.label}y`, color: g.color }
@@ -1272,7 +1284,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   domain={[0, 'auto']}
                   label={{ value: 'Deaths during year', angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' } }}
                 />
-                <Tooltip content={makeChartTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                   wlPerYearRows,
                   [
                     { key: 'total', baseKey: 'baseTotal', label: 'Total waitlist deaths', color: '#8b0000' },
@@ -1464,7 +1476,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   domain={[0, 'auto']}
                   label={{ value: 'Deaths during year', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
-                <Tooltip content={makeChartTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                   prepareAgeDataForChart(filteredData.deathsPerYearDataByAge),
                   AGE_GROUPS.filter(g => ageGroupsPerChart.deathsPerYear[g.key]).map(g => (
                     { key: `total_${g.key}`, label: `Total · age ${g.label}y`, color: g.color }
@@ -1525,7 +1537,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   domain={[0, 'auto']}
                   label={{ value: 'Deaths during year', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
-                <Tooltip content={makeChartTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeChartTooltip(
                   filteredData.deathsPerYearData,
                   [
                     { key: 'total', label: 'Total', color: COLORS.quaternary },
@@ -1602,7 +1614,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   label={{ value: 'Lives saved per year', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
-                <Tooltip content={makeNetPreventedTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeNetPreventedTooltip(
                   prepareAgeDataForChart(filteredData.netDeathsPreventedByAge),
                   AGE_GROUPS.filter(g => ageGroupsPerChart.netDeathsPrevented[g.key]).map(g => (
                     { key: `total_${g.key}`, label: `Age ${g.label}y`, color: g.color }
@@ -1666,7 +1678,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                   label={{ value: 'Lives saved per year', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))', fontSize: 11 } }}
                 />
                 <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
-                <Tooltip content={makeNetPreventedTooltip(
+                <Tooltip {...TOOLTIP_BASE_PROPS} content={makeNetPreventedTooltip(
                   filteredData.netDeathsPreventedPerYearData,
                   [
                     { key: 'total', label: 'Total', color: '#15803d' },
