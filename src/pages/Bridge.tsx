@@ -16,7 +16,8 @@ import { Activity, Beaker, Loader2, Hourglass, TrendingDown } from 'lucide-react
 import BridgeControls, { type BridgeParams } from '@/components/BridgeControls';
 import SimulationCharts from '@/components/SimulationCharts';
 import SummaryMetrics from '@/components/SummaryMetrics';
-import ParetoChart from '@/components/ParetoChart';
+import ParetoChart, { type ParetoSeries } from '@/components/ParetoChart';
+import SegmentedControl from '@/components/SegmentedControl';
 import ModeNav from '@/components/ModeNav';
 import WaitTimeChart from '@/components/WaitTimeChart';
 
@@ -36,8 +37,19 @@ import {
   livesSavedFromViz,
   waitlistReductionFromViz,
   waitTimeReductionFromViz,
-  type ParetoDataset,
 } from '@/utils/pareto';
+import {
+  type OverlayMode,
+  type ParetoView,
+  THRESHOLDS,
+  THRESHOLD_PALETTE,
+  THRESHOLD_LABEL,
+  STRATEGIES,
+  STRATEGY_PALETTE,
+  STRATEGY_LABEL,
+  type ThresholdValue,
+  type StrategyValue,
+} from '@/components/paretoOverlay';
 
 const Bridge: React.FC = () => {
   const [params, setParams] = useState<BridgeParams>({
@@ -56,24 +68,68 @@ const Bridge: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Pareto state — separate so the main chart load doesn't block them and
-  // vice-versa. Both charts depend on (mode, threshold, strategy, horizon)
-  // but DO NOT depend on the user's xeno_proportion / survivalMonths
-  // selection (the chart's whole purpose is to show the full sweep).
-  const [supplyCurve, setSupplyCurve] = useState<ParetoDataset | null>(null);
+  // Pareto toolbar state. Defaults match the previous UI (overlay off,
+  // cumulative view) so the page renders identically until the user
+  // opts into the new modes.
+  const [overlay, setOverlay] = useState<OverlayMode>('off');
+  const [view, setView] = useState<ParetoView>('cumulative');
+
+  // Pareto state — separate so the main chart load doesn't block them
+  // and vice-versa. Each card now owns an array of ParetoSeries (one
+  // entry per subgroup; length 1 when overlay is off).
+  const [supplySeries, setSupplySeries] = useState<ParetoSeries[] | null>(null);
   const [supplyLoading, setSupplyLoading] = useState(true);
   const [supplyError, setSupplyError] = useState<string | null>(null);
 
-  const [survivalCurve, setSurvivalCurve] = useState<ParetoDataset | null>(null);
+  const [survivalSeries, setSurvivalSeries] = useState<ParetoSeries[] | null>(null);
   const [survivalLoading, setSurvivalLoading] = useState(true);
   const [survivalError, setSurvivalError] = useState<string | null>(null);
 
-  // Wait-time-vs-survival Pareto. Same x-axis as the waitlist-reduction
-  // card so the two read against an identical sweep; y is base − scenario
-  // wait time per list-spell at year H, derived via Little's Law.
-  const [waitTimeCurve, setWaitTimeCurve] = useState<ParetoDataset | null>(null);
+  const [waitTimeSeries, setWaitTimeSeries] = useState<ParetoSeries[] | null>(null);
   const [waitTimeLoading, setWaitTimeLoading] = useState(true);
   const [waitTimeError, setWaitTimeError] = useState<string | null>(null);
+
+  // Build the subgroup list for the current overlay setting. Each entry
+  // becomes one curve on every Pareto card. "off" returns a single
+  // pinned-to-current-selection entry so the rest of the loading code
+  // can treat all three modes uniformly.
+  type Subgroup =
+    | { kind: 'fixed'; threshold: number; strategy: string; label: string; color: string }
+    | { kind: 'threshold'; threshold: ThresholdValue; strategy: string; label: string; color: string }
+    | { kind: 'strategy'; threshold: number; strategy: StrategyValue; label: string; color: string };
+
+  const subgroups: Subgroup[] = useMemo(() => {
+    const strategy = params.targetingStrategy || 'standard';
+    if (overlay === 'thresholds') {
+      return THRESHOLDS.map((t) => ({
+        kind: 'threshold' as const,
+        threshold: t,
+        strategy,
+        label: THRESHOLD_LABEL[t],
+        color: THRESHOLD_PALETTE[t],
+      }));
+    }
+    if (overlay === 'strategies') {
+      return STRATEGIES.map((s) => ({
+        kind: 'strategy' as const,
+        threshold: params.highCPRAThreshold,
+        strategy: s,
+        label: STRATEGY_LABEL[s],
+        color: STRATEGY_PALETTE[s],
+      }));
+    }
+    const color =
+      THRESHOLD_PALETTE[params.highCPRAThreshold as ThresholdValue] ?? '#2563eb';
+    return [
+      {
+        kind: 'fixed' as const,
+        threshold: params.highCPRAThreshold,
+        strategy,
+        label: 'Curve',
+        color,
+      },
+    ];
+  }, [overlay, params.highCPRAThreshold, params.targetingStrategy]);
 
   // ── Main viz load (matches Index.tsx flow) ────────────────────────────
   useEffect(() => {
@@ -166,36 +222,39 @@ const Bridge: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    // Drop the previous dataset *atomically* with the param change so the
-    // chart can't render a stale "Inflection at 1,723/yr" caption while the
-    // new threshold's data is still in flight (the new sweeps caption
-    // updates synchronously from `params.*`, so the Inflection label has
-    // to follow it).
-    setSupplyCurve(null);
+    setSupplySeries(null);
     async function loadSupply() {
       setSupplyLoading(true);
       setSupplyError(null);
       try {
-        const strategy = params.targetingStrategy || 'standard';
-        const ds = await loadParetoDataset({
-          mode: 'bridge',
-          highCPRAThreshold: params.highCPRAThreshold,
-          strategy,
-          targetYear: params.simulationHorizon,
-          metric: livesSavedFromViz,
-          // 0.5 → 4× span the supply Pareto over an order of magnitude:
-          //   * 0.5/1/1.5/2× covers the realistic-now → realistic-soon range
-          //   * 3× and 4× push past the saturation point so the curve's
-          //     asymptote becomes visible (especially for tighter pools
-          //     like 99 %+ where 2× already consumes ~99.6 % of supply).
-          points: [0.5, 1, 1.5, 2, 3, 4].map((p) => ({
-            label: `${Math.round(xenoBaseRate * p).toLocaleString()}/yr`,
-            x: Math.round(xenoBaseRate * p),
-            xeno_proportion: p,
-            surv: params.survivalMonths,
-          })),
+        const tasks = subgroups.map(async (sg) => {
+          const baseRate = getXenoBaseRate(sg.strategy, sg.threshold);
+          const ds = await loadParetoDataset({
+            mode: 'bridge',
+            highCPRAThreshold: sg.threshold,
+            strategy: sg.strategy,
+            targetYear: params.simulationHorizon,
+            metric: livesSavedFromViz,
+            // 0.5 → 4× spans the supply Pareto over an order of
+            // magnitude (the bridge MC sweep uploaded all 6 points).
+            // Overlay-off renders kidneys/yr on x; overlay-on switches
+            // to multiplier so curves with different baseRates align.
+            points: [0.5, 1, 1.5, 2, 3, 4].map((p) => ({
+              label: overlay === 'off'
+                ? `${Math.round(baseRate * p).toLocaleString()}/yr`
+                : `${p}×`,
+              x: overlay === 'off' ? Math.round(baseRate * p) : p,
+              xeno_proportion: p,
+              surv: params.survivalMonths,
+            })),
+          });
+          if (ds.points.length === 0) return null;
+          return { dataset: ds, label: sg.label, color: sg.color };
         });
-        if (!cancelled) setSupplyCurve(ds);
+        const settled = (await Promise.all(tasks)).filter(
+          (s): s is ParetoSeries => s !== null,
+        );
+        if (!cancelled) setSupplySeries(settled);
       } catch (err) {
         if (!cancelled) {
           console.error('[Bridge:supply Pareto] failed:', err);
@@ -209,13 +268,7 @@ const Bridge: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [
-    params.highCPRAThreshold,
-    params.targetingStrategy,
-    params.survivalMonths,
-    params.simulationHorizon,
-    xenoBaseRate,
-  ]);
+  }, [subgroups, overlay, params.survivalMonths, params.simulationHorizon]);
 
   // ── Pareto: graft survival (months) vs waitlist reduction ────────────
   // Sweep survivalMonths ∈ {6, 12, 18, 24, 36} at the user's currently-
@@ -223,41 +276,45 @@ const Bridge: React.FC = () => {
   // nothing to plot so we surface a friendly message instead.
   useEffect(() => {
     let cancelled = false;
-    // See note in the supply-curve effect above: clear the prior dataset
-    // synchronously so the inflection caption can't out-live the params it
-    // was computed from.
-    setSurvivalCurve(null);
+    setSurvivalSeries(null);
     async function loadSurvival() {
       setSurvivalLoading(true);
       setSurvivalError(null);
       if (params.xeno_proportion === 0) {
         if (!cancelled) {
-          setSurvivalCurve({ points: [], inflectionIndex: null });
+          setSurvivalSeries([]);
           setSurvivalLoading(false);
         }
         return;
       }
       try {
-        const strategy = params.targetingStrategy || 'standard';
-        const ds = await loadParetoDataset({
-          mode: 'bridge',
-          highCPRAThreshold: params.highCPRAThreshold,
-          strategy,
-          targetYear: params.simulationHorizon,
-          metric: waitlistReductionFromViz,
-          points: BRIDGE_SURVIVAL_MONTHS.map((m): {
-            label: string;
-            x: number;
-            xeno_proportion: number;
-            surv: BridgeSurvivalMonths;
-          } => ({
-            label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
-            x: m,
-            xeno_proportion: params.xeno_proportion,
-            surv: m,
-          })),
+        const tasks = subgroups.map(async (sg) => {
+          const ds = await loadParetoDataset({
+            mode: 'bridge',
+            highCPRAThreshold: sg.threshold,
+            strategy: sg.strategy,
+            targetYear: params.simulationHorizon,
+            metric: waitlistReductionFromViz,
+            // x is months — comparable across all subgroups, no axis switch needed.
+            points: BRIDGE_SURVIVAL_MONTHS.map((m): {
+              label: string;
+              x: number;
+              xeno_proportion: number;
+              surv: BridgeSurvivalMonths;
+            } => ({
+              label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
+              x: m,
+              xeno_proportion: params.xeno_proportion,
+              surv: m,
+            })),
+          });
+          if (ds.points.length === 0) return null;
+          return { dataset: ds, label: sg.label, color: sg.color };
         });
-        if (!cancelled) setSurvivalCurve(ds);
+        const settled = (await Promise.all(tasks)).filter(
+          (s): s is ParetoSeries => s !== null,
+        );
+        if (!cancelled) setSurvivalSeries(settled);
       } catch (err) {
         if (!cancelled) {
           console.error('[Bridge:survival Pareto] failed:', err);
@@ -271,12 +328,7 @@ const Bridge: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [
-    params.highCPRAThreshold,
-    params.targetingStrategy,
-    params.xeno_proportion,
-    params.simulationHorizon,
-  ]);
+  }, [subgroups, params.xeno_proportion, params.simulationHorizon]);
 
   // ── Pareto: graft survival ↔ wait-time reduction ─────────────────────
   // Same survival sweep as the waitlist-reduction card so the two
@@ -287,39 +339,45 @@ const Bridge: React.FC = () => {
   // (xeno_proportion, survival, threshold, strategy).
   useEffect(() => {
     let cancelled = false;
-    setWaitTimeCurve(null);
+    setWaitTimeSeries(null);
     async function loadWaitTime() {
       setWaitTimeLoading(true);
       setWaitTimeError(null);
       if (params.xeno_proportion === 0) {
         if (!cancelled) {
-          setWaitTimeCurve({ points: [], inflectionIndex: null });
+          setWaitTimeSeries([]);
           setWaitTimeLoading(false);
         }
         return;
       }
       try {
-        const strategy = params.targetingStrategy || 'standard';
-        const ds = await loadParetoDataset({
-          mode: 'bridge',
-          highCPRAThreshold: params.highCPRAThreshold,
-          strategy,
-          targetYear: params.simulationHorizon,
-          metric: (scen, base, target) =>
-            waitTimeReductionFromViz(scen, base, target, params.highCPRAThreshold),
-          points: BRIDGE_SURVIVAL_MONTHS.map((m): {
-            label: string;
-            x: number;
-            xeno_proportion: number;
-            surv: BridgeSurvivalMonths;
-          } => ({
-            label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
-            x: m,
-            xeno_proportion: params.xeno_proportion,
-            surv: m,
-          })),
+        const tasks = subgroups.map(async (sg) => {
+          const ds = await loadParetoDataset({
+            mode: 'bridge',
+            highCPRAThreshold: sg.threshold,
+            strategy: sg.strategy,
+            targetYear: params.simulationHorizon,
+            metric: (scen, base, target) =>
+              waitTimeReductionFromViz(scen, base, target, sg.threshold),
+            points: BRIDGE_SURVIVAL_MONTHS.map((m): {
+              label: string;
+              x: number;
+              xeno_proportion: number;
+              surv: BridgeSurvivalMonths;
+            } => ({
+              label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
+              x: m,
+              xeno_proportion: params.xeno_proportion,
+              surv: m,
+            })),
+          });
+          if (ds.points.length === 0) return null;
+          return { dataset: ds, label: sg.label, color: sg.color };
         });
-        if (!cancelled) setWaitTimeCurve(ds);
+        const settled = (await Promise.all(tasks)).filter(
+          (s): s is ParetoSeries => s !== null,
+        );
+        if (!cancelled) setWaitTimeSeries(settled);
       } catch (err) {
         if (!cancelled) {
           console.error('[Bridge:waitTime Pareto] failed:', err);
@@ -335,12 +393,7 @@ const Bridge: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [
-    params.highCPRAThreshold,
-    params.targetingStrategy,
-    params.xeno_proportion,
-    params.simulationHorizon,
-  ]);
+  }, [subgroups, params.xeno_proportion, params.simulationHorizon]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -526,8 +579,52 @@ const Bridge: React.FC = () => {
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   How additional xeno supply and longer graft survival convert
                   to lives saved, waitlist reduction, and wait-time reduction
-                  at year {params.simulationHorizon}.
+                  at year {params.simulationHorizon}. Use the toolbar to
+                  overlay subgroups (cPRA thresholds or allocation strategies)
+                  on the same axes, and to switch between cumulative and
+                  per-step marginal views.
                 </p>
+              </div>
+
+              {/* Toolbar: overlay + view selectors */}
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-4">
+                <SegmentedControl<OverlayMode>
+                  label="Overlay:"
+                  ariaLabel="Subgroup overlay"
+                  value={overlay}
+                  onChange={setOverlay}
+                  options={[
+                    { value: 'off', label: 'Off' },
+                    {
+                      value: 'thresholds',
+                      label: 'cPRA 85 / 95 / 99%+',
+                      hint: 'Compare the same sweep across all three cPRA thresholds.',
+                    },
+                    {
+                      value: 'strategies',
+                      label: 'All 5 strategies',
+                      hint: 'Compare the same sweep across all five allocation strategies.',
+                    },
+                  ]}
+                />
+                <SegmentedControl<ParetoView>
+                  label="View:"
+                  ariaLabel="Pareto view"
+                  value={view}
+                  onChange={setView}
+                  options={[
+                    {
+                      value: 'cumulative',
+                      label: 'Cumulative',
+                      hint: 'Plot total y at each x.',
+                    },
+                    {
+                      value: 'marginal',
+                      label: 'Marginal',
+                      hint: 'Plot per-step rate of return (Δy/Δx) so saturation/acceleration shows up directly.',
+                    },
+                  ]}
+                />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -537,22 +634,42 @@ const Bridge: React.FC = () => {
                       Xeno supply &nbsp;↔&nbsp; Lives saved
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Sweeps {[0.5, 1, 1.5, 2, 3, 4]
-                        .map((m) => `${Math.round(xenoBaseRate * m).toLocaleString()}/yr`)
-                        .join(' · ')}{' '}
-                      at {params.survivalMonths}-mo bridge, {params.highCPRAThreshold}%+
-                      cPRA, strategy = {params.targetingStrategy ?? 'standard'}
+                      {overlay === 'off' ? (
+                        <>
+                          Sweeps {[0.5, 1, 1.5, 2, 3, 4]
+                            .map((m) => `${Math.round(xenoBaseRate * m).toLocaleString()}/yr`)
+                            .join(' · ')}{' '}
+                          at {params.survivalMonths}-mo bridge,{' '}
+                          {params.highCPRAThreshold}%+ cPRA, strategy ={' '}
+                          {params.targetingStrategy ?? 'standard'}
+                        </>
+                      ) : (
+                        <>
+                          Sweeps {[0.5, 1, 1.5, 2, 3, 4].map((m) => `${m}×`).join(' · ')}{' '}
+                          supply at {params.survivalMonths}-mo bridge.{' '}
+                          {overlay === 'thresholds'
+                            ? 'One curve per cPRA threshold.'
+                            : 'One curve per allocation strategy.'}
+                        </>
+                      )}
                     </p>
                   </CardHeader>
                   <CardContent>
                     <ParetoChart
-                      dataset={supplyCurve}
+                      datasets={supplySeries}
                       loading={supplyLoading}
                       error={supplyError}
-                      xLabel="Xeno kidneys per year"
-                      yLabel={`Lives saved by year ${params.simulationHorizon}`}
-                      formatX={(v) => v.toLocaleString()}
+                      xLabel={overlay === 'off'
+                        ? 'Xeno kidneys per year'
+                        : 'Xeno supply (× base, comparable across subgroups)'}
+                      yLabel={view === 'marginal'
+                        ? 'Δ Lives saved per Δ supply'
+                        : `Lives saved by year ${params.simulationHorizon}`}
+                      formatX={overlay === 'off'
+                        ? (v) => v.toLocaleString()
+                        : (v) => `${v}×`}
                       formatY={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      view={view}
                     />
                   </CardContent>
                 </Card>
@@ -565,8 +682,12 @@ const Bridge: React.FC = () => {
                     <p className="text-xs text-muted-foreground">
                       Sweeps 6 · 12 · 18 · 24 · 36 mo at{' '}
                       {Math.round(xenoBaseRate * params.xeno_proportion).toLocaleString()}/yr
-                      ({params.xeno_proportion}× supply), {params.highCPRAThreshold}%+ cPRA,
-                      strategy = {params.targetingStrategy ?? 'standard'}
+                      ({params.xeno_proportion}× supply).{' '}
+                      {overlay === 'off'
+                        ? `${params.highCPRAThreshold}%+ cPRA, strategy = ${params.targetingStrategy ?? 'standard'}`
+                        : overlay === 'thresholds'
+                          ? 'One curve per cPRA threshold.'
+                          : 'One curve per allocation strategy.'}
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -579,15 +700,18 @@ const Bridge: React.FC = () => {
                       </div>
                     ) : (
                       <ParetoChart
-                        dataset={survivalCurve}
+                        datasets={survivalSeries}
                         loading={survivalLoading}
                         error={survivalError}
                         xLabel="Mean graft survival (months)"
-                        yLabel={`Waitlist reduction at year ${params.simulationHorizon}`}
+                        yLabel={view === 'marginal'
+                          ? 'Δ Waitlist reduction per Δ months'
+                          : `Waitlist reduction at year ${params.simulationHorizon}`}
                         formatX={(v) => `${v} mo`}
                         formatY={(v) =>
                           v.toLocaleString(undefined, { maximumFractionDigits: 0 })
                         }
+                        view={view}
                       />
                     )}
                   </CardContent>
@@ -602,7 +726,7 @@ const Bridge: React.FC = () => {
                       Same {[6, 12, 18, 24, 36].map((m) => (m % 12 === 0 ? `${m / 12} yr` : `${m} mo`)).join(' · ')}{' '}
                       survival sweep at {Math.round(xenoBaseRate * params.xeno_proportion).toLocaleString()}/yr
                       ({params.xeno_proportion}× supply). y = months saved per list-spell at year{' '}
-                      {params.simulationHorizon} (Little's Law on the same viz JSONs).
+                      {params.simulationHorizon} (Little's Law).
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -615,13 +739,16 @@ const Bridge: React.FC = () => {
                       </div>
                     ) : (
                       <ParetoChart
-                        dataset={waitTimeCurve}
+                        datasets={waitTimeSeries}
                         loading={waitTimeLoading}
                         error={waitTimeError}
                         xLabel="Mean graft survival (months)"
-                        yLabel={`Wait time reduction at year ${params.simulationHorizon} (mo)`}
+                        yLabel={view === 'marginal'
+                          ? 'Δ Wait-time reduction per Δ months (mo)'
+                          : `Wait time reduction at year ${params.simulationHorizon} (mo)`}
                         formatX={(v) => `${v} mo`}
                         formatY={(v) => `${v.toFixed(1)} mo`}
+                        view={view}
                       />
                     )}
                   </CardContent>
