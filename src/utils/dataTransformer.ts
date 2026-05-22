@@ -406,6 +406,46 @@ function waitTimeMonths(meanL: number, outflow: number): number {
   return (meanL / outflow) * 12;
 }
 
+// Detect a "frozen tail" in a cumulative series — trailing samples whose
+// per-segment growth is materially smaller than the interior median. This
+// is the signature of the backend extending `common_times` past the
+// simulator's actual stop time: the cumulative series is then flat from
+// the real stop to x[-1], and any interpolation INTO that segment will
+// undercount activity (specifically, transplant outflow), inflating
+// L/λ_out at the boundary year and putting a spurious upward tick at the
+// end of the wait-time chart.
+//
+// Returns the largest trustworthy index — i.e. data[0..returnedIdx]
+// represents real simulation activity. Defaults to "trust everything" if
+// the series is too short to estimate, or if the last segment looks
+// normal.
+//
+// Heuristic: median segment growth across the interior (excluding the
+// first and last two segments to avoid boundary noise); a segment is
+// trustworthy if its growth is >= 0.7 × that median. Walk backward from
+// the end and return the first trustworthy index. 0.7 is intentionally
+// looser than "definitely an artifact" so we don't falsely flag real
+// throughput decay (which is gradual and won't drop a single segment to
+// <70% in one step).
+function effectiveLastIndex(cumulative: number[]): number {
+  const n = cumulative.length;
+  if (n < 5) return n - 1;
+  const growths: number[] = new Array(n - 1);
+  for (let i = 1; i < n; i++) growths[i - 1] = cumulative[i] - cumulative[i - 1];
+  // Interior segments only — drop first (cold-start) and last two (the
+  // ones we're trying to characterize).
+  const interior = growths.slice(1, -2);
+  if (interior.length < 3) return n - 1;
+  const sorted = [...interior].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  if (median <= 0) return n - 1; // pathological / never-grew series
+  const threshold = 0.7 * median;
+  for (let i = n - 1; i >= 1; i--) {
+    if (growths[i - 1] >= threshold) return i;
+  }
+  return n - 1;
+}
+
 // Find a series whose label contains the cPRA pattern AND age pattern.
 function findCellSeries(
   series: Array<{ label: string; y: number[] }> | undefined,
@@ -500,8 +540,24 @@ export function computeWaitTimeByYear(
   }
   if (cells.length === 0) return null;
 
+  // Frozen-tail defense: the backend `common_times` grid sometimes
+  // extends past the simulator's last event time (e.g. T=3650 days but
+  // x[-1]=3660), creating a flat segment on every cumulative series.
+  // Interpolating tEnd into that segment undercounts transplants in the
+  // final year and produces a spurious upward tick on the wait-time
+  // chart. Cap maxYears so we only emit Ŵ for windows whose tEnd lies
+  // inside the trustworthy range of the data.
+  const totalCumTx = new Array<number>(xDays.length).fill(0);
+  for (const cell of cells) {
+    for (let i = 0; i < cell.cumTx.length; i++) totalCumTx[i] += cell.cumTx[i];
+  }
+  const trustIdx = effectiveLastIndex(totalCumTx);
+  const trustEndDay = xDays[trustIdx] ?? maxDays;
+  const trustMaxYear = Math.floor(trustEndDay / 365);
+  const cappedMaxYears = Math.min(maxYears, Math.max(1, trustMaxYear));
+
   const out: WaitTimeYear[] = [];
-  for (let y = 1; y <= maxYears; y++) {
+  for (let y = 1; y <= cappedMaxYears; y++) {
     const tStart = (y - 1) * 365;
     const tEnd = y * 365;
     const deathsIdx = y - 1;
