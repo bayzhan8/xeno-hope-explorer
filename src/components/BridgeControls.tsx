@@ -143,10 +143,10 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
             </div>
           </div>
 
-          {/* Xeno Kidneys Per Year */}
+          {/* Xeno Supply Rate */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Xeno Kidneys Per Year</Label>
+              <Label className="text-sm font-medium">Xeno Supply Rate (intended, per year)</Label>
               <span className="text-sm font-semibold text-primary">
                 {xenoKidneysPerYear.toLocaleString()}
               </span>
@@ -170,8 +170,9 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              {xenoKidneysPerYear.toLocaleString()} bridging xeno kidneys added per year
-              ({params.xeno_proportion}x of {xenoBaseRate.toLocaleString()} base)
+              {xenoKidneysPerYear.toLocaleString()} bridging xeno procedures/year offered
+              ({params.xeno_proportion}x of {xenoBaseRate.toLocaleString()} base).
+              Actual delivered count may differ — see Throughput card.
             </p>
           </div>
 

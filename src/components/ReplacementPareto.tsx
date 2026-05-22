@@ -209,7 +209,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               dataset={supplyCurve}
               loading={supplyLoading}
               error={supplyError}
-              xLabel="Xeno kidneys per year"
+              xLabel="Xeno supply rate (procedures / yr, intended)"
               yLabel={`Lives saved by year ${simulationHorizon}`}
               formatX={(v) => v.toLocaleString()}
               formatY={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 })}
