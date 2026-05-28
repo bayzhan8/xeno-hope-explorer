@@ -24,9 +24,23 @@ export function getXenoBaseRate(strategy: string, threshold: number): number {
 
 // Transform JSON visualization data to format expected by SimulationCharts
 
+// Therapy regime tag emitted by the backend (workflow_age_cpra.create_viz_data).
+// 'replacement' — xenokidney is a definitive transplant; xeno recipients leave
+//                  the candidate pool until/unless their graft fails.
+// 'bridge_v2'   — xenokidney is a temporary bridge; xeno recipients remain
+//                  candidates and compete with C for the same allokidney supply
+//                  (simulator's share_allo_with_xeno=True). The 'v2' suffix
+//                  distinguishes the new shared-supply model from the legacy
+//                  "Bridge Therapy" runs that were mathematically just
+//                  replacement-with-short-graft-life (no `mode` field).
+// missing       — legacy JSON; treated as 'replacement' semantics.
+export type TherapyMode = 'replacement' | 'bridge_v2';
+
 interface VizData {
   config_name: string;
   total_days?: number;
+  mode?: TherapyMode;
+  share_allo_with_xeno?: boolean;
   waitlist_sizes?: {
     x: number[];
     series: Array<{ label: string; y: number[]; color?: string; linestyle?: string }>;
@@ -61,11 +75,30 @@ interface VizData {
     x: number[];
     series: Array<{ label: string; y: number[]; color?: string }>;
   };
+  // Bridge Therapy (mode='bridge_v2'): cumulative allokidneys whose
+  // recipient was drawn from H_xeno (a bridged candidate transitioning
+  // to a definitive human transplant). Always zero in Replacement
+  // Therapy; missing on legacy JSONs.
+  cumulative_bridge_allo?: {
+    x: number[];
+    series: Array<{ label: string; y: number[]; color?: string }>;
+  };
   cumulative_waitlist_deaths?: {
     x: number[];
     series: Array<{ label: string; y: number[]; color?: string }>;
   };
   cumulative_post_tx_deaths?: {
+    x: number[];
+    series: Array<{ label: string; y: number[]; color?: string }>;
+  };
+  // Per-cell post-tx death splits. Bridge mode uses the xeno split as
+  // the death-while-bridged outflow channel in Little's-Law. Missing
+  // on legacy JSONs.
+  cumulative_post_tx_deaths_std?: {
+    x: number[];
+    series: Array<{ label: string; y: number[]; color?: string }>;
+  };
+  cumulative_post_tx_deaths_xeno?: {
     x: number[];
     series: Array<{ label: string; y: number[]; color?: string }>;
   };
@@ -132,10 +165,20 @@ interface SimulationData {
   // for shorter horizons.
   cumulativeXenoTransplants: number;
   cumulativeStdTransplants: number;
+  // Bridge Therapy: cumulative allokidneys whose recipient was a
+  // bridged candidate (subset of cumulativeStdTransplants). Always 0
+  // in Replacement Therapy.
+  cumulativeBridgeAllo?: number;
   // Full cumulative procedure timeseries (x in DAYS, y monotone non-decreasing).
   // Use interpolateCumulative(xDays, y, horizon*365) to slice at any horizon.
   cumulativeXenoTransplantsSeries?: { xDays: number[]; y: number[] };
   cumulativeStdTransplantsSeries?: { xDays: number[]; y: number[] };
+  cumulativeBridgeAlloSeries?: { xDays: number[]; y: number[] };
+  // Therapy regime tag (defaults to 'replacement' on legacy JSONs).
+  // Components use this to enable Bridge-Therapy-only UI affordances
+  // (e.g. the bridge throughput rows, the "bridged candidates" overlay
+  // on the waitlist chart).
+  therapyMode?: TherapyMode;
   // Age-specific data (optional)
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
@@ -315,10 +358,30 @@ function findFirstIndex<T>(array: T[], predicate: (item: T) => boolean): number 
 //
 // Outflow channels in this model (must include ALL of them or Ŵ is
 // systematically inflated):
-//   - Standard (human) transplants            (Δ cumulative_std_transplants)
-//   - Xeno transplants                        (Δ cumulative_xeno_transplants)
-//   - Waitlist deaths                         (waitlist_deaths_per_year[y-1])
-//   - Waitlist removals (too sick / dropped)  (wl_removal_rate × L̄ × 365)
+//
+// Replacement Therapy (default, mode='replacement' or missing):
+//   L̄  = mean of C (un-bridged candidates) in the year
+//   outflow channels:
+//     - Standard (human) transplants            (Δ cumulative_std_transplants)
+//     - Xeno transplants                        (Δ cumulative_xeno_transplants)
+//     - Waitlist deaths                         (waitlist_deaths_per_year[y-1])
+//     - Waitlist removals (too sick / dropped)  (wl_removal_rate × L̄_C × 365)
+//
+// Bridge Therapy (mode='bridge_v2'):
+//   L̄  = mean of (C + H_xeno), because a patient holding a bridge
+//        xenograft is still a candidate for a definitive allokidney
+//   outflow channels:
+//     - Standard (human) transplants            (Δ cumulative_std_transplants)
+//         — counts allokidneys routed to BOTH un-bridged and bridged
+//         recipients (sum of "allo → C" and "allo → bridged"); the latter
+//         is what the new `cumulative_bridge_allo` series reports as a
+//         subset of tx_std.
+//     - Waitlist deaths                         (waitlist_deaths_per_year[y-1])
+//     - Bridge deaths                           (Δ cumulative_post_tx_deaths_xeno)
+//     - Waitlist removals                       (wl_removal_rate × L̄_C × 365)
+//   INTERNAL transitions (NOT counted as outflow):
+//     - Xeno transplants  C → H_xeno            (still in candidate pool)
+//     - Relisting         H_xeno → C            (still in candidate pool)
 //
 // The waitlist-removal channel is not in the viz JSON, so we reconstruct it
 // analytically from the per-(cPRA) `wl_removal` rate baked into the
@@ -478,6 +541,17 @@ export interface WaitTimeOptions {
   wlRemovalRates?: { low: number; high: number };
 }
 
+// Resolve the therapy regime tag, with a back-compat fallback for
+// legacy viz JSONs (no `mode` field) that defaults to 'replacement'.
+export function resolveTherapyMode(vizData: VizData | null | undefined): TherapyMode {
+  if (!vizData) return 'replacement';
+  if (vizData.mode === 'bridge_v2') return 'bridge_v2';
+  // Defensive: an explicit share_allo_with_xeno=true with a missing/
+  // mismatched `mode` field still routes through bridge semantics.
+  if (vizData.share_allo_with_xeno === true) return 'bridge_v2';
+  return 'replacement';
+}
+
 export function computeWaitTimeByYear(
   vizData: VizData,
   opts: WaitTimeOptions = {},
@@ -491,11 +565,16 @@ export function computeWaitTimeByYear(
   }).waitlist_deaths_per_year;
   const cumXeno = vizData.cumulative_xeno_transplants;
   const cumStd = vizData.cumulative_std_transplants;
+  const cumPostTxXeno = vizData.cumulative_post_tx_deaths_xeno;
+  const recXeno = vizData.recipients_xeno;
   const wlRem = opts.wlRemovalRates ?? { low: 0, high: 0 };
   if (!wl || !wl.x || !wl.series || wl.x.length === 0) return null;
   if (!wlDeaths || !wlDeaths.x || !wlDeaths.series || wlDeaths.x.length === 0) {
     return null;
   }
+
+  const mode = resolveTherapyMode(vizData);
+  const isBridge = mode === 'bridge_v2';
 
   const xDays = wl.x;
   const maxDays = xDays[xDays.length - 1];
@@ -513,29 +592,79 @@ export function computeWaitTimeByYear(
   ];
 
   // For each (cPRA × age) cell, pull the L, tx, deaths series once.
+  //
+  // Wait-time semantics differ by therapy regime (see resolveTherapyMode):
+  //
+  //  Replacement Therapy: candidates live in C only. Outflow = standard
+  //    transplants + xeno transplants + waitlist deaths + waitlist
+  //    removals. (Xeno transplant moves a candidate OUT of C and they
+  //    don't return until graft failure, which is a fresh re-listing.)
+  //
+  //  Bridge Therapy (v2): candidates live in C ∪ H_xeno because bridged
+  //    patients are still candidates for a definitive human allokidney.
+  //    L counts both. Outflow channels are:
+  //      - tx_std (counts both "allo → C" and "allo → bridged patient")
+  //      - waitlist deaths (deaths in C)
+  //      - bridge deaths (deaths in H_xeno, i.e. post_tx_deaths_xeno)
+  //      - waitlist removals (wl_removal × meanL_C × 365)
+  //    Xeno transplants (C → H_xeno) and relisting (H_xeno → C) are
+  //    INTERNAL to the candidate pool and intentionally omitted.
   type Cell = {
     cpra: 'low' | 'high';
     ageKey: string;
-    L: number[];
-    cumTx: number[];                  // cum_std + cum_xeno (combined)
+    L: number[];                      // pool size over time (C in repl, C+H_xeno in bridge)
+    cumTx: number[];                  // outflow-by-transplant (cumulative)
     deathsPerYear: number[];          // length = wlDeaths.x.length
+    cumBridgeDeaths: number[];        // length matches L; identically zero in repl mode
+    LCForRemoval: number[];           // pool size for the wl_removal hazard (C only, both modes)
   };
   const cells: Cell[] = [];
   for (const { key, pattern } of cpraGroups) {
     for (const { key: ageKey, pattern: agePattern } of WT_AGE_PATTERNS) {
-      const L = findCellSeries(wl.series, pattern, agePattern);
-      if (!L) continue;
+      const Ccell = findCellSeries(wl.series, pattern, agePattern);
+      if (!Ccell) continue;
       const xenoTx = findCellSeries(cumXeno?.series, pattern, agePattern, 'xeno');
       const stdTx = findCellSeries(cumStd?.series, pattern, agePattern, 'human');
-      // Sum the two cumulative series pointwise (one may be missing).
-      const len = L.length;
+      const hxCell = findCellSeries(recXeno?.series, pattern, agePattern, 'xeno');
+      const postTxXenoCell = findCellSeries(
+        cumPostTxXeno?.series, pattern, agePattern, 'xeno',
+      );
+      const len = Ccell.length;
       const cumTx = new Array<number>(len).fill(0);
-      for (let i = 0; i < len; i++) {
-        cumTx[i] = (xenoTx?.[i] || 0) + (stdTx?.[i] || 0);
+      if (isBridge) {
+        // Bridge mode: tx_std already counts allokidneys routed to BOTH
+        // un-bridged and bridged recipients. Xeno transplants (C →
+        // H_xeno) are internal to the candidate pool, so we deliberately
+        // do NOT add them.
+        for (let i = 0; i < len; i++) cumTx[i] = stdTx?.[i] || 0;
+      } else {
+        // Replacement mode (legacy): both flavors of transplant are
+        // outflows from C.
+        for (let i = 0; i < len; i++) {
+          cumTx[i] = (xenoTx?.[i] || 0) + (stdTx?.[i] || 0);
+        }
+      }
+      const L = new Array<number>(len);
+      if (isBridge && hxCell && hxCell.length === len) {
+        for (let i = 0; i < len; i++) L[i] = (Ccell[i] || 0) + (hxCell[i] || 0);
+      } else {
+        for (let i = 0; i < len; i++) L[i] = Ccell[i] || 0;
+      }
+      const cumBridgeDeaths = new Array<number>(len).fill(0);
+      if (isBridge && postTxXenoCell && postTxXenoCell.length === len) {
+        for (let i = 0; i < len; i++) cumBridgeDeaths[i] = postTxXenoCell[i] || 0;
       }
       const deathsAge = findCellSeries(wlDeaths.series, pattern, agePattern);
       const deathsPerYear = deathsAge || new Array<number>(wlDeaths.x.length).fill(0);
-      cells.push({ cpra: key, ageKey, L, cumTx, deathsPerYear });
+      cells.push({
+        cpra: key,
+        ageKey,
+        L,
+        cumTx,
+        deathsPerYear,
+        cumBridgeDeaths,
+        LCForRemoval: Ccell.slice(),
+      });
     }
   }
   if (cells.length === 0) return null;
@@ -574,19 +703,32 @@ export function computeWaitTimeByYear(
 
     for (const cell of cells) {
       const meanL = meanInWindow(xDays, cell.L, tStart, tEnd);
+      // wl_removal hazard operates on the un-bridged candidate pool C
+      // only (a bridged patient on a functioning xenograft isn't
+      // "removed for being too sick"); we use a dedicated meanL_C for
+      // the hazard product to avoid inflating removals in bridge mode.
+      const meanLForRemoval = meanInWindow(xDays, cell.LCForRemoval, tStart, tEnd);
       const txStart = interpolateCumulative(xDays, cell.cumTx, tStart);
       const txEnd = interpolateCumulative(xDays, cell.cumTx, tEnd);
       const dTx = Math.max(0, txEnd - txStart);
       const dDeaths = cell.deathsPerYear[deathsIdx] || 0;
+      // Bridge-deaths channel: number of deaths-with-functioning-xeno
+      // during the year, interpolated from the cumulative series. In
+      // Replacement mode this is identically zero (cumBridgeDeaths is
+      // an all-zeros vector), so no behavior change there.
+      const bdStart = interpolateCumulative(xDays, cell.cumBridgeDeaths, tStart);
+      const bdEnd = interpolateCumulative(xDays, cell.cumBridgeDeaths, tEnd);
+      const dBridgeDeaths = Math.max(0, bdEnd - bdStart);
       // wl_removal is a per-person-day hazard; over one year and an
-      // average load of meanL, the expected removals are rate × meanL ×
-      // 365. NaN-guard so we don't pollute outflow when meanL is missing.
+      // average un-bridged load of meanL_C, the expected removals are
+      // rate × meanL_C × 365. NaN-guard so we don't pollute outflow
+      // when meanL is missing.
       const wlRemovalRate = cell.cpra === 'low' ? wlRem.low : wlRem.high;
       const dRemovals =
-        Number.isFinite(meanL) && wlRemovalRate > 0
-          ? wlRemovalRate * meanL * 365
+        Number.isFinite(meanLForRemoval) && wlRemovalRate > 0
+          ? wlRemovalRate * meanLForRemoval * 365
           : 0;
-      const outflow = dTx + dDeaths + dRemovals;
+      const outflow = dTx + dDeaths + dBridgeDeaths + dRemovals;
       const months = waitTimeMonths(meanL, outflow);
 
       if (cell.cpra === 'low') {
@@ -917,6 +1059,27 @@ export function transformVizDataToSimulationData(
       };
     }
   }
+
+  // 2d. Bridge Therapy: cumulative allokidneys whose recipient was a
+  // bridged candidate (drawn from H_xeno instead of C). Subset of
+  // cumulativeStdTransplants. Identically zero / missing in
+  // Replacement Therapy runs.
+  if (vizData.cumulative_bridge_allo && vizData.cumulative_bridge_allo.series && vizData.cumulative_bridge_allo.x && vizData.cumulative_bridge_allo.x.length > 0) {
+    const totalSeries = findSeries(
+      vizData.cumulative_bridge_allo.series,
+      ['total bridge allokidneys', 'total bridge allo', 'total'],
+    );
+    if (totalSeries && totalSeries.length > 0) {
+      result.cumulativeBridgeAllo = totalSeries[totalSeries.length - 1] || 0;
+      result.cumulativeBridgeAlloSeries = {
+        xDays: [...vizData.cumulative_bridge_allo.x],
+        y: [...totalSeries],
+      };
+    }
+  }
+  // Therapy regime tag (read directly from the JSON so the rest of the
+  // app can branch on it without re-deriving).
+  result.therapyMode = resolveTherapyMode(vizData);
 
   // 3. Cumulative deaths
   if (vizData.cumulative_deaths && vizData.cumulative_deaths.series && vizData.cumulative_deaths.x && vizData.cumulative_deaths.x.length > 0) {
@@ -1844,6 +2007,11 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
       totalTransplants: 0,
       xenoTransplants: 0,
       penetrationRate: 0,
+      // Bridge Therapy: allokidneys delivered to bridged candidates over
+      // the horizon. Zero when the run isn't a bridge_v2 run; undefined-
+      // safe consumers can guard on therapyMode.
+      bridgeAlloTransplants: 0,
+      therapyMode: data.therapyMode ?? 'replacement',
       averageWaitTimeMonths: NaN,
       baseAverageWaitTimeMonths: NaN,
       waitTimeReductionMonths: NaN,
@@ -1938,11 +2106,27 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     }
   }
 
+  // Bridge Therapy: slice the cumulative_bridge_allo series at the user's
+  // horizon (same approach as xeno/std transplants above). Falls back to
+  // the legacy end-of-series scalar or zero when missing.
+  let bridgeAlloTransplants = 0;
+  if (data.cumulativeBridgeAlloSeries) {
+    bridgeAlloTransplants = interpolateCumulative(
+      data.cumulativeBridgeAlloSeries.xDays,
+      data.cumulativeBridgeAlloSeries.y,
+      horizonDays,
+    );
+  } else if (data.cumulativeBridgeAllo && data.cumulativeBridgeAllo > 0) {
+    bridgeAlloTransplants = data.cumulativeBridgeAllo;
+  }
+
   return {
     waitlistReduction: waitlistReductionVsBase,
     deathsPrevented: totalDeathsPrevented,
     totalTransplants,
     xenoTransplants,
+    bridgeAlloTransplants,
+    therapyMode: data.therapyMode ?? 'replacement',
     penetrationRate,
     averageWaitTimeMonths: avgWaitMonths,
     baseAverageWaitTimeMonths: baseAvgWaitMonths,

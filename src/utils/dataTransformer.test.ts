@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeWaitTimeByYear,
+  resolveTherapyMode,
   transformVizDataToSimulationData,
   calculateSummaryMetrics,
 } from './dataTransformer';
@@ -471,5 +472,260 @@ describe('calculateSummaryMetrics wait-time fields', () => {
     expect(m.baseAverageWaitTimeMonths).toBeCloseTo(24, 1);
     expect(m.waitTimeReductionMonths).toBeCloseTo(6, 1);
     expect(m.waitTimeReductionPct).toBeCloseTo(25, 0);
+  });
+});
+
+// ─── Bridge Therapy (model v2) ──────────────────────────────────────────
+//
+// Pins the semantic difference between Replacement and Bridge wait-time
+// computations. Specifically:
+//
+//   * mode='bridge_v2' makes the candidate pool L = C + H_xeno
+//   * mode='bridge_v2' switches the transplant outflow to tx_std ONLY
+//     (xeno transplants are internal C → H_xeno; not outflow)
+//   * mode='bridge_v2' adds bridge-deaths (post_tx_deaths_xeno) as an
+//     outflow channel
+//   * Missing `mode` field defaults to 'replacement' (back-compat).
+
+// Augment the synthetic viz with bridge-mode fields. Caller supplies the
+// H_xeno population (constant) and per-year bridge-deaths per cell; this
+// helper builds the cumulative_post_tx_deaths_xeno + recipients_xeno
+// series and tags the viz with mode='bridge_v2'.
+function withBridgeFields(viz: any, opts: {
+  hxCell: Record<'low' | 'high', Record<string, number>>;
+  bridgeDeathsPerYearCell?: Record<'low' | 'high', Record<string, number>>;
+  bridgeAlloPerYearCell?: Record<'low' | 'high', Record<string, number>>;
+}) {
+  const x = viz.waitlist_sizes.x as number[];
+  const monthsTotal = x.length - 1;
+  const cpras: Array<{ key: 'low' | 'high'; label: string }> = [
+    { key: 'low', label: 'Low cPRA' },
+    { key: 'high', label: 'High cPRA' },
+  ];
+  const ageKeys: Array<{ key: string; label: string }> = [
+    { key: 'age0_18', label: 'Age 0-18' },
+    { key: 'age18_45', label: 'Age 18-45' },
+    { key: 'age45_60', label: 'Age 45-60' },
+    { key: 'age60plus', label: 'Age 60+' },
+  ];
+
+  const recXenoSeries: Array<{ label: string; y: number[] }> = [];
+  const postTxXenoSeries: Array<{ label: string; y: number[] }> = [];
+  const bridgeAlloSeries: Array<{ label: string; y: number[] }> = [];
+  for (const cpra of cpras) {
+    for (const age of ageKeys) {
+      const hx = opts.hxCell[cpra.key]?.[age.key] ?? 0;
+      const bdY = opts.bridgeDeathsPerYearCell?.[cpra.key]?.[age.key] ?? 0;
+      const baY = opts.bridgeAlloPerYearCell?.[cpra.key]?.[age.key] ?? 0;
+      const hxArr: number[] = [];
+      const bdArr: number[] = [];
+      const baArr: number[] = [];
+      for (let i = 0; i <= monthsTotal; i++) {
+        const t = i / 12;
+        hxArr.push(hx);
+        bdArr.push(bdY * t);
+        baArr.push(baY * t);
+      }
+      recXenoSeries.push({ label: `${cpra.label} - ${age.label} - Xeno`, y: hxArr });
+      postTxXenoSeries.push({ label: `${cpra.label} - ${age.label} - Xeno`, y: bdArr });
+      bridgeAlloSeries.push({ label: `${cpra.label} - ${age.label} - Bridge Allo`, y: baArr });
+    }
+  }
+  // Synthetic totals so findSeries('total ...') hits.
+  const totals = (series: Array<{ y: number[] }>) => {
+    const out: number[] = new Array(recXenoSeries[0].y.length).fill(0);
+    for (let i = 0; i < out.length; i++) {
+      for (const s of series) out[i] += s.y[i] || 0;
+    }
+    return out;
+  };
+  recXenoSeries.push({ label: 'Total Recipients - Xeno', y: totals(recXenoSeries) });
+  postTxXenoSeries.push({ label: 'Total Post-Tx Deaths - Xeno', y: totals(postTxXenoSeries) });
+  bridgeAlloSeries.push({ label: 'Total Bridge Allokidneys', y: totals(bridgeAlloSeries) });
+
+  return {
+    ...viz,
+    mode: 'bridge_v2',
+    share_allo_with_xeno: true,
+    recipients_xeno: { x, series: recXenoSeries },
+    cumulative_post_tx_deaths_xeno: { x, series: postTxXenoSeries },
+    cumulative_bridge_allo: { x, series: bridgeAlloSeries },
+  };
+}
+
+describe('resolveTherapyMode', () => {
+  it("returns 'replacement' for legacy viz with no mode field", () => {
+    expect(resolveTherapyMode({ config_name: 'legacy' } as any)).toBe('replacement');
+  });
+  it("returns 'replacement' for null/undefined", () => {
+    expect(resolveTherapyMode(null)).toBe('replacement');
+    expect(resolveTherapyMode(undefined)).toBe('replacement');
+  });
+  it("returns 'bridge_v2' on explicit mode", () => {
+    expect(resolveTherapyMode({ mode: 'bridge_v2' } as any)).toBe('bridge_v2');
+  });
+  it("returns 'bridge_v2' on share_allo_with_xeno even if mode is missing", () => {
+    expect(resolveTherapyMode({ share_allo_with_xeno: true } as any)).toBe('bridge_v2');
+  });
+});
+
+describe('Bridge Therapy wait time (mode=bridge_v2)', () => {
+  it('L includes H_xeno (bridged candidates still count toward the pool)', () => {
+    // Single cell, C=600, H_xeno=400 → pool L = 1000.
+    // In bridge mode, tx_std is the only transplant outflow channel.
+    // Set txPerYearCell with xenoShare=0 (no xeno transplants) so cum_std
+    // == 200/yr and cum_xeno == 0.
+    const base = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 200 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y3 = rows!.find((r) => r.year === 3)!;
+    // L = 600 + 400 = 1000; outflow_per_year = 200; W = 1000/200*12 = 60 mo.
+    expect(y3.totalMonths).toBeCloseTo(60, 1);
+    expect(y3.lowCPRAMonths).toBeCloseTo(60, 1);
+    expect(y3.lowCPRAByAge.age18_45).toBeCloseTo(60, 1);
+  });
+
+  it('xeno transplants are INTERNAL in bridge mode (not counted as outflow)', () => {
+    // Same C and H_xeno as above, but now half the txs are "xeno" (in
+    // bridge mode that's a C → H_xeno transition, NOT an outflow).
+    //   Replacement-mode reading: 200 tx/yr outflow → 60 mo
+    //   Bridge-mode reading: only tx_std (100/yr) is outflow → 120 mo
+    // The difference verifies xeno transplants stop counting in bridge.
+    const base = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 200 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0.5,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y3 = rows!.find((r) => r.year === 3)!;
+    // L = 1000, outflow = 100/yr tx_std only → 120 mo.
+    expect(y3.totalMonths).toBeCloseTo(120, 1);
+  });
+
+  it('bridge-deaths are counted as outflow', () => {
+    // Pool L = 1000. tx_std = 100/yr. waitlist_deaths = 0. bridge_deaths
+    // = 50/yr. Expected outflow = 150 → W = 1000/150 * 12 = 80 mo.
+    const base = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+      bridgeDeathsPerYearCell: { low: { age18_45: 50 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y3 = rows!.find((r) => r.year === 3)!;
+    expect(y3.totalMonths).toBeCloseTo((1000 / 150) * 12, 1);
+  });
+
+  it('replacement vs bridge: same scenario, different L → different Ŵ', () => {
+    // Identical underlying numbers, but mode flips. This pins the
+    // contract that the mode tag is what flips semantics, nothing else.
+    const base = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 200 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const replRows = computeWaitTimeByYear(base as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    // Make a bridge variant (adds H_xeno=400, mode tag, etc.).
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+    });
+    const brdgRows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const replY3 = replRows!.find((r) => r.year === 3)!;
+    const brdgY3 = brdgRows!.find((r) => r.year === 3)!;
+    // Replacement: L=C=600, outflow=200 → 36 mo
+    // Bridge:      L=C+H_xeno=1000, outflow=200 → 60 mo
+    expect(replY3.totalMonths).toBeCloseTo(36, 1);
+    expect(brdgY3.totalMonths).toBeCloseTo(60, 1);
+  });
+
+  it('wl_removal hazard operates on C only, not on H_xeno', () => {
+    // If wl_removal applied to the full pool (C + H_xeno) we'd inflate
+    // the removal channel and shorten Ŵ further. Pin that the hazard
+    // only acts on un-bridged candidates.
+    const base = makeViz({
+      years: 4,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+    });
+    const rate = 0.0003;
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: rate, high: rate },
+    });
+    const y3 = rows!.find((r) => r.year === 3)!;
+    // pool L = 1000, but wl_removal acts on meanLC = 600 only.
+    // outflow = 100 tx + 0 deaths + 0.0003 * 600 * 365 = 165.7 / yr
+    // W = 1000 / 165.7 * 12 ≈ 72.4 mo
+    const expected = (1000 / (100 + rate * 600 * 365)) * 12;
+    expect(y3.totalMonths).toBeCloseTo(expected, 1);
+  });
+
+  it('transformer surfaces therapyMode and cumulative_bridge_allo', () => {
+    const base = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+      bridgeAlloPerYearCell: { low: { age18_45: 30 }, high: {} },
+    });
+    const result = transformVizDataToSimulationData(viz as any, null, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    expect(result.therapyMode).toBe('bridge_v2');
+    // At t=3yr we accumulate 30*3 = 90 bridge allos in this single cell;
+    // the transformer surfaces the end-of-series scalar.
+    expect(result.cumulativeBridgeAllo).toBeCloseTo(90, 0);
+  });
+
+  it('replacement-mode JSON keeps cumulativeBridgeAllo unset', () => {
+    const viz = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const result = transformVizDataToSimulationData(viz as any, null, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    expect(result.therapyMode).toBe('replacement');
+    expect(result.cumulativeBridgeAllo).toBeUndefined();
   });
 });

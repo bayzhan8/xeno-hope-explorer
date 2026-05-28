@@ -22,6 +22,11 @@ interface MetricSummary {
   totalTransplants: number;
   xenoTransplants: number;
   penetrationRate: number;
+  // Bridge Therapy: allokidneys delivered to bridged candidates over the
+  // horizon. Zero / missing in Replacement mode. The therapyMode tag
+  // tells the UI whether to surface this as a separate row.
+  bridgeAlloTransplants?: number;
+  therapyMode?: 'replacement' | 'bridge_v2';
   // Wait time (Little's Law estimate from waitlist size and outflows).
   // All in months. NaN signals "not available" (e.g. base case not loaded,
   // or no outflow in the horizon year).
@@ -297,6 +302,34 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
                   </span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Bridge → Allo row. Only relevant in Bridge Therapy (v2)
+              runs, where the simulator tracks how many bridged patients
+              received a definitive human allokidney over the horizon.
+              In Replacement Therapy this is always zero (the bridge
+              isn't a candidate anymore once xenotransplanted), so the
+              row is hidden to keep the card tight. */}
+          {metrics.therapyMode === 'bridge_v2' && (
+            <div className="mt-3 pt-3 border-t border-medical-border">
+              <div className="flex items-start gap-3">
+                <Activity className="w-4 h-4 mt-0.5 flex-shrink-0 text-primary" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    Bridge → Allo · {formatNumber(Math.round(metrics.bridgeAlloTransplants ?? 0))}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {' '}· bridged candidates who reached a definitive human allokidney
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    These are a subset of the total human transplants performed
+                    over {horizon} years. The bridge organ kept the candidate
+                    alive on a functioning kidney long enough to receive a
+                    permanent human allokidney from the shared supply.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>
