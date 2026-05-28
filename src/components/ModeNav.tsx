@@ -28,13 +28,15 @@ const TABS: Array<{
   {
     to: '/',
     label: 'Replacement Therapy',
-    description: 'Xenografts replace standard human transplants',
+    // Surfaced in the tab on the active page; phrased to match the
+    // intro card and SummaryMetrics paradigm tagline.
+    description: 'Xenokidney as a definitive transplant',
     icon: ArrowRightLeft,
   },
   {
     to: '/bridge',
     label: 'Bridge Therapy',
-    description: 'Xenografts bridge to a permanent human transplant',
+    description: 'Keep patients alive while they wait',
     icon: Hourglass,
     flagged: true,
   },
@@ -68,17 +70,23 @@ const ModeNav: React.FC = () => {
                 to={tab.to}
                 role="tab"
                 aria-selected={isActive}
-                className={`flex items-center gap-2 px-5 py-3 border-b-2 text-sm font-medium transition-colors ${
+                title={tab.description}
+                className={`flex items-start gap-2 px-5 py-3 border-b-2 text-sm font-medium transition-colors ${
                   isActive
                     ? 'border-primary text-primary'
                     : 'border-transparent text-muted-foreground hover:text-foreground hover:border-medical-border'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                <span className="hidden sm:inline">{tab.label}</span>
-                <span className="sm:hidden">
-                  {tab.label.split(' ')[0] === 'Replacement' ? 'Replace' : 'Bridge'}
-                </span>
+                <Icon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <div className="flex flex-col leading-tight">
+                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span className="sm:hidden">
+                    {tab.label.split(' ')[0] === 'Replacement' ? 'Replace' : 'Bridge'}
+                  </span>
+                  <span className="hidden md:inline text-[10px] font-normal opacity-80">
+                    {tab.description}
+                  </span>
+                </div>
               </Link>
             );
           })}

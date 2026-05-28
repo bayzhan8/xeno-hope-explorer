@@ -476,36 +476,46 @@ const Bridge: React.FC = () => {
                 <h3 className="text-base font-semibold text-foreground mb-2">
                   About Bridge Therapy
                 </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  In Bridge Therapy, xenotransplants are temporary — each one
-                  keeps a high-cPRA patient alive for a known mean duration
-                  (your choice from 6&nbsp;mo to 3&nbsp;yr), after which the
-                  patient typically returns to the waitlist for a permanent
-                  human transplant. The <em>central</em> lever is
-                  &ldquo;mortality while bridged&rdquo;: relative to the
-                  human-kidney post-tx baseline, is xeno support better,
-                  equivalent, or worse, and how does that compare with
-                  dialysis mortality on the waitlist? The mortality panel
-                  shows that comparison directly; the Pareto curves below
-                  then show how supply and graft survival convert into lives
-                  saved, waitlist reduction, and wait-time reduction at the
-                  selected mortality assumption.
+                <p className="text-sm text-foreground leading-relaxed font-medium">
+                  Bridge Therapy keeps high-cPRA patients alive — and off
+                  dialysis — while they wait for a definitive human
+                  allokidney. The xenokidney is <em>temporary support</em>,
+                  not a replacement transplant: bridged patients remain
+                  candidates for the same scarce human-kidney supply.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed mt-3">
+                  Each bridge graft keeps a patient alive for a known mean
+                  duration (your choice from 6&nbsp;mo to 3&nbsp;yr), after
+                  which they typically return to the waitlist. The{' '}
+                  <em>central</em> lever is &ldquo;mortality while
+                  bridged&rdquo;: relative to the post-allo baseline, is xeno
+                  support better, equivalent, or worse — and how does that
+                  compare with dialysis mortality on the waitlist? The
+                  mortality panel shows that comparison directly; the Pareto
+                  curves below then show how supply and graft survival
+                  convert into lives saved, dialysis-burden reduction, and
+                  survival-to-allotransplant at the selected mortality
+                  assumption.
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed mt-3 border-t border-medical-border pt-3">
-                  <strong>Two reading frames.</strong> The page distinguishes
-                  &ldquo;system effects&rdquo; (queue-wide outcomes — total
-                  wait, throughput, lives saved) from &ldquo;treated-population
-                  effects&rdquo; (what changes for a bridged patient — time on
-                  dialysis avoided, time on the bridge, mortality while
-                  waiting). With a fixed human-kidney supply the system-level
-                  wait until a definitive transplant is approximately
-                  conserved; the treated-population channel — dialysis-time
-                  displacement — is where bridge therapy delivers most of its
-                  clinical value.{' '}
-                  <strong>Modelling assumption.</strong> All waitlisted
-                  candidates (state C) are assumed to be on active dialysis.
-                  Bridged patients (state H<sub>xeno</sub>) and post-allo
-                  recipients (state H<sub>std</sub>) are off dialysis.
+                  <strong>Different paradigm?</strong> If you want to model
+                  xeno as a definitive transplant (recipient leaves the
+                  waitlist permanently; primary effects are throughput and
+                  queue size), switch to the <em>Replacement Therapy</em>{' '}
+                  tab above.{' '}
+                  <strong>Two reading frames here.</strong> System effects
+                  (queue-wide: total wait, throughput, lives saved) vs.
+                  treated-population effects (per bridged patient: time on
+                  dialysis avoided, time on bridge, mortality while waiting).
+                  With a fixed human-kidney supply the system-level wait
+                  until a definitive transplant is approximately conserved;
+                  the dialysis-time displacement is where bridge therapy
+                  delivers most of its clinical value.{' '}
+                  <strong>Modelling assumption.</strong> Every waitlisted
+                  candidate (state <em>C</em>) is assumed to be on active
+                  dialysis. Bridged patients (state H<sub>xeno</sub>) and
+                  post-allo recipients (state H<sub>std</sub>) are off
+                  dialysis.
                 </p>
               </div>
             </div>
@@ -567,7 +577,12 @@ const Bridge: React.FC = () => {
                       Key Outcomes Summary
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Impact metrics over {params.simulationHorizon}-year simulation horizon
+                      Bridge-paradigm headline metrics over a{' '}
+                      {params.simulationHorizon}-year horizon: lives saved,
+                      dialysis-years avoided, time on dialysis per spell.
+                      Throughput (xeno procedures performed) is reported in
+                      the card below for completeness but is not the goal of
+                      this paradigm.
                     </p>
                   </div>
                   <SummaryMetrics

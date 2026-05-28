@@ -2516,6 +2516,21 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
       baseAverageWaitTimeMonths: NaN,
       waitTimeReductionMonths: NaN,
       waitTimeReductionPct: NaN,
+      // Dialysis-only (W_C) variants. Equal to the overall wait in
+      // replacement mode by construction; in bridge mode they drop as
+      // residence shifts off dialysis. Always emitted so paradigm-aware
+      // UI can choose the right framing without therapyMode-branching
+      // its math.
+      dialysisWaitMonths: NaN,
+      baseDialysisWaitMonths: NaN,
+      dialysisWaitReductionMonths: NaN,
+      dialysisWaitReductionPct: NaN,
+      // Cumulative person-years of dialysis avoided vs. the base case,
+      // plus the per-bridge-recipient amortization and a wall-clock
+      // session count. Undefined when no base scenario is loaded.
+      dialysisYearsAvoided: undefined as number | undefined,
+      dialysisPerRecipientMonthsAvoided: undefined as number | undefined,
+      sessionsAvoided: undefined as number | undefined,
     };
   }
 
@@ -2591,6 +2606,14 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
   let baseAvgWaitMonths = NaN;
   let waitReductionMonths = NaN;
   let waitReductionPct = NaN;
+  // Dialysis-only wait (W_C) — Task-7 paradigm-aware variant. In
+  // replacement mode this equals the overall wait by construction; in
+  // bridge mode it's the clinically headline number ("time on dialysis
+  // per spell"). We compute both so paradigm-aware UI can choose.
+  let dialysisWaitMonths = NaN;
+  let baseDialysisWaitMonths = NaN;
+  let dialysisWaitReductionMonths = NaN;
+  let dialysisWaitReductionPct = NaN;
   if (waitRows.length > 0) {
     const horizonRow =
       waitRows.find((d) => d.year === horizon) ?? waitRows[waitRows.length - 1];
@@ -2603,6 +2626,20 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
       waitReductionMonths = baseAvgWaitMonths - avgWaitMonths;
       waitReductionPct =
         baseAvgWaitMonths > 0 ? (waitReductionMonths / baseAvgWaitMonths) * 100 : NaN;
+    }
+    if (Number.isFinite(horizonRow.dialysisMonths)) {
+      dialysisWaitMonths = horizonRow.dialysisMonths;
+    }
+    if (
+      horizonRow.baseDialysisMonths !== undefined &&
+      Number.isFinite(horizonRow.baseDialysisMonths)
+    ) {
+      baseDialysisWaitMonths = horizonRow.baseDialysisMonths;
+      dialysisWaitReductionMonths = baseDialysisWaitMonths - dialysisWaitMonths;
+      dialysisWaitReductionPct =
+        baseDialysisWaitMonths > 0
+          ? (dialysisWaitReductionMonths / baseDialysisWaitMonths) * 100
+          : NaN;
     }
   }
 
@@ -2620,6 +2657,15 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     bridgeAlloTransplants = data.cumulativeBridgeAllo;
   }
 
+  // Dialysis burden summary — surfaces the relevant scalars from the
+  // burden integral computed in transformVizDataToSimulationData. The
+  // burden object itself is also accessible through data.dialysisBurden
+  // for downstream consumers that want the time-share breakdown.
+  const burden = data.dialysisBurden;
+  const dialysisYearsAvoided = burden?.dialysisYearsAvoided;
+  const dialysisPerRecipientMonthsAvoided = burden?.perRecipientMonthsAvoided;
+  const sessionsAvoided = burden?.sessionsAvoided;
+
   return {
     waitlistReduction: waitlistReductionVsBase,
     deathsPrevented: totalDeathsPrevented,
@@ -2632,6 +2678,13 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     baseAverageWaitTimeMonths: baseAvgWaitMonths,
     waitTimeReductionMonths: waitReductionMonths,
     waitTimeReductionPct: waitReductionPct,
+    dialysisWaitMonths,
+    baseDialysisWaitMonths,
+    dialysisWaitReductionMonths,
+    dialysisWaitReductionPct,
+    dialysisYearsAvoided,
+    dialysisPerRecipientMonthsAvoided,
+    sessionsAvoided,
   };
 }
 

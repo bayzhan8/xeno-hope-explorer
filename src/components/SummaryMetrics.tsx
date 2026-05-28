@@ -13,6 +13,8 @@ import {
   Clock,
   CheckCircle2,
   Repeat,
+  Droplets,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -34,6 +36,20 @@ interface MetricSummary {
   baseAverageWaitTimeMonths?: number;
   waitTimeReductionMonths?: number;
   waitTimeReductionPct?: number;
+  // Dialysis-only wait (W_C). In replacement mode equals the overall
+  // wait by construction; in bridge mode it's the headline value.
+  // Always emitted by calculateSummaryMetrics so paradigm-aware UI can
+  // swap labels without branching its math.
+  dialysisWaitMonths?: number;
+  baseDialysisWaitMonths?: number;
+  dialysisWaitReductionMonths?: number;
+  dialysisWaitReductionPct?: number;
+  // Cumulative person-years of dialysis avoided vs base case, plus the
+  // per-bridge-recipient amortization (months) and a wall-clock HD-
+  // session count. All undefined when there's no base scenario.
+  dialysisYearsAvoided?: number;
+  dialysisPerRecipientMonthsAvoided?: number;
+  sessionsAvoided?: number;
 }
 
 interface SummaryMetricsProps {
@@ -72,12 +88,31 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
     const sign = pct > 0 ? '−' : pct < 0 ? '+' : '';
     return ` (${sign}${Math.abs(pct).toFixed(0)}%)`;
   };
-  const avgWait = metrics.averageWaitTimeMonths;
-  const baseAvgWait = metrics.baseAverageWaitTimeMonths;
-  const waitReduction = metrics.waitTimeReductionMonths;
-  const waitReductionPct = metrics.waitTimeReductionPct;
+  // Paradigm switch: in bridge mode the headline wait metric is "time
+  // on dialysis" (W_C), not "wait until any transplant" (W). Both are
+  // computed by the transformer; we just pick the paradigm-appropriate
+  // one to surface in the summary. Replacement mode keeps the legacy
+  // labels because W_C ≡ W there by construction.
+  const isBridge = metrics.therapyMode === 'bridge_v2';
+  const avgWait = isBridge
+    ? metrics.dialysisWaitMonths
+    : metrics.averageWaitTimeMonths;
+  const baseAvgWait = isBridge
+    ? metrics.baseDialysisWaitMonths
+    : metrics.baseAverageWaitTimeMonths;
+  const waitReduction = isBridge
+    ? metrics.dialysisWaitReductionMonths
+    : metrics.waitTimeReductionMonths;
+  const waitReductionPct = isBridge
+    ? metrics.dialysisWaitReductionPct
+    : metrics.waitTimeReductionPct;
   const hasWaitData = avgWait !== undefined && Number.isFinite(avgWait);
   const hasReductionData = waitReduction !== undefined && Number.isFinite(waitReduction);
+  const waitLabel = isBridge ? 'Time on Dialysis' : 'Average Wait Time';
+  const waitReductionLabel = isBridge ? 'Dialysis Time Saved' : 'Wait Time Reduction';
+  const waitTooltip = isBridge
+    ? "Little's-Law estimate of time on dialysis per list-spell (W_C). L = candidates on dialysis (state C); outflow = transplants leaving C + waitlist deaths + waitlist removals. Drops as bridging shifts residence time off dialysis, even when the total wait until a definitive transplant is conserved."
+    : `Snapshot estimate via Little's Law (W = L / outflow) at year ${horizon} of the xeno scenario. Outflow = transplants + waitlist deaths + waitlist removals. Measures mean time per list-spell.`;
 
   // Throughput math. metrics.xenoTransplants is already horizon-sliced by
   // calculateSummaryMetrics (it interpolates the cumulative procedure
@@ -151,14 +186,30 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
     };
   })();
 
-  const standardMetrics = [
+  // Standard-metrics grid is paradigm-aware. Replacement leads with
+  // queue-side metrics (waitlist reduction, throughput, lives); Bridge
+  // leads with the treated-population channel (lives saved, dialysis-
+  // years avoided, waitlist reduction). Total Transplants moves out of
+  // the headline grid in bridge mode because the dedicated throughput
+  // card already covers it — bridge therapy doesn't claim throughput
+  // gains as its primary value.
+  const fmtYears = (years: number): string => {
+    if (!Number.isFinite(years)) return '—';
+    if (Math.abs(years) >= 1000) return `${(years / 1000).toFixed(1)}k yr`;
+    if (Math.abs(years) >= 10) return `${years.toFixed(0)} yr`;
+    return `${years.toFixed(1)} yr`;
+  };
+  const dialysisYears = metrics.dialysisYearsAvoided;
+  const hasDialysisBurden =
+    dialysisYears !== undefined && Number.isFinite(dialysisYears);
+  const replacementStandardMetrics = [
     {
       title: 'Waitlist Reduction',
       value: formatNumber(metrics.waitlistReduction),
       icon: <Users className="w-5 h-5 text-primary" />,
       trend: getTrendIcon(metrics.waitlistReduction),
       subtitle: `Fewer patients waiting vs. base case at year ${horizon}`,
-      color: 'text-primary'
+      color: 'text-primary',
     },
     {
       title: 'Lives Saved',
@@ -166,7 +217,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
       icon: <Heart className="w-5 h-5 text-success" />,
       trend: getTrendIcon(metrics.deathsPrevented),
       subtitle: 'Waitlist deaths prevented vs. base case',
-      color: 'text-success'
+      color: 'text-success',
     },
     {
       title: 'Total Transplants',
@@ -174,12 +225,69 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
       icon: <Activity className="w-5 h-5 text-chart-secondary" />,
       trend: getTrendIcon(metrics.totalTransplants),
       subtitle: `Cumulative procedures (human + xeno) over ${horizon} years`,
-      color: 'text-chart-secondary'
+      color: 'text-chart-secondary',
     },
   ];
+  const bridgeStandardMetrics = [
+    {
+      title: 'Lives Saved',
+      value: formatNumber(metrics.deathsPrevented),
+      icon: <Heart className="w-5 h-5 text-success" />,
+      trend: getTrendIcon(metrics.deathsPrevented),
+      // Bridge's central scientific claim — emphasized in the subtitle.
+      subtitle: 'Waitlist deaths prevented · the bridge\'s central claim',
+      color: 'text-success',
+    },
+    {
+      title: 'Dialysis-Years Avoided',
+      value: hasDialysisBurden ? fmtYears(dialysisYears!) : '—',
+      icon: <Droplets className="w-5 h-5 text-primary" />,
+      trend: getTrendIcon(hasDialysisBurden && dialysisYears! > 0 ? 1 : 0),
+      subtitle: hasDialysisBurden
+        ? `Cumulative person-years off dialysis vs. base case`
+        : 'Requires a base-case scenario for comparison',
+      color: 'text-primary',
+    },
+    {
+      title: 'Waitlist Reduction',
+      value: formatNumber(metrics.waitlistReduction),
+      icon: <Users className="w-5 h-5 text-chart-secondary" />,
+      trend: getTrendIcon(metrics.waitlistReduction),
+      subtitle: `Net change vs. base case at year ${horizon}`,
+      color: 'text-chart-secondary',
+    },
+  ];
+  const standardMetrics = isBridge
+    ? bridgeStandardMetrics
+    : replacementStandardMetrics;
 
   return (
     <div className="space-y-4">
+      {/* Paradigm tagline — makes the conceptual framing visible at the
+          top of the metrics so each number reads against the right
+          backdrop (Task Group 7). */}
+      <div
+        className={`flex items-start gap-3 px-4 py-3 rounded-lg border text-xs leading-relaxed ${
+          isBridge
+            ? 'bg-amber-50 border-amber-200 text-amber-900'
+            : 'bg-sky-50 border-sky-200 text-sky-900'
+        }`}
+      >
+        {isBridge ? (
+          <Hourglass className="w-4 h-4 mt-0.5 flex-shrink-0" />
+        ) : (
+          <ArrowRightLeft className="w-4 h-4 mt-0.5 flex-shrink-0" />
+        )}
+        <div>
+          <span className="font-semibold">
+            {isBridge ? 'Bridge Therapy paradigm.' : 'Replacement Therapy paradigm.'}
+          </span>{' '}
+          {isBridge
+            ? 'Xenografts keep high-cPRA patients alive while they wait. Headline metrics: waitlist mortality, dialysis burden, survival to a definitive allokidney. Throughput is a side-effect, not the goal.'
+            : 'Xenografts function as definitive transplants for high-cPRA patients. Headline metrics: throughput, waitlist size, total transplants. Wait time and mortality follow from queue dynamics.'}
+        </div>
+      </div>
+
       {/* Xeno Throughput Card - full width.
           Option B redesign: both columns use the SAME noun ("procedures")
           and the SAME time base (per-year + cumulative subtitle) so they
@@ -360,14 +468,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
                       <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs text-xs leading-relaxed">
-                      Snapshot estimate via Little's Law (W = L / outflow)
-                      at year {horizon} of the xeno scenario. Outflow =
-                      transplants + waitlist deaths + waitlist removals.
-                      Measures mean time <em>per list-spell</em>; a
-                      patient who relists after a short xeno graft is
-                      counted as multiple spells. Exact in steady state,
-                      approximate during transients (especially years 1–5
-                      of any new scenario).
+                      {waitTooltip}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -376,14 +477,16 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
             </div>
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Average Wait Time
+                {waitLabel}
               </p>
               <p className="text-xl font-bold text-primary">
                 {fmtDuration(avgWait)}
               </p>
               <p className="text-xs text-muted-foreground">
                 {hasWaitData
-                  ? `Per list-spell, year ${horizon} (Little's Law estimate)`
+                  ? isBridge
+                    ? `Per list-spell, year ${horizon} · L = candidates on dialysis only`
+                    : `Per list-spell, year ${horizon} (Little's Law estimate)`
                   : 'Insufficient outflow at horizon — wait time undefined'}
               </p>
             </div>
@@ -401,12 +504,9 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
                       <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs text-xs leading-relaxed">
-                      Difference between base-case (no xeno) and xeno-
-                      scenario wait time at year {horizon}, both estimated
-                      via Little's Law from the same outflow channels.
-                      Absolute reduction shifts if the underlying rates
-                      change; the percentage is robust because both
-                      numerator and denominator move together.
+                      {isBridge
+                        ? `Difference between base-case and xeno-scenario time-on-dialysis (W_C) at year ${horizon}, both estimated via Little's Law. Bridging shifts residence time off dialysis, so this drops even when the total wait (W = C + H_xeno) is conserved.`
+                        : `Difference between base-case (no xeno) and xeno-scenario wait time at year ${horizon}, both estimated via Little's Law from the same outflow channels. The percentage is robust because both numerator and denominator move together.`}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -415,7 +515,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
             </div>
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Wait Time Reduction
+                {waitReductionLabel}
               </p>
               <p className="text-xl font-bold text-success">
                 {fmtSignedDuration(waitReduction)}

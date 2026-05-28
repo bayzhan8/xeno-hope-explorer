@@ -474,6 +474,95 @@ describe('calculateSummaryMetrics wait-time fields', () => {
     expect(m.waitTimeReductionMonths).toBeCloseTo(6, 1);
     expect(m.waitTimeReductionPct).toBeCloseTo(25, 0);
   });
+
+  it('replacement: dialysisWaitMonths equals averageWaitTimeMonths', () => {
+    // Task-7 paradigm-aware metric. In replacement mode W_C ≡ W by
+    // construction (bridge_allo=0, no H_xeno in candidate pool), so
+    // the paradigm-aware UI can use the same value with a different
+    // label without dual-pathing math.
+    const xenoViz = makeViz({
+      years: 4,
+      Lcell: { low: { age18_45: 1500 }, high: {} },
+      txPerYearCell: { low: { age18_45: 1000 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const baseViz = makeViz({
+      years: 4,
+      Lcell: { low: { age18_45: 1500 }, high: {} },
+      txPerYearCell: { low: { age18_45: 750 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const result = transformVizDataToSimulationData(xenoViz as any, baseViz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const m = calculateSummaryMetrics(result, 3);
+    expect(m.dialysisWaitMonths).toBeCloseTo(m.averageWaitTimeMonths, 6);
+    expect(m.baseDialysisWaitMonths).toBeCloseTo(m.baseAverageWaitTimeMonths, 6);
+    expect(m.dialysisWaitReductionMonths).toBeCloseTo(m.waitTimeReductionMonths, 6);
+  });
+
+  it('bridge: dialysisWaitMonths < averageWaitTimeMonths (residence shifts to H_xeno)', () => {
+    // Build a bridge scenario where the W_C and W lanes diverge.
+    const base = makeViz({
+      years: 4,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+    });
+    const result = transformVizDataToSimulationData(viz as any, null, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const m = calculateSummaryMetrics(result, 3);
+    // Combined W = (600+400)/100 = 120 mo;  W_C = 600/100 = 72 mo.
+    expect(m.averageWaitTimeMonths).toBeCloseTo(120, 1);
+    expect(m.dialysisWaitMonths).toBeCloseTo(72, 1);
+    expect(m.dialysisWaitMonths).toBeLessThan(m.averageWaitTimeMonths);
+  });
+
+  it('exposes dialysisYearsAvoided when a base case is loaded', () => {
+    const base = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const scen = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 900 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 1.0,
+    });
+    const result = transformVizDataToSimulationData(scen as any, base as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const m = calculateSummaryMetrics(result, 3);
+    // 100 patients × 3 yr = 300 person-years dialysis avoided.
+    expect(m.dialysisYearsAvoided).toBeCloseTo(300, 0);
+    // 300 yr × 12 mo/yr / 300 bridge events = 12 mo per recipient.
+    expect(m.dialysisPerRecipientMonthsAvoided).toBeCloseTo(12, 1);
+    expect(m.sessionsAvoided).toBeCloseTo(300 * (365.25 / 7) * 3, 0);
+  });
+
+  it('omits dialysisYearsAvoided without a base case', () => {
+    const viz = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const result = transformVizDataToSimulationData(viz as any, null, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const m = calculateSummaryMetrics(result, 3);
+    expect(m.dialysisYearsAvoided).toBeUndefined();
+    expect(m.dialysisPerRecipientMonthsAvoided).toBeUndefined();
+    expect(m.sessionsAvoided).toBeUndefined();
+  });
 });
 
 // ─── Bridge Therapy (model v2) ──────────────────────────────────────────
