@@ -20,6 +20,7 @@ import ParetoChart, { type ParetoSeries } from '@/components/ParetoChart';
 import SegmentedControl from '@/components/SegmentedControl';
 import ModeNav from '@/components/ModeNav';
 import WaitTimeChart from '@/components/WaitTimeChart';
+import MortalityComparison from '@/components/MortalityComparison';
 
 import {
   composeConfigName,
@@ -54,7 +55,7 @@ import {
 const Bridge: React.FC = () => {
   const [params, setParams] = useState<BridgeParams>({
     survivalMonths: 12,
-    postTransplantDeathRate: 1.0, // locked
+    postTransplantDeathRate: 1.0,
     simulationHorizon: 10,
     xeno_proportion: 1,
     highCPRAThreshold: 95,
@@ -148,12 +149,19 @@ const Bridge: React.FC = () => {
         const strategy = params.targetingStrategy || 'standard';
         const configName = composeConfigName(
           'bridge',
-          { xeno_proportion: params.xeno_proportion },
+          {
+            xeno_proportion: params.xeno_proportion,
+            postTransplantDeathRate: params.postTransplantDeathRate,
+          },
           strategy,
         );
+        // Base case: prop=0 holds at the canonical 1.0× death so the
+        // "lives saved vs. baseline" comparison is anchored at a single
+        // counterfactual regardless of which mortality multiplier the
+        // user has selected.
         const baseConfigName = composeConfigName(
           'bridge',
-          { xeno_proportion: 0 },
+          { xeno_proportion: 0, postTransplantDeathRate: 1.0 },
           strategy,
         );
 
@@ -205,6 +213,7 @@ const Bridge: React.FC = () => {
     params.simulationHorizon,
     params.highCPRAThreshold,
     params.targetingStrategy,
+    params.postTransplantDeathRate,
   ]);
 
   // ── Pareto: xeno supply (kidneys/year) vs lives saved ────────────────
@@ -239,6 +248,9 @@ const Bridge: React.FC = () => {
             // magnitude (the bridge MC sweep uploaded all 6 points).
             // Overlay-off renders kidneys/yr on x; overlay-on switches
             // to multiplier so curves with different baseRates align.
+            //
+            // Pin the current death-multiplier so every point on the
+            // curve reflects the user's mortality assumption.
             points: [0.5, 1, 1.5, 2, 3, 4].map((p) => ({
               label: overlay === 'off'
                 ? `${Math.round(baseRate * p).toLocaleString()}/yr`
@@ -246,6 +258,7 @@ const Bridge: React.FC = () => {
               x: overlay === 'off' ? Math.round(baseRate * p) : p,
               xeno_proportion: p,
               surv: params.survivalMonths,
+              postTransplantDeathRate: params.postTransplantDeathRate,
             })),
           });
           if (ds.points.length === 0) return null;
@@ -268,7 +281,13 @@ const Bridge: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [subgroups, overlay, params.survivalMonths, params.simulationHorizon]);
+  }, [
+    subgroups,
+    overlay,
+    params.survivalMonths,
+    params.simulationHorizon,
+    params.postTransplantDeathRate,
+  ]);
 
   // ── Pareto: graft survival (months) vs waitlist reduction ────────────
   // Sweep survivalMonths ∈ {6, 12, 18, 24, 36} at the user's currently-
@@ -296,16 +315,20 @@ const Bridge: React.FC = () => {
             targetYear: params.simulationHorizon,
             metric: waitlistReductionFromViz,
             // x is months — comparable across all subgroups, no axis switch needed.
+            // Pin the current death-multiplier so every point on the
+            // curve reflects the user's mortality assumption.
             points: BRIDGE_SURVIVAL_MONTHS.map((m): {
               label: string;
               x: number;
               xeno_proportion: number;
               surv: BridgeSurvivalMonths;
+              postTransplantDeathRate: number;
             } => ({
               label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
               x: m,
               xeno_proportion: params.xeno_proportion,
               surv: m,
+              postTransplantDeathRate: params.postTransplantDeathRate,
             })),
           });
           if (ds.points.length === 0) return null;
@@ -328,7 +351,12 @@ const Bridge: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [subgroups, params.xeno_proportion, params.simulationHorizon]);
+  }, [
+    subgroups,
+    params.xeno_proportion,
+    params.simulationHorizon,
+    params.postTransplantDeathRate,
+  ]);
 
   // ── Pareto: graft survival ↔ wait-time reduction ─────────────────────
   // Same survival sweep as the waitlist-reduction card so the two
@@ -364,11 +392,13 @@ const Bridge: React.FC = () => {
               x: number;
               xeno_proportion: number;
               surv: BridgeSurvivalMonths;
+              postTransplantDeathRate: number;
             } => ({
               label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
               x: m,
               xeno_proportion: params.xeno_proportion,
               surv: m,
+              postTransplantDeathRate: params.postTransplantDeathRate,
             })),
           });
           if (ds.points.length === 0) return null;
@@ -393,7 +423,12 @@ const Bridge: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [subgroups, params.xeno_proportion, params.simulationHorizon]);
+  }, [
+    subgroups,
+    params.xeno_proportion,
+    params.simulationHorizon,
+    params.postTransplantDeathRate,
+  ]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -411,7 +446,8 @@ const Bridge: React.FC = () => {
                 </h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   Bridge Therapy &middot; cPRA {params.highCPRAThreshold}%+ &middot;{' '}
-                  {params.survivalMonths} mo mean graft survival
+                  {params.survivalMonths} mo mean graft survival &middot;{' '}
+                  {params.postTransplantDeathRate.toFixed(1)}× bridge mortality
                 </p>
               </div>
             </div>
@@ -440,15 +476,19 @@ const Bridge: React.FC = () => {
                   About Bridge Therapy
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  In Bridge Therapy, xenotransplants are temporary — each one keeps a
-                  high-cPRA patient alive for a known mean duration (your choice from
-                  6&nbsp;mo to 3&nbsp;yr), after which the patient typically returns
-                  to the waitlist for a permanent human transplant. Post-transplant
-                  death stays at the human-kidney baseline (1.0×). The two Pareto
-                  curves below show how supply and graft survival trade off against
-                  lives saved and waitlist reduction — including the inflection
-                  point past which more supply (or longer survival) yields
-                  diminishing returns.
+                  In Bridge Therapy, xenotransplants are temporary — each one
+                  keeps a high-cPRA patient alive for a known mean duration
+                  (your choice from 6&nbsp;mo to 3&nbsp;yr), after which the
+                  patient typically returns to the waitlist for a permanent
+                  human transplant. The <em>central</em> lever is
+                  &ldquo;mortality while bridged&rdquo;: relative to the
+                  human-kidney post-tx baseline, is xeno support better,
+                  equivalent, or worse, and how does that compare with
+                  dialysis mortality on the waitlist? The mortality panel
+                  shows that comparison directly; the Pareto curves below
+                  then show how supply and graft survival convert into lives
+                  saved, waitlist reduction, and wait-time reduction at the
+                  selected mortality assumption.
                 </p>
               </div>
             </div>
@@ -517,6 +557,27 @@ const Bridge: React.FC = () => {
                     metrics={metrics}
                     horizon={params.simulationHorizon}
                     xenoIntendedPerYear={Math.round(xenoBaseRate * params.xeno_proportion)}
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-6 pb-4 border-b border-medical-border">
+                    <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
+                      Mortality at a Glance
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Where does &ldquo;mortality while bridged&rdquo; sit
+                      relative to the alternatives (dialysis on the
+                      waitlist; living with a definitive human allokidney)?
+                      This is the bridge's central scientific claim — every
+                      downstream metric (lives saved, waitlist size, wait
+                      time) is a consequence of how this comparison resolves
+                      at your selected mortality multiplier.
+                    </p>
+                  </div>
+                  <MortalityComparison
+                    highCPRAThreshold={params.highCPRAThreshold}
+                    bridgeMultiplier={params.postTransplantDeathRate}
                   />
                 </div>
 
