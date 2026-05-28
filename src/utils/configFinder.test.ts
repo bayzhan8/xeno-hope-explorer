@@ -65,12 +65,40 @@ describe('composeConfigName — bridge mode', () => {
     ).toBe('xeno_age_prop1p0_relist1p0_death1p0');
   });
 
-  it('honours postTransplantDeathRate (the Task-Group-2 mortality slider)', () => {
-    // This is the contract the backend sweep relies on: composing a
-    // config name for death=0.5 MUST match
-    // `run_bridge_experiments.py::config_name_for(strategy, prop, 0.5)`,
-    // which produces `_death0p5`. If this drifts the Bridge page silently
-    // 404s for every non-1.0 mortality slider position.
+  it('honours postTransplantDeathRate for the canonical {1.0, 1.2} grid', () => {
+    // Contract the backend sweep relies on: composing a config name for
+    // each XENO_DEATH_MULTIPLIERS value MUST match
+    // `run_bridge_experiments.py::config_name_for(strategy, prop, k)`.
+    // If this drifts the Bridge page silently 404s on the mortality
+    // picker.
+    expect(
+      composeConfigName(
+        'bridge',
+        { xeno_proportion: 1, postTransplantDeathRate: 1.0 },
+        'standard',
+      ),
+    ).toBe('xeno_age_prop1p0_relist1p0_death1p0');
+    expect(
+      composeConfigName(
+        'bridge',
+        { xeno_proportion: 1, postTransplantDeathRate: 1.2 },
+        'standard',
+      ),
+    ).toBe('xeno_age_prop1p0_relist1p0_death1p2');
+    expect(
+      composeConfigName(
+        'bridge',
+        { xeno_proportion: 0.5, postTransplantDeathRate: 1.2 },
+        'age45_cpraHigh',
+      ),
+    ).toBe('age45_cpraHigh_prop0p5_relist1p0_death1p2');
+  });
+
+  it('formatter still handles historical multipliers (env-var override path)', () => {
+    // The 4-point sweep {0.5, 1.0, 1.5, 2.0} is still reachable via the
+    // `BRIDGE_DEATH_MULTIPLIERS` env var on the backend; the frontend
+    // formatter must keep producing the matching names so an operator
+    // can hand-build a URL to those historical configs.
     expect(
       composeConfigName(
         'bridge',
@@ -85,19 +113,13 @@ describe('composeConfigName — bridge mode', () => {
         'standard',
       ),
     ).toBe('xeno_age_prop1p0_relist1p0_death2p0');
-    expect(
-      composeConfigName(
-        'bridge',
-        { xeno_proportion: 0.5, postTransplantDeathRate: 1.5 },
-        'age45_cpraHigh',
-      ),
-    ).toBe('age45_cpraHigh_prop0p5_relist1p0_death1p5');
   });
 
   it('every BRIDGE_DEATH_MULTIPLIERS value round-trips into a death_<k>p<...> suffix', () => {
-    // Sanity-check the slider/sweep contract for every supported
-    // multiplier so we don't ship a slider position that can't address
+    // Sanity-check the picker/sweep contract for every supported
+    // multiplier so we don't ship a picker option that can't address
     // an uploaded Supabase config.
+    expect(BRIDGE_DEATH_MULTIPLIERS).toEqual([1.0, 1.2]);
     for (const m of BRIDGE_DEATH_MULTIPLIERS) {
       const name = composeConfigName(
         'bridge',
@@ -136,6 +158,35 @@ describe('composeConfigName — replacement mode (regression guard)', () => {
         'age60_cpraHigh',
       ),
     ).toBe('age60_cpraHigh_prop1p0_relist1p0_death1p0');
+  });
+
+  it('formats the new canonical death=1.2 multiplier in both modes', () => {
+    // Replacement and Bridge now share XENO_DEATH_MULTIPLIERS = {1.0, 1.2}.
+    // Standard replacement mode uses str() → "1.2" → "1p2"; targeted
+    // mode uses toFixed(1) → "1.2" → "1p2"; bridge mode uses targeting-
+    // style. Lock down all three so the new picker option can address
+    // the upcoming Supabase configs.
+    expect(
+      composeConfigName(
+        'replacement',
+        { xeno_proportion: 1, xenoGraftFailureRate: 1, postTransplantDeathRate: 1.2 },
+        'standard',
+      ),
+    ).toBe('xeno_age_prop1_relist1_death1p2');
+    expect(
+      composeConfigName(
+        'replacement',
+        { xeno_proportion: 1, xenoGraftFailureRate: 1, postTransplantDeathRate: 1.2 },
+        'age60_cpraHigh',
+      ),
+    ).toBe('age60_cpraHigh_prop1p0_relist1p0_death1p2');
+    expect(
+      composeConfigName(
+        'bridge',
+        { xeno_proportion: 1, postTransplantDeathRate: 1.2 },
+        'standard',
+      ),
+    ).toBe('xeno_age_prop1p0_relist1p0_death1p2');
   });
 });
 

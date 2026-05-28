@@ -3,10 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { Info, ChevronDown, ChevronUp, Target } from 'lucide-react';
+import { Info, ChevronDown, ChevronUp, Target, HeartPulse } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getXenoBaseRate } from '@/utils/dataTransformer';
 import { fmtMeanTime, fmtAnnualRate } from '@/utils/chartFormat';
+import { XENO_DEATH_MULTIPLIERS } from '@/utils/configFinder';
 import {
   Select,
   SelectContent,
@@ -76,9 +77,11 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
   const meanTimeToGraftFailure = fmtMeanTime(actualGraftFailureAnnual);
   const meanTimeToPostTxDeath = fmtMeanTime(actualPostTxDeathAnnual);
 
-  // Multipliers are user-selected on a 0.5 grid (0, 0.5, 1, 1.5, 2),
-  // so showing one decimal is exact and avoids the trailing zero that
-  // confused readers ("Why is it 1.00x? Is there hidden precision?").
+  // Multipliers are user-selected from discrete grids:
+  //   - Xeno graft failure: 0.5 grid (0, 0.5, 1, 1.5, 2) — historical slider
+  //   - Xeno post-tx death: XENO_DEATH_MULTIPLIERS = {1.0, 1.2} — narrow
+  //     canonical set shared with Bridge therapy
+  // One decimal place is exact for every supported value.
   const fmtMultiplier = (m: number) => `${m.toFixed(1)}×`;
 
   return (
@@ -294,38 +297,50 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             )}
           </div>
 
-          {/* Xeno Post-Transplant Death Rate */}
+          {/* Xeno Post-Transplant Death Rate — 2-button picker (canonical
+              XENO_DEATH_MULTIPLIERS, shared with Bridge). */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Xeno Post-Transplant Death Rate</Label>
+              <div className="flex items-center gap-2">
+                <HeartPulse className="w-4 h-4 text-primary" />
+                <Label className="text-sm font-medium">Xeno Post-Transplant Death Rate</Label>
+              </div>
               <div className="text-right">
-                <div className="text-sm text-muted-foreground">{fmtMultiplier(params.postTransplantDeathRate)} standard kidney</div>
+                <div className="text-sm font-semibold text-primary">
+                  {fmtMultiplier(params.postTransplantDeathRate)} standard kidney
+                </div>
                 <div className="text-xs text-muted-foreground">{meanTimeToPostTxDeath} until death</div>
               </div>
             </div>
-            <Slider
-              value={[params.postTransplantDeathRate]}
-              onValueChange={(value) => updateParam('postTransplantDeathRate', snapTo(value[0], [0, 0.5, 1, 1.5, 2]))}
-              max={2}
-              min={0}
-              step={0.5}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>0x</span>
-              <span>0.5x</span>
-              <span>1x</span>
-              <span>1.5x</span>
-              <span>2x</span>
+            <div className="grid grid-cols-2 gap-2">
+              {XENO_DEATH_MULTIPLIERS.map((mult) => {
+                const isActive = params.postTransplantDeathRate === mult;
+                return (
+                  <button
+                    key={mult}
+                    type="button"
+                    onClick={() => updateParam('postTransplantDeathRate', mult)}
+                    className={`px-2 py-2 text-xs font-medium rounded-md transition-colors ${
+                      isActive
+                        ? 'border-2 border-primary bg-primary text-primary-foreground'
+                        : 'border border-input bg-background text-foreground hover:bg-muted'
+                    }`}
+                    aria-pressed={isActive}
+                  >
+                    {mult.toFixed(1)}×
+                  </button>
+                );
+              })}
             </div>
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                Modeled as a multiplier on a standard human kidney's post-transplant death rate (1.0x = same as standard)
+                Modeled as a multiplier on a standard human kidney's post-transplant
+                death rate (1.0× = same as standard, 1.2× = 20% higher).
               </p>
               <button
                 type="button"
                 onClick={() => toggleSection('postTxDeath')}
-                className="text-xs text-primary hover:underline flex items-center gap-1"
+                className="text-xs text-primary hover:underline flex items-center gap-1 flex-shrink-0 ml-2"
               >
                 Read more
                 {expandedSections.postTxDeath ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -334,7 +349,14 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             {expandedSections.postTxDeath && (
               <div className="text-xs text-muted-foreground space-y-2 p-3 bg-muted rounded-md border border-medical-border">
                 <p className="font-medium text-foreground">Xeno Post-Transplant Death Rate</p>
-                <p>Same idea as graft failure: a xeno recipient's post-transplant death hazard is modeled as a <strong>standard human kidney recipient's hazard scaled by a multiplier</strong>. At 1.0x, the rate equals the SRTR-derived value for a standard human kidney recipient in the same cPRA bin. Reference (1.0x) rates by cPRA threshold:</p>
+                <p>
+                  A xeno recipient's post-transplant death hazard is modeled
+                  as a <strong>standard human kidney recipient's hazard
+                  scaled by a multiplier</strong>. At 1.0×, the rate equals
+                  the SRTR-derived value for a standard human kidney
+                  recipient in the same cPRA bin. Reference (1.0×) rates by
+                  cPRA threshold:
+                </p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>85+ cPRA: {fmtAnnualRate(4.1)} → {fmtMeanTime(4.1)} until death</li>
                   <li>95+ cPRA: {fmtAnnualRate(4.0)} → {fmtMeanTime(4.0)} until death</li>
@@ -342,13 +364,9 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 </ul>
                 <div className="mt-2 pt-2 border-t border-medical-border">
                   <p className="font-medium text-foreground mb-1">Understanding the Multipliers</p>
-                  <p>The slider scales these base rates. Mean time to death scales inversely:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2 mt-1">
-                    <li>0.5x → half the rate, twice as long survival</li>
-                    <li>1.0x → same as standard human donor kidney</li>
-                    <li>1.5x → 50 % worse, ~⅔ the survival time</li>
-                    <li>2.0x → double the rate, half the survival time</li>
-                    <li>0x → no post-transplant deaths modeled</li>
+                    <li><strong>1.0×</strong> — xeno post-tx mortality matches a standard human kidney (optimistic baseline)</li>
+                    <li><strong>1.2×</strong> — xeno post-tx mortality is 20% higher than a human kidney (realistic central estimate)</li>
                   </ul>
                   <p className="mt-2">
                     Currently selected: <strong>{fmtMultiplier(params.postTransplantDeathRate)}</strong> on {params.highCPRAThreshold}+ cPRA<br />
