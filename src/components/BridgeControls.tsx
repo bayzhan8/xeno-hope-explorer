@@ -3,10 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { Info, ChevronDown, ChevronUp, Target, Hourglass, Lock } from 'lucide-react';
+import { Info, ChevronDown, ChevronUp, Target, Hourglass, HeartPulse } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getXenoBaseRate } from '@/utils/dataTransformer';
-import { BRIDGE_SURVIVAL_MONTHS, type BridgeSurvivalMonths } from '@/utils/configFinder';
+import {
+  BRIDGE_SURVIVAL_MONTHS,
+  BRIDGE_DEATH_MULTIPLIERS,
+  type BridgeSurvivalMonths,
+} from '@/utils/configFinder';
 import {
   Select,
   SelectContent,
@@ -18,9 +22,14 @@ import {
 export interface BridgeParams {
   /** Mean useful graft survival (months). One of {6, 12, 18, 24, 36}. */
   survivalMonths: BridgeSurvivalMonths;
-  /** Multiplier on the human post-tx death rate. Hard-locked to 1.0 in
-   *  bridge mode for now (the baked input pickle uses 1.0). The slot
-   *  exists so we can flip it on later without touching every consumer. */
+  /**
+   * Multiplier on the per-day mortality hazard for patients living with a
+   * functioning xenograft (the `H_xeno` state). This is the central
+   * Task-Group-2 lever: shifting this away from 1.0 lets us ask "does
+   * bridging reduce or increase mortality vs. the human-kidney baseline".
+   * One of `BRIDGE_DEATH_MULTIPLIERS` ({0.5, 1.0, 1.5, 2.0}); other
+   * values won't have a precomputed Supabase config.
+   */
   postTransplantDeathRate: number;
   /** Display horizon — 5 or 10 years (data goes 10y on disk). */
   simulationHorizon: number;
@@ -193,7 +202,94 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
             </p>
           </div>
 
-          {/* Mean Graft Survival — the bridge-defining parameter */}
+          {/* Mortality While Bridged — the *central* Task-Group-2 lever */}
+          <div className="space-y-3 pt-4 border-t border-medical-border">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HeartPulse className="w-4 h-4 text-primary" />
+                <Label className="text-sm font-medium">Mortality While Bridged</Label>
+              </div>
+              <span className="text-sm font-semibold text-primary">
+                {params.postTransplantDeathRate.toFixed(1)}× post-tx baseline
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {BRIDGE_DEATH_MULTIPLIERS.map((mult) => {
+                const isActive = params.postTransplantDeathRate === mult;
+                return (
+                  <button
+                    key={mult}
+                    type="button"
+                    onClick={() => updateParam('postTransplantDeathRate', mult)}
+                    className={`px-2 py-2 text-xs font-medium rounded-md transition-colors ${
+                      isActive
+                        ? 'border-2 border-primary bg-primary text-primary-foreground'
+                        : 'border border-input bg-background text-foreground hover:bg-muted'
+                    }`}
+                    aria-pressed={isActive}
+                  >
+                    {mult.toFixed(1)}×
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Per-day mortality hazard for patients on a functioning
+                xenograft, as a multiple of the human-kidney post-tx baseline
+                (1.0×). This is the bridge's reason for existing — set it
+                relative to dialysis mortality (see panel above).
+              </p>
+              <button
+                type="button"
+                onClick={() => toggleSection('mortality')}
+                className="text-xs text-primary hover:underline flex items-center gap-1 flex-shrink-0 ml-2"
+              >
+                Read more
+                {expandedSections.mortality ? (
+                  <ChevronUp className="w-3 h-3" />
+                ) : (
+                  <ChevronDown className="w-3 h-3" />
+                )}
+              </button>
+            </div>
+            {expandedSections.mortality && (
+              <div className="text-xs text-muted-foreground space-y-2 p-3 bg-muted rounded-md border border-medical-border">
+                <p className="font-medium text-foreground">
+                  Why mortality is the central knob
+                </p>
+                <p>
+                  The bridge competes with dialysis, not with a definitive
+                  human transplant. The headline question is whether keeping a
+                  high-cPRA patient on a xenograft instead of dialysis reduces
+                  their day-to-day mortality enough to be worth the supply
+                  cost and the rejection cycle. Everything else (waitlist
+                  size, lives saved, throughput) is downstream of that
+                  comparison.
+                </p>
+                <p>
+                  <strong>1.0×</strong> means a bridged patient's death rate
+                  matches a standard human-kidney recipient in the same cPRA
+                  bin (~4 %/yr at the 95% threshold). <strong>0.5×</strong>
+                  models a bridge that's clearly better than a human kidney
+                  on this axis. <strong>2.0×</strong> stress-tests the
+                  scenario where xeno support is real but the patient still
+                  dies faster than a human-kidney recipient would — useful
+                  to see at what point the bridge stops outperforming
+                  dialysis.
+                </p>
+                <p>
+                  Because the bridge pickle bakes the M target as a combined
+                  hazard (rejection + baseline death), moving this multiplier
+                  drifts the achieved mean bridge duration by at most ~3% at
+                  the 0.5×/2× extremes — negligible compared with Monte-Carlo
+                  noise.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Mean Graft Survival — the bridge-defining duration */}
           <div className="space-y-3 pt-4 border-t border-medical-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -226,8 +322,9 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
             </div>
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                Mean time the xenograft keeps the recipient transplanted before
-                rejection (re-listing) or death-with-functioning-graft.
+                Intrinsic mean lifetime of the xenograft — time until rejection
+                (re-listing) or death-with-functioning-graft, at the canonical
+                1.0× mortality multiplier.
               </p>
               <button
                 type="button"
@@ -252,7 +349,7 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                   intervenes. We bake exactly your selected duration into a
                   per-age combined hazard, so a 6-month bridge means an
                   intrinsic mean of 6 useful months regardless of the recipient
-                  age bin.
+                  age bin (at the canonical 1.0× mortality multiplier).
                 </p>
                 <p>
                   A bridged recipient now has a <em>third</em> exit channel
@@ -267,22 +364,6 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                 </p>
               </div>
             )}
-          </div>
-
-          {/* Post-tx death — locked at 1.0 in bridge mode for now */}
-          <div className="space-y-3 pt-4 border-t border-medical-border">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium flex items-center gap-2">
-                Post-Transplant Death Rate
-                <Lock className="w-3.5 h-3.5 text-muted-foreground" />
-              </Label>
-              <span className="text-sm text-muted-foreground">1.00x (locked)</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              In Bridge Therapy mode the post-transplant death rate is held at
-              the human-kidney baseline (1.0×). Future versions may enable a
-              1.2× / 1.5× / 2.0× sensitivity slider here.
-            </p>
           </div>
 
           {/* Simulation Horizon */}

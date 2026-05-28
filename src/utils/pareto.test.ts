@@ -545,6 +545,68 @@ describe('loadParetoDataset', () => {
     expect(ds.inflectionIndex).toBeNull();
   });
 
+  it('threads bridge-mode postTransplantDeathRate through to config names', async () => {
+    // Bridge mode added a death-multiplier dimension to the sweep. The
+    // Pareto loaders pin the user's currently-selected death rate on
+    // every point so the curve reflects the chosen mortality
+    // assumption. This test makes sure the per-point override actually
+    // reaches composeConfigName instead of getting silently dropped.
+    const urls: string[] = [];
+    fetchSpy.mockImplementation(async (input) => {
+      const url = String(input);
+      urls.push(url);
+      const xDays = [0, 1825, 3650];
+      return new Response(
+        JSON.stringify({
+          total_days: 3650,
+          waitlist_sizes: { x: xDays, series: [{ label: 'wl', y: [200, 150, 100] }] },
+          cumulative_waitlist_deaths: { x: xDays, series: [{ label: 'd', y: [0, 50, 100] }] },
+          cumulative_post_tx_deaths: { x: xDays, series: [{ label: 't', y: [0, 0, 0] }] },
+        }),
+        { status: 200 },
+      );
+    });
+
+    await loadParetoDataset({
+      mode: 'bridge',
+      highCPRAThreshold: 95,
+      strategy: 'standard',
+      targetYear: 10,
+      metric: livesSavedFromViz,
+      // Sweep proportion ∈ {0.5, 1} at fixed surv=12 and death=0.5
+      points: [
+        {
+          label: '0.5x',
+          x: 0.5,
+          xeno_proportion: 0.5,
+          surv: 12,
+          postTransplantDeathRate: 0.5,
+        },
+        {
+          label: '1x',
+          x: 1,
+          xeno_proportion: 1,
+          surv: 12,
+          postTransplantDeathRate: 0.5,
+        },
+      ] as ParetoPointSpec[],
+    });
+
+    // Scenario names: prop0p5_relist1p0_death0p5, prop1p0_relist1p0_death0p5
+    expect(
+      urls.some((u) => u.includes('xeno_age_prop0p5_relist1p0_death0p5.json')),
+    ).toBe(true);
+    expect(
+      urls.some((u) => u.includes('xeno_age_prop1p0_relist1p0_death0p5.json')),
+    ).toBe(true);
+    // Base case is always prop0_relist1_death1 — anchor the lives-saved
+    // comparison so the curve is internally consistent regardless of
+    // the chosen mortality multiplier.
+    expect(
+      urls.some((u) => u.includes('xeno_age_prop0p0_relist1p0_death1p0.json')),
+    ).toBe(true);
+  });
+
   it('threads replacement-mode multipliers (relist/death) through to config names', async () => {
     // Capture every URL the loader fetches so we can assert the per-point
     // multiplier overrides reach composeConfigName.

@@ -197,6 +197,93 @@ export function getWlRemovalRates(
   );
 }
 
+// ─── Mortality rates for the Bridge mortality-comparison panel ────────────
+//
+// All values are per-person-day hazards taken from the same FIXED_PARAMS_*
+// tables the backend uses. The Bridge page reads these to render the
+// dialysis-vs-bridge-vs-post-allo comparison without round-tripping
+// through the viz JSON (it would be cheaper to read them straight from
+// the loaded JSON, but the panel needs to react to slider moves before
+// the JSON has finished refetching).
+//
+// Notes:
+//   - "dialysis" mortality is the simulator's `waitlist death` rate on
+//     the `C` state — i.e. the per-person-day death hazard for a
+//     candidate on the active waitlist (i.e. on dialysis).
+//   - "postAllo" mortality is `death with tx` on the `H_std` state.
+//   - "bridgeBaseline" is the per-day mortality the bridge pickle bakes
+//     into `death_with_tx_xeno` for the high-cPRA row — by design equal
+//     to `death with tx` (the human-kidney post-tx hazard) at the
+//     canonical 1.0× multiplier. Multiplying by `bridgeMultiplier` gives
+//     the achieved bridge mortality.
+export interface BridgeMortalityRates {
+  /** Per-person-day mortality for the dialysis (active-waitlist) state. */
+  dialysisPerDay: number;
+  /** Per-person-day mortality for the post-allokidney state (H_std). */
+  postAlloPerDay: number;
+  /** Per-person-day xenograft-baseline (= postAlloPerDay at 1.0×). */
+  bridgeBaselinePerDay: number;
+}
+
+const HIGH_KEY_RATES: Record<number, BridgeMortalityRates> = {
+  85: {
+    dialysisPerDay: FIXED_PARAMS_85.rates_cpra['85-100']['waitlist death'],
+    postAlloPerDay: FIXED_PARAMS_85.rates_cpra['85-100']['death with tx'],
+    bridgeBaselinePerDay: FIXED_PARAMS_85.rates_cpra['85-100']['death with tx'],
+  },
+  95: {
+    dialysisPerDay: FIXED_PARAMS_95.rates_cpra['95-100']['waitlist death'],
+    postAlloPerDay: FIXED_PARAMS_95.rates_cpra['95-100']['death with tx'],
+    bridgeBaselinePerDay: FIXED_PARAMS_95.rates_cpra['95-100']['death with tx'],
+  },
+  99: {
+    dialysisPerDay: FIXED_PARAMS_99.rates_cpra['99-100']['waitlist death'],
+    postAlloPerDay: FIXED_PARAMS_99.rates_cpra['99-100']['death with tx'],
+    bridgeBaselinePerDay: FIXED_PARAMS_99.rates_cpra['99-100']['death with tx'],
+  },
+};
+
+const LOW_KEY_RATES: Record<number, BridgeMortalityRates> = {
+  85: {
+    dialysisPerDay: FIXED_PARAMS_85.rates_cpra['0-85']['waitlist death'],
+    postAlloPerDay: FIXED_PARAMS_85.rates_cpra['0-85']['death with tx'],
+    bridgeBaselinePerDay: FIXED_PARAMS_85.rates_cpra['0-85']['death with tx'],
+  },
+  95: {
+    dialysisPerDay: FIXED_PARAMS_95.rates_cpra['0-95']['waitlist death'],
+    postAlloPerDay: FIXED_PARAMS_95.rates_cpra['0-95']['death with tx'],
+    bridgeBaselinePerDay: FIXED_PARAMS_95.rates_cpra['0-95']['death with tx'],
+  },
+  99: {
+    dialysisPerDay: FIXED_PARAMS_99.rates_cpra['0-99']['waitlist death'],
+    postAlloPerDay: FIXED_PARAMS_99.rates_cpra['0-99']['death with tx'],
+    bridgeBaselinePerDay: FIXED_PARAMS_99.rates_cpra['0-99']['death with tx'],
+  },
+};
+
+/**
+ * Per-person-day mortality hazards for the cPRA bucket the bridge
+ * actually targets. The `cpraGroup` argument selects which row of the
+ * input pickle is used:
+ *
+ *   - `'high'` (default) — the high-cPRA row, i.e. the row whose
+ *     `death_with_tx_xeno` was overwritten by `make_bridge_inputs.py`.
+ *     This is the row the Bridge mortality slider actually scales.
+ *   - `'low'` — the lower-cPRA row, exposed so the panel can show the
+ *     "less sensitized" population as context.
+ *
+ * Falls back to the 85% bucket (most-commonly-shown default) if the
+ * caller passes a threshold we don't have rates for, mirroring
+ * `getWlRemovalRates`.
+ */
+export function getBridgeMortalityRates(
+  highCPRAThreshold: number,
+  cpraGroup: 'high' | 'low' = 'high',
+): BridgeMortalityRates {
+  const table = cpraGroup === 'high' ? HIGH_KEY_RATES : LOW_KEY_RATES;
+  return table[highCPRAThreshold] ?? table[85];
+}
+
 export const BRIDGE_SURVIVAL_MONTHS = [6, 12, 18, 24, 36] as const;
 export type BridgeSurvivalMonths = (typeof BRIDGE_SURVIVAL_MONTHS)[number];
 
@@ -291,16 +378,33 @@ const BACKUP_PREFIX_ROOT = '_backup_pre_rerun_2026_05_14';
 //
 //   replacement-standard:  xeno_age_prop{p}_relist{r}_death{d}
 //   replacement-targeted:  {strategy}_prop{p}_relist{r}_death{d}
-//   bridge-standard:       xeno_age_prop{p}_relist1p0_death1p0
-//   bridge-targeted:       {strategy}_prop{p}_relist1p0_death1p0
+//   bridge-standard:       xeno_age_prop{p}_relist1p0_death{d}
+//   bridge-targeted:       {strategy}_prop{p}_relist1p0_death{d}
 //
-// The bridge variants HARD-CODE _relist1p0_death1p0 because the bridge
-// runner always passes those multipliers (the actual rates are pre-baked
-// per-age into the input pickle — see make_bridge_inputs.py).
+// The bridge variants HARD-CODE _relist1p0 because the bridge pickle
+// already encodes per-age survival in `relisting_xeno` (the runner has
+// nothing to scale there). The death multiplier IS expressed in the name
+// so the website's mortality sensitivity slider can navigate the sweep
+// produced by `BRIDGE_DEATH_MULTIPLIERS` in `run_bridge_experiments.py`.
+//
+// `BRIDGE_DEATH_MULTIPLIERS` is the canonical list of death multipliers
+// covered by the backend sweep. Frontend components that build a death
+// slider should snap to one of these values to guarantee a hit on
+// Supabase.
+export const BRIDGE_DEATH_MULTIPLIERS = [0.5, 1.0, 1.5, 2.0] as const;
+export type BridgeDeathMultiplier = (typeof BRIDGE_DEATH_MULTIPLIERS)[number];
+
 export interface ComposeNameParams {
   xeno_proportion: number;
   xenoGraftFailureRate?: number;     // replacement only; ignored in bridge mode
-  postTransplantDeathRate?: number;  // replacement only; ignored in bridge mode
+  /**
+   * Post-transplant death multiplier (used by both modes).
+   * - replacement: scales the post-tx death hazard on H_std recipients.
+   * - bridge: scales the post-tx death hazard on H_xeno recipients only
+   *   (the "mortality while bridged" lever — central to Task Group 2).
+   * Defaults to 1.0 (the canonical baseline).
+   */
+  postTransplantDeathRate?: number;
 }
 
 export function composeConfigName(
@@ -314,8 +418,9 @@ export function composeConfigName(
     // str(float).replace(".", "p")).
     const fmt = formatTargeting;
     const propStr = fmt(params.xeno_proportion);
+    const drate = params.postTransplantDeathRate ?? 1;
     const base = strategy === 'standard' ? 'xeno_age' : strategy;
-    return `${base}_prop${propStr}_relist1p0_death1p0`;
+    return `${base}_prop${propStr}_relist1p0_death${fmt(drate)}`;
   }
 
   // Replacement therapy — preserve historical formatting quirk: the
