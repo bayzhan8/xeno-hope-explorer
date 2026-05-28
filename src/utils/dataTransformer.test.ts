@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeWaitTimeByYear,
+  computeDialysisBurden,
   resolveTherapyMode,
   transformVizDataToSimulationData,
   calculateSummaryMetrics,
@@ -727,5 +728,344 @@ describe('Bridge Therapy wait time (mode=bridge_v2)', () => {
     });
     expect(result.therapyMode).toBe('replacement');
     expect(result.cumulativeBridgeAllo).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// W_C and W_X split (Task Group 3 + 4)
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('Wait-time split (W_C dialysis-only + W_X bridge-only)', () => {
+  it('replacement: W_C ≡ W exactly (no H_xeno, no bridge_allo)', () => {
+    // Pure replacement scenario — every outflow channel that drains C in
+    // the new W_C math is already counted in legacy W. Pin the equality.
+    const viz = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any);
+    const y3 = rows!.find((r) => r.year === 3)!;
+    expect(y3.dialysisTotalMonths).toBeCloseTo(y3.totalMonths, 5);
+    expect(y3.dialysisLowCPRAMonths).toBeCloseTo(y3.lowCPRAMonths, 5);
+    expect(y3.dialysisLowCPRAByAge.age18_45).toBeCloseTo(
+      y3.lowCPRAByAge.age18_45,
+      5,
+    );
+  });
+
+  it('bridge: W_C uses L=C only (drops vs combined W)', () => {
+    // C=600, H_xeno=400, tx_std=100/yr (no xeno-tx, no bridge_allo,
+    // no deaths). Combined W = (600+400)/100 = 10 yr = 120 mo.
+    // W_C: L=600, outflow_from_C = 0 (no xeno-tx) + (cum_std - 0) +
+    // 0 deaths = 100/yr → 600/100 = 6 yr = 72 mo.
+    const base = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y3 = rows!.find((r) => r.year === 3)!;
+    expect(y3.totalMonths).toBeCloseTo(120, 1);
+    expect(y3.dialysisTotalMonths).toBeCloseTo(72, 1);
+  });
+
+  it('bridge: xeno transplants count as outflow from C (off dialysis)', () => {
+    // Same as above but half of all tx are xeno (50/yr each).
+    // W_C outflow from C = 50 (tx_xeno) + 50 (tx_std − bridge_allo)
+    //                    = 100/yr → 600/100 * 12 = 72 mo. UNCHANGED.
+    // Combined W: tx_std only counts in bridge, so 50/yr → 1000/50 = 240 mo.
+    const base = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0.5,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y3 = rows!.find((r) => r.year === 3)!;
+    expect(y3.dialysisTotalMonths).toBeCloseTo(72, 1);
+    expect(y3.totalMonths).toBeCloseTo(240, 1);
+  });
+
+  it('bridge: bridge_allo is subtracted from tx_std for W_C outflow', () => {
+    // tx_std = 100/yr, of which 30/yr routes through H_xeno (bridge_allo).
+    // → only 70/yr drains C via tx_std. Plus 0 xeno-tx (xenoShare=0).
+    // W_C outflow = 0 + (100-30) + 0 = 70/yr → 600/70 * 12 ≈ 102.86 mo.
+    const base = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+      bridgeAlloPerYearCell: { low: { age18_45: 30 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y3 = rows!.find((r) => r.year === 3)!;
+    expect(y3.dialysisTotalMonths).toBeCloseTo((600 / 70) * 12, 1);
+  });
+
+  it('bridge: bridge_deaths are NOT outflow from C (only from H_xeno)', () => {
+    // Pin that 50 bridge-deaths/yr don't show up in W_C outflow.
+    // Outflow from C = tx_xeno (0) + tx_std (100) + 0 wl_deaths = 100/yr.
+    // Expected W_C = 72 mo. (Combined W differs because bridge_deaths
+    // DO count there; we just want to be sure they don't leak into W_C.)
+    const base = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 400 }, high: {} },
+      bridgeDeathsPerYearCell: { low: { age18_45: 50 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y3 = rows!.find((r) => r.year === 3)!;
+    expect(y3.dialysisTotalMonths).toBeCloseTo(72, 1);
+  });
+
+  it('W_X: steady-state H_xeno = L_X / Δcum_xeno', () => {
+    // tx_xeno = 100/yr (xenoShare=1.0, tx_total=100). H_xeno is
+    // constant 200 (steady state ⇒ ΔH_xeno=0 ⇒ outflow_X = 100/yr).
+    // W_X = 200/100 * 12 = 24 mo per spell.
+    const base = makeViz({
+      years: 5,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 1.0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 200 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y3 = rows!.find((r) => r.year === 3)!;
+    expect(y3.bridgeTotalMonths).toBeCloseTo(24, 1);
+    expect(y3.bridgeLowCPRAByAge.age18_45).toBeCloseTo(24, 1);
+  });
+
+  it('W_X: NaN when no bridge population (replacement-style replay)', () => {
+    // Bridge mode, but H_xeno=0 everywhere. Mean L_X = 0 ⇒ NaN.
+    const base = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const rows = computeWaitTimeByYear(viz as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y2 = rows!.find((r) => r.year === 2)!;
+    expect(Number.isNaN(y2.bridgeTotalMonths)).toBe(true);
+    expect(Number.isNaN(y2.bridgeLowCPRAByAge.age18_45)).toBe(true);
+  });
+
+  it('transformer: bridge-mode surfaces bridgeMonths + dialysisMonths', () => {
+    const base = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 1.0,
+    });
+    const viz = withBridgeFields(base, {
+      hxCell: { low: { age18_45: 200 }, high: {} },
+    });
+    const result = transformVizDataToSimulationData(viz as any, null, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y2 = result.waitingTimeData.find((d) => d.year === 2)!;
+    expect(Number.isFinite(y2.dialysisMonths)).toBe(true);
+    expect(Number.isFinite(y2.bridgeMonths ?? NaN)).toBe(true);
+  });
+
+  it('transformer: replacement-mode surfaces dialysisMonths but not bridgeMonths', () => {
+    const viz = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 600 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const result = transformVizDataToSimulationData(viz as any, null, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    const y2 = result.waitingTimeData.find((d) => d.year === 2)!;
+    expect(Number.isFinite(y2.dialysisMonths)).toBe(true);
+    expect(y2.bridgeMonths).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Dialysis burden (Task Group 5)
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('computeDialysisBurden', () => {
+  it('null without a base scenario', () => {
+    const viz = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    expect(computeDialysisBurden(viz as any, null)).toBeNull();
+  });
+
+  it('zero dialysis-years-avoided when scenarios are identical', () => {
+    const a = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const b = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const burden = computeDialysisBurden(a as any, b as any);
+    expect(burden).not.toBeNull();
+    expect(burden!.dialysisYearsAvoided).toBeCloseTo(0, 6);
+    expect(burden!.sessionsAvoided).toBeCloseTo(0, 6);
+  });
+
+  it('integrates the C(t) gap over horizon (constant 100 patients × 3 yr)', () => {
+    // scenario keeps C=900, base has C=1000. Δ = 100 patients
+    // continuously over 3 years → 300 person-years on dialysis avoided.
+    const base = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const scen = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 900 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const burden = computeDialysisBurden(scen as any, base as any);
+    expect(burden).not.toBeNull();
+    expect(burden!.dialysisYearsAvoided).toBeCloseTo(300, 0);
+    // Sessions: 300 yr × (365.25/7 × 3) ≈ 300 × 156.5357 ≈ 46961.
+    expect(burden!.sessionsAvoided).toBeCloseTo(300 * (365.25 / 7) * 3, 0);
+  });
+
+  it('per-recipient months avoided uses cum_xeno at horizon', () => {
+    // 300 dialysis-years avoided; 300 cumulative xeno transplants
+    // (100/yr × 3 yr) → 12 months avoided per bridge recipient.
+    const base = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 0 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const scen = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 900 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 1.0,
+    });
+    const burden = computeDialysisBurden(scen as any, base as any);
+    expect(burden).not.toBeNull();
+    expect(burden!.cumXenoAtHorizon).toBeCloseTo(300, 0);
+    // (300 yr × 12 mo/yr) / 300 recipients = 12 mo/recipient.
+    expect(burden!.perRecipientMonthsAvoided).toBeCloseTo(12, 1);
+  });
+
+  it('time-share fractions are non-negative and sum to ~1 in each scenario', () => {
+    const base = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const scen = withBridgeFields(
+      makeViz({
+        years: 3,
+        Lcell: { low: { age18_45: 700 }, high: {} },
+        txPerYearCell: { low: { age18_45: 100 }, high: {} },
+        deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+        xenoShare: 0.5,
+      }),
+      { hxCell: { low: { age18_45: 200 }, high: {} } },
+    );
+    const burden = computeDialysisBurden(scen as any, base as any);
+    expect(burden).not.toBeNull();
+    const sumScen =
+      burden!.timeShare.dialysis +
+      burden!.timeShare.bridge +
+      burden!.timeShare.postAllo;
+    const sumBase =
+      burden!.baseTimeShare.dialysis +
+      burden!.baseTimeShare.bridge +
+      burden!.baseTimeShare.postAllo;
+    expect(sumScen).toBeCloseTo(1, 3);
+    expect(sumBase).toBeCloseTo(1, 3);
+    expect(burden!.timeShare.bridge).toBeGreaterThan(0);
+    expect(burden!.baseTimeShare.bridge).toBeCloseTo(0, 5);
+  });
+
+  it('transformer surfaces dialysisBurden when a base case is supplied', () => {
+    const base = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const scen = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 900 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+      xenoShare: 1.0,
+    });
+    const result = transformVizDataToSimulationData(scen as any, base as any, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    expect(result.dialysisBurden).toBeDefined();
+    expect(result.dialysisBurden!.dialysisYearsAvoided).toBeCloseTo(300, 0);
+  });
+
+  it('transformer omits dialysisBurden without a base case', () => {
+    const viz = makeViz({
+      years: 3,
+      Lcell: { low: { age18_45: 1000 }, high: {} },
+      txPerYearCell: { low: { age18_45: 100 }, high: {} },
+      deathsPerYearCell: { low: { age18_45: 0 }, high: {} },
+    });
+    const result = transformVizDataToSimulationData(viz as any, null, {
+      wlRemovalRates: { low: 0, high: 0 },
+    });
+    expect(result.dialysisBurden).toBeUndefined();
   });
 });
