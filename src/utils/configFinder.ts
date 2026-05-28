@@ -387,12 +387,21 @@ const BACKUP_PREFIX_ROOT = '_backup_pre_rerun_2026_05_14';
 // so the website's mortality sensitivity slider can navigate the sweep
 // produced by `BRIDGE_DEATH_MULTIPLIERS` in `run_bridge_experiments.py`.
 //
-// `BRIDGE_DEATH_MULTIPLIERS` is the canonical list of death multipliers
-// covered by the backend sweep. Frontend components that build a death
-// slider should snap to one of these values to guarantee a hit on
-// Supabase.
-export const BRIDGE_DEATH_MULTIPLIERS = [0.5, 1.0, 1.5, 2.0] as const;
-export type BridgeDeathMultiplier = (typeof BRIDGE_DEATH_MULTIPLIERS)[number];
+// `XENO_DEATH_MULTIPLIERS` is the canonical list of post-transplant
+// death multipliers covered by the backend sweep, shared by both
+// Replacement and Bridge pages. Each value scales the xeno post-tx
+// death hazard relative to the human-kidney post-tx baseline:
+//   1.0  — xeno mortality equals human-kidney mortality (optimistic baseline)
+//   1.2  — xeno mortality is 20% higher than human-kidney (slightly worse)
+// Frontend pickers MUST snap to one of these values; backend runners
+// (run_age_experiments.py / run_bridge_experiments.py /
+// run_bridge_priority.py) MUST generate at least these. The two
+// "branded" aliases below are kept so historical references in the
+// codebase stay intact, but they now point at the same array.
+export const XENO_DEATH_MULTIPLIERS = [1.0, 1.2] as const;
+export const BRIDGE_DEATH_MULTIPLIERS = XENO_DEATH_MULTIPLIERS;
+export type BridgeDeathMultiplier = (typeof XENO_DEATH_MULTIPLIERS)[number];
+export type XenoDeathMultiplier = BridgeDeathMultiplier;
 
 export interface ComposeNameParams {
   xeno_proportion: number;

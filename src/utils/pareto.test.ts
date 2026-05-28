@@ -573,31 +573,33 @@ describe('loadParetoDataset', () => {
       strategy: 'standard',
       targetYear: 10,
       metric: livesSavedFromViz,
-      // Sweep proportion ∈ {0.5, 1} at fixed surv=12 and death=0.5
+      // Sweep proportion ∈ {0.5, 1} at fixed surv=12 and death=1.2 (the
+      // new canonical non-baseline multiplier — see XENO_DEATH_MULTIPLIERS
+      // in configFinder.ts).
       points: [
         {
           label: '0.5x',
           x: 0.5,
           xeno_proportion: 0.5,
           surv: 12,
-          postTransplantDeathRate: 0.5,
+          postTransplantDeathRate: 1.2,
         },
         {
           label: '1x',
           x: 1,
           xeno_proportion: 1,
           surv: 12,
-          postTransplantDeathRate: 0.5,
+          postTransplantDeathRate: 1.2,
         },
       ] as ParetoPointSpec[],
     });
 
-    // Scenario names: prop0p5_relist1p0_death0p5, prop1p0_relist1p0_death0p5
+    // Scenario names: prop0p5_relist1p0_death1p2, prop1p0_relist1p0_death1p2
     expect(
-      urls.some((u) => u.includes('xeno_age_prop0p5_relist1p0_death0p5.json')),
+      urls.some((u) => u.includes('xeno_age_prop0p5_relist1p0_death1p2.json')),
     ).toBe(true);
     expect(
-      urls.some((u) => u.includes('xeno_age_prop1p0_relist1p0_death0p5.json')),
+      urls.some((u) => u.includes('xeno_age_prop1p0_relist1p0_death1p2.json')),
     ).toBe(true);
     // Base case is always prop0_relist1_death1 — anchor the lives-saved
     // comparison so the curve is internally consistent regardless of

@@ -27,7 +27,7 @@ export interface BridgeParams {
    * functioning xenograft (the `H_xeno` state). This is the central
    * Task-Group-2 lever: shifting this away from 1.0 lets us ask "does
    * bridging reduce or increase mortality vs. the human-kidney baseline".
-   * One of `BRIDGE_DEATH_MULTIPLIERS` ({0.5, 1.0, 1.5, 2.0}); other
+   * One of `BRIDGE_DEATH_MULTIPLIERS` ({1.0, 1.2}); other
    * values won't have a precomputed Supabase config.
    */
   postTransplantDeathRate: number;
@@ -213,7 +213,7 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                 {params.postTransplantDeathRate.toFixed(1)}× post-tx baseline
               </span>
             </div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {BRIDGE_DEATH_MULTIPLIERS.map((mult) => {
                 const isActive = params.postTransplantDeathRate === mult;
                 return (
@@ -268,21 +268,21 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                   comparison.
                 </p>
                 <p>
-                  <strong>1.0×</strong> means a bridged patient's death rate
-                  matches a standard human-kidney recipient in the same cPRA
-                  bin (~4 %/yr at the 95% threshold). <strong>0.5×</strong>
-                  models a bridge that's clearly better than a human kidney
-                  on this axis. <strong>2.0×</strong> stress-tests the
-                  scenario where xeno support is real but the patient still
-                  dies faster than a human-kidney recipient would — useful
-                  to see at what point the bridge stops outperforming
-                  dialysis.
+                  <strong>1.0×</strong> models a bridged patient whose
+                  death rate matches a standard human-kidney recipient in
+                  the same cPRA bin (~4 %/yr at the 95% threshold) — the
+                  optimistic baseline. <strong>1.2×</strong> models a
+                  bridge that's slightly worse than a human kidney on this
+                  axis (a realistic central estimate given current xeno
+                  trial data). Use the mortality-comparison panel above
+                  to see how each multiplier stacks against dialysis,
+                  which is the actual counterfactual the bridge replaces.
                 </p>
                 <p>
                   Because the bridge pickle bakes the M target as a combined
                   hazard (rejection + baseline death), moving this multiplier
-                  drifts the achieved mean bridge duration by at most ~3% at
-                  the 0.5×/2× extremes — negligible compared with Monte-Carlo
+                  drifts the achieved mean bridge duration by &lt;0.5% across
+                  the 1.0×/1.2× range — negligible compared with Monte-Carlo
                   noise.
                 </p>
               </div>
