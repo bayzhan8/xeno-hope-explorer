@@ -38,6 +38,18 @@ interface SimulationData {
     highCPRA: number;
     baseLowCPRA?: number;
     baseHighCPRA?: number;
+    // Task-7 paradigm-aware additions surfaced by the transformer.
+    // Replacement parses them but doesn't display the bridge-only ones.
+    dialysisMonths: number;
+    baseDialysisMonths?: number;
+    dialysisReductionMonths?: number;
+    dialysisLowCPRA: number;
+    dialysisHighCPRA: number;
+    baseDialysisLowCPRA?: number;
+    baseDialysisHighCPRA?: number;
+    bridgeMonths?: number;
+    bridgeLowCPRA?: number;
+    bridgeHighCPRA?: number;
   }>;
   waitingTimeDataByAge?: Array<{
     year: number;
@@ -45,6 +57,12 @@ interface SimulationData {
     highCPRA: Record<string, number>;
     baseLowCPRA?: Record<string, number>;
     baseHighCPRA?: Record<string, number>;
+    dialysisLowCPRA?: Record<string, number>;
+    dialysisHighCPRA?: Record<string, number>;
+    baseDialysisLowCPRA?: Record<string, number>;
+    baseDialysisHighCPRA?: Record<string, number>;
+    bridgeLowCPRA?: Record<string, number>;
+    bridgeHighCPRA?: Record<string, number>;
   }>;
   recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number; lowXeno: number }>;
   cumulativeDeathsData: Array<{ year: number; lowWaitlist: number; highWaitlist: number; lowPostTx: number; highPostTx: number; total: number }>;
@@ -162,7 +180,8 @@ const Index = () => {
               <div>
                 <h1 className="text-2xl font-bold text-primary tracking-tight">Xeno Kidney Impact Simulator</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  Age-stratified analysis of xenotransplantation outcomes • cPRA {params.highCPRAThreshold}%+ threshold
+                  Replacement Therapy &middot; xenokidney as a definitive
+                  transplant &middot; cPRA {params.highCPRAThreshold}%+ threshold
                 </p>
               </div>
             </div>
@@ -186,12 +205,35 @@ const Index = () => {
                 <Activity className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1">
-                <h3 className="text-base font-semibold text-foreground mb-2">About This Simulator</h3>
+                <h3 className="text-base font-semibold text-foreground mb-2">About Replacement Therapy</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  This simulator explores how xenotransplantation might impact kidney transplant outcomes for high-cPRA patients.
-                  Using a continuous-time Markov chain model based on 2022 SRTR data, it projects waitlist dynamics, transplant volumes,
-                  and mortality outcomes over a {params.simulationHorizon}-year horizon. Adjust the parameters below to explore different
-                  scenarios for xeno availability, graft failure rates, and post-transplant mortality.
+                  In Replacement Therapy, a xenokidney functions as a{' '}
+                  <em>definitive</em> transplant for high-cPRA patients. A
+                  successful xenotransplant removes the recipient from the
+                  waitlist; only a graft failure brings them back. The
+                  primary effects are queue-side — more transplants
+                  performed, smaller waitlist, fewer waitlist deaths from
+                  prolonged queue pressure. Mortality and wait-time
+                  improvements follow as queue dynamics shift.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed mt-3">
+                  Using a continuous-time Markov chain model based on 2022
+                  SRTR data, the simulator projects waitlist dynamics,
+                  transplant volumes, and mortality outcomes over a{' '}
+                  {params.simulationHorizon}-year horizon. Adjust the
+                  parameters below to explore different scenarios for xeno
+                  availability, graft failure rates, and post-transplant
+                  mortality.
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed mt-3 border-t border-medical-border pt-3">
+                  <strong>Different paradigm?</strong> If you want to model
+                  the xenokidney as a <em>temporary bridge</em> that keeps
+                  high-cPRA patients alive while they wait for a permanent
+                  human transplant — with mortality, dialysis-burden, and
+                  survival-to-allotransplant as the headline metrics —
+                  switch to the <em>Bridge Therapy</em> tab above. The two
+                  paradigms ask different scientific questions and
+                  optimize different outcomes.
                 </p>
               </div>
             </div>
@@ -247,7 +289,10 @@ const Index = () => {
                       Key Outcomes Summary
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Impact metrics over {params.simulationHorizon}-year simulation horizon
+                      Replacement-paradigm headline metrics over a{' '}
+                      {params.simulationHorizon}-year horizon: throughput,
+                      waitlist size, total transplants. Wait-time and
+                      mortality follow as queue dynamics shift.
                     </p>
                   </div>
                   <SummaryMetrics
