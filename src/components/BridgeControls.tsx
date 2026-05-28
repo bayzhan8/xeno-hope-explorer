@@ -84,10 +84,12 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
               </TooltipTrigger>
               <TooltipContent>
                 <p className="max-w-xs text-xs">
-                  Bridge mode treats xenografts as a temporary transplant: each
-                  one keeps a high-cPRA patient alive for a known mean duration,
-                  then they return to the waiting list for a permanent human
-                  transplant.
+                  Bridge Therapy treats the xenograft as a <em>temporary</em>
+                  organ: the recipient remains a transplant candidate and stays
+                  eligible for a definitive human allokidney. Both bridged and
+                  un-bridged candidates draw from the same fixed human supply —
+                  this simulation does not manufacture extra organs, it changes
+                  who can receive them and when.
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -182,9 +184,12 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              {xenoKidneysPerYear.toLocaleString()} bridging xeno procedures/year offered
-              ({params.xeno_proportion}x of {xenoBaseRate.toLocaleString()} base).
-              Actual delivered count may differ — see Throughput card.
+              {xenoKidneysPerYear.toLocaleString()} bridge xenografts/year offered
+              ({params.xeno_proportion}× of {xenoBaseRate.toLocaleString()} base).
+              The human allokidney supply is unchanged; a bridged recipient
+              competes for the same allokidneys as every other candidate.
+              Actual delivered counts (bridge xenos placed, bridge → allo
+              transitions) are on the Throughput card.
             </p>
           </div>
 
@@ -241,19 +246,24 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
               <div className="text-xs text-muted-foreground space-y-2 p-3 bg-muted rounded-md border border-medical-border">
                 <p className="font-medium text-foreground">How "graft survival" is modeled</p>
                 <p>
-                  Bridge Therapy assumes each xenograft has a known average
-                  useful lifetime in the recipient — a clinical "bridge" that
-                  buys the patient time while they wait for a permanent human
-                  kidney. We bake exactly your selected duration into a
-                  per-age combined hazard (relisting + death-with-tx), so a
-                  6-month bridge means an average of 6 months of useful
-                  function regardless of the recipient's age bin.
+                  The selected duration is the <em>intrinsic</em> mean useful
+                  lifetime of the xenograft — the time until graft failure (re-
+                  listing) or death-with-functioning-graft if nothing else
+                  intervenes. We bake exactly your selected duration into a
+                  per-age combined hazard, so a 6-month bridge means an
+                  intrinsic mean of 6 useful months regardless of the recipient
+                  age bin.
                 </p>
                 <p>
-                  At the end of that period the patient typically returns to
-                  the waitlist (most cases) or dies with a functioning graft
-                  (less common). Both outcomes are captured by the same
-                  combined-hazard target.
+                  A bridged recipient now has a <em>third</em> exit channel
+                  besides re-listing and death-with-graft: a definitive human
+                  allokidney can become available while their bridge is still
+                  intact. When that happens the bridge ends early — the patient
+                  becomes a permanent human-kidney recipient (counted in
+                  Bridge → Allo on the Throughput card) and the bridge organ is
+                  considered consumed. So the <em>observed</em> mean residence
+                  time on the bridge can be shorter than your selected M when
+                  the allo supply is plentiful relative to demand.
                 </p>
               </div>
             )}
