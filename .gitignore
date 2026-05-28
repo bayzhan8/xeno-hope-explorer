@@ -15,6 +15,9 @@ dist-ssr
 # Dev server pid file (written by local dev wrapper, never source)
 .dev_pid
 
+# TypeScript incremental build cache (regenerated on every `tsc -b`)
+*.tsbuildinfo
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
