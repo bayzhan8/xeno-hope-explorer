@@ -137,6 +137,25 @@ interface SimulationData {
     highCPRA: number;
     baseLowCPRA?: number;
     baseHighCPRA?: number;
+    // ─── Dialysis-only wait (W_C) — Task 3 ─────────────────────────────
+    // Time on dialysis per list-spell. In replacement mode this equals
+    // the overall wait; in bridge mode it drops as bridging absorbs C
+    // residence time. Always present (NaN if outflow=0).
+    dialysisMonths: number;
+    baseDialysisMonths?: number;
+    dialysisReductionMonths?: number;       // base_W_C − W_C
+    dialysisLowCPRA: number;
+    dialysisHighCPRA: number;
+    baseDialysisLowCPRA?: number;
+    baseDialysisHighCPRA?: number;
+    // ─── Time on bridge (W_X) — bridge mode only ───────────────────────
+    // Mean time on a functioning xenograft per spell (flow-balance
+    // residence time). NaN in replacement scenarios where no patient
+    // ever entered H_xeno, and NaN cell-by-cell during heavy transient
+    // build-up of H_xeno.
+    bridgeMonths?: number;
+    bridgeLowCPRA?: number;
+    bridgeHighCPRA?: number;
   }>;
   waitingTimeDataByAge?: Array<{
     year: number;
@@ -144,6 +163,14 @@ interface SimulationData {
     highCPRA: Record<string, number>;
     baseLowCPRA?: Record<string, number>;
     baseHighCPRA?: Record<string, number>;
+    // Dialysis-only and bridge-only views, mirroring the aggregate
+    // additions above.
+    dialysisLowCPRA?: Record<string, number>;
+    dialysisHighCPRA?: Record<string, number>;
+    baseDialysisLowCPRA?: Record<string, number>;
+    baseDialysisHighCPRA?: Record<string, number>;
+    bridgeLowCPRA?: Record<string, number>;
+    bridgeHighCPRA?: Record<string, number>;
   }>;
   recipientsData: Array<{ year: number; lowHuman: number; highHuman: number; highXeno: number; lowXeno: number }>;
   cumulativeDeathsData: Array<{ year: number; lowWaitlist: number; highWaitlist: number; lowPostTx: number; highPostTx: number; total: number }>;
@@ -179,6 +206,11 @@ interface SimulationData {
   // (e.g. the bridge throughput rows, the "bridged candidates" overlay
   // on the waitlist chart).
   therapyMode?: TherapyMode;
+  // Dialysis-burden summary (Task Group 5). Always computed when a base
+  // scenario is available, regardless of therapy mode (replacement mode
+  // also avoids dialysis by substituting xeno for waitlist time). UI
+  // components render this most prominently on the Bridge page.
+  dialysisBurden?: DialysisBurdenMetrics;
   // Age-specific data (optional)
   waitlistDataByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number> }>;
   netDeathsPreventedByAge?: Array<{ year: number; lowCPRA: Record<string, number>; highCPRA: Record<string, number>; total: Record<string, number> }>;
@@ -383,6 +415,21 @@ function findFirstIndex<T>(array: T[], predicate: (item: T) => boolean): number 
 //     - Xeno transplants  C → H_xeno            (still in candidate pool)
 //     - Relisting         H_xeno → C            (still in candidate pool)
 //
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// We also emit two related per-state estimates so the Bridge page can
+// answer the Task-3 reframe ("the queue is conserved; only the
+// composition of the wait changes"):
+//
+//   W_C   — dialysis-only wait. L = C, outflow = (transplants that drain
+//           C) + waitlist deaths + waitlist removals. Strictly equals W
+//           in replacement mode (cum_bridge_allo = 0); drops under
+//           bridging.
+//   W_X   — time-on-bridge per spell. L = H_xeno, outflow derived from
+//           flow balance:  outflow_X = inflow_X − ΔH_xeno  where
+//           inflow_X = Δ cum_xeno_transplants. Reaches the steady-state
+//           formula L_X / Δcum_xeno when H_xeno stops growing. Always
+//           computed; charts typically only render it in bridge mode.
+//
 // The waitlist-removal channel is not in the viz JSON, so we reconstruct it
 // analytically from the per-(cPRA) `wl_removal` rate baked into the
 // simulator's input rates and the year's mean L. In the default 85%
@@ -419,11 +466,54 @@ const WT_AGE_PATTERNS: Array<{ key: string; pattern: string }> = [
 
 interface WaitTimeYear {
   year: number;                 // 1-indexed
+  // ─── Combined "wait until permanent exit" (legacy W) ───────────────────
+  //   Replacement: L = C (un-bridged candidates only)
+  //   Bridge:      L = C + H_xeno (a bridged patient still counts as
+  //                a candidate for a definitive allokidney). Approximately
+  //                conserved under bridging because the human-kidney
+  //                supply is unchanged — only the *composition* of the
+  //                wait shifts (Task-3 reframing).
   totalMonths: number;          // NaN if outflow=0
   lowCPRAMonths: number;
   highCPRAMonths: number;
   lowCPRAByAge: Record<string, number>;
   highCPRAByAge: Record<string, number>;
+  // ─── Dialysis-only wait (W_C — Task 3 headline) ────────────────────────
+  // L = C only (un-bridged candidates). Outflows drain C specifically:
+  //   - tx_std going to C candidates  ( = cum_std - cum_bridge_allo )
+  //   - tx_xeno (C → H_xeno; leaves dialysis even if not yet "done waiting")
+  //   - waitlist deaths (deaths in C)
+  //   - waitlist removals (rate × meanL_C × 365)
+  // Bridge-deaths are NOT outflow from C (they happen in H_xeno).
+  //
+  // In replacement mode this metric is mathematically identical to
+  // totalMonths (cum_bridge_allo is zero by construction); a downstream
+  // chart can either dedupe or just always display this as the
+  // headline.
+  //
+  // In bridge mode it's the clinically meaningful number — drops as
+  // bridging absorbs C residence time.
+  dialysisTotalMonths: number;
+  dialysisLowCPRAMonths: number;
+  dialysisHighCPRAMonths: number;
+  dialysisLowCPRAByAge: Record<string, number>;
+  dialysisHighCPRAByAge: Record<string, number>;
+  // ─── Time-on-bridge wait (W_X — bridge mode only) ──────────────────────
+  // L = H_xeno population. Outflow derived via flow balance — over a
+  // window, outflow = inflow - ΔH_xeno where inflow = Δ cum_xeno_tx.
+  // In steady state this collapses to L_X / Δcum_xeno = mean residence
+  // time on a functioning xenograft per spell. NaN when outflow ≤ 0
+  // (heavy transient build-up of H_xeno).
+  //
+  // Always computed (replacement-mode H_xeno still has a residence
+  // time — it's the post-xeno-tx lifetime there); chart components
+  // typically only render it in bridge mode where it's clinically
+  // meaningful as "time on bridge per spell."
+  bridgeTotalMonths: number;
+  bridgeLowCPRAMonths: number;
+  bridgeHighCPRAMonths: number;
+  bridgeLowCPRAByAge: Record<string, number>;
+  bridgeHighCPRAByAge: Record<string, number>;
 }
 
 // Linear-interpolate cumulative series y at time t (days). Cumulative
@@ -609,14 +699,32 @@ export function computeWaitTimeByYear(
   //      - waitlist removals (wl_removal × meanL_C × 365)
   //    Xeno transplants (C → H_xeno) and relisting (H_xeno → C) are
   //    INTERNAL to the candidate pool and intentionally omitted.
+  const cumBridgeAllo = (vizData as VizData & {
+    cumulative_bridge_allo?: { x: number[]; series: Array<{ label: string; y: number[] }> };
+  }).cumulative_bridge_allo;
+
   type Cell = {
     cpra: 'low' | 'high';
     ageKey: string;
-    L: number[];                      // pool size over time (C in repl, C+H_xeno in bridge)
-    cumTx: number[];                  // outflow-by-transplant (cumulative)
+    // Combined pool L for legacy W: C in replacement, C+H_xeno in bridge.
+    L: number[];
+    // Transplant outflow channel for legacy W (matches the L definition).
+    cumTx: number[];
     deathsPerYear: number[];          // length = wlDeaths.x.length
     cumBridgeDeaths: number[];        // length matches L; identically zero in repl mode
-    LCForRemoval: number[];           // pool size for the wl_removal hazard (C only, both modes)
+    LCForRemoval: number[];           // C-only series (also = L_C, the W_C pool)
+    // ─── W_C extras ──────────────────────────────────────────────────
+    // Cumulative outflow-from-C (transplants only — deaths/removals are
+    // handled separately in the per-year loop). In replacement this is
+    // cum_xeno + cum_std; in bridge it's cum_xeno + (cum_std −
+    // cum_bridge_allo).
+    cumTxFromC: number[];
+    // ─── W_X extras ──────────────────────────────────────────────────
+    // H_xeno population series (= L_X). All-zero if the viz omits
+    // recipients_xeno (legacy replacement JSONs).
+    LX: number[];
+    // Cumulative xeno transplants (= cumulative inflow to H_xeno).
+    cumXeno: number[];
   };
   const cells: Cell[] = [];
   for (const { key, pattern } of cpraGroups) {
@@ -629,6 +737,7 @@ export function computeWaitTimeByYear(
       const postTxXenoCell = findCellSeries(
         cumPostTxXeno?.series, pattern, agePattern, 'xeno',
       );
+      const bridgeAllo = findCellSeries(cumBridgeAllo?.series, pattern, agePattern);
       const len = Ccell.length;
       const cumTx = new Array<number>(len).fill(0);
       if (isBridge) {
@@ -654,6 +763,32 @@ export function computeWaitTimeByYear(
       if (isBridge && postTxXenoCell && postTxXenoCell.length === len) {
         for (let i = 0; i < len; i++) cumBridgeDeaths[i] = postTxXenoCell[i] || 0;
       }
+      // W_C outflow-from-C (transplant channels only — deaths and
+      // removals are layered in per-year below). The bridge_allo subset
+      // of std transplants targets H_xeno recipients, NOT C, so we
+      // remove it from the C-draining count.
+      const cumTxFromC = new Array<number>(len).fill(0);
+      const xenoArr = xenoTx ?? null;
+      const stdArr = stdTx ?? null;
+      const bridgeAlloArr = (isBridge && bridgeAllo && bridgeAllo.length === len)
+        ? bridgeAllo : null;
+      for (let i = 0; i < len; i++) {
+        const x = xenoArr?.[i] || 0;
+        const s = stdArr?.[i] || 0;
+        const ba = bridgeAlloArr?.[i] || 0;
+        // Defensive clamp: small Monte-Carlo noise can push the diff
+        // slightly negative; keep the cumulative monotone.
+        cumTxFromC[i] = x + Math.max(0, s - ba);
+      }
+      // W_X: H_xeno population + cum_xeno inflow.
+      const LX = new Array<number>(len).fill(0);
+      if (hxCell && hxCell.length === len) {
+        for (let i = 0; i < len; i++) LX[i] = hxCell[i] || 0;
+      }
+      const cumXenoCell = new Array<number>(len).fill(0);
+      if (xenoArr && xenoArr.length === len) {
+        for (let i = 0; i < len; i++) cumXenoCell[i] = xenoArr[i] || 0;
+      }
       const deathsAge = findCellSeries(wlDeaths.series, pattern, agePattern);
       const deathsPerYear = deathsAge || new Array<number>(wlDeaths.x.length).fill(0);
       cells.push({
@@ -664,6 +799,9 @@ export function computeWaitTimeByYear(
         deathsPerYear,
         cumBridgeDeaths,
         LCForRemoval: Ccell.slice(),
+        cumTxFromC,
+        LX,
+        cumXeno: cumXenoCell,
       });
     }
   }
@@ -694,12 +832,26 @@ export function computeWaitTimeByYear(
     // Per-cell wait times (used only for the age-stratified view).
     const lowByAge: Record<string, number> = {};
     const highByAge: Record<string, number> = {};
+    const lowDialByAge: Record<string, number> = {};
+    const highDialByAge: Record<string, number> = {};
+    const lowBridgeByAge: Record<string, number> = {};
+    const highBridgeByAge: Record<string, number> = {};
 
-    // Sums for flow-weighted aggregation.
+    // Sums for flow-weighted aggregation (W combined).
     let sumLLow = 0;
     let sumOutLow = 0;
     let sumLHigh = 0;
     let sumOutHigh = 0;
+    // Sums for W_C (dialysis only).
+    let sumLCLow = 0;
+    let sumOutCLow = 0;
+    let sumLCHigh = 0;
+    let sumOutCHigh = 0;
+    // Sums for W_X (bridge only).
+    let sumLXLow = 0;
+    let sumOutXLow = 0;
+    let sumLXHigh = 0;
+    let sumOutXHigh = 0;
 
     for (const cell of cells) {
       const meanL = meanInWindow(xDays, cell.L, tStart, tEnd);
@@ -707,7 +859,8 @@ export function computeWaitTimeByYear(
       // only (a bridged patient on a functioning xenograft isn't
       // "removed for being too sick"); we use a dedicated meanL_C for
       // the hazard product to avoid inflating removals in bridge mode.
-      const meanLForRemoval = meanInWindow(xDays, cell.LCForRemoval, tStart, tEnd);
+      const meanLC = meanInWindow(xDays, cell.LCForRemoval, tStart, tEnd);
+      const meanLX = meanInWindow(xDays, cell.LX, tStart, tEnd);
       const txStart = interpolateCumulative(xDays, cell.cumTx, tStart);
       const txEnd = interpolateCumulative(xDays, cell.cumTx, tEnd);
       const dTx = Math.max(0, txEnd - txStart);
@@ -725,23 +878,71 @@ export function computeWaitTimeByYear(
       // when meanL is missing.
       const wlRemovalRate = cell.cpra === 'low' ? wlRem.low : wlRem.high;
       const dRemovals =
-        Number.isFinite(meanLForRemoval) && wlRemovalRate > 0
-          ? wlRemovalRate * meanLForRemoval * 365
+        Number.isFinite(meanLC) && wlRemovalRate > 0
+          ? wlRemovalRate * meanLC * 365
           : 0;
       const outflow = dTx + dDeaths + dBridgeDeaths + dRemovals;
       const months = waitTimeMonths(meanL, outflow);
 
+      // ── W_C: dialysis-only wait per spell ────────────────────────
+      //  L = C, outflow = (cum_xeno + cum_std - cum_bridge_allo) +
+      //                   wl_deaths + wl_removals
+      //  Note: bridge_deaths are NOT outflow from C (they happen in
+      //  H_xeno). Xeno transplants ARE outflow from C even in bridge
+      //  mode (the patient stops being on dialysis).
+      const txFromCStart = interpolateCumulative(xDays, cell.cumTxFromC, tStart);
+      const txFromCEnd = interpolateCumulative(xDays, cell.cumTxFromC, tEnd);
+      const dTxFromC = Math.max(0, txFromCEnd - txFromCStart);
+      const outflowC = dTxFromC + dDeaths + dRemovals;
+      const dialysisMonths = waitTimeMonths(meanLC, outflowC);
+
+      // ── W_X: time on bridge per spell ────────────────────────────
+      //  L = H_xeno, outflow_X = inflow_X − ΔH_xeno
+      //  where inflow_X = Δcum_xeno_transplants.
+      //  In steady state ΔH_xeno → 0 and outflow_X → Δcum_xeno.
+      const xenoInStart = interpolateCumulative(xDays, cell.cumXeno, tStart);
+      const xenoInEnd = interpolateCumulative(xDays, cell.cumXeno, tEnd);
+      const dInflowX = Math.max(0, xenoInEnd - xenoInStart);
+      const lxStart = interpolateCumulative(xDays, cell.LX, tStart);
+      const lxEnd = interpolateCumulative(xDays, cell.LX, tEnd);
+      const dHX = lxEnd - lxStart;
+      const outflowX = dInflowX - dHX;
+      // NaN when meanLX = 0 (no bridge population) or outflow ≤ 0.
+      const bridgeMonths = (meanLX > 0 && outflowX > 0)
+        ? waitTimeMonths(meanLX, outflowX)
+        : NaN;
+
       if (cell.cpra === 'low') {
         lowByAge[cell.ageKey] = months;
+        lowDialByAge[cell.ageKey] = dialysisMonths;
+        lowBridgeByAge[cell.ageKey] = bridgeMonths;
         if (Number.isFinite(meanL) && outflow > 0) {
           sumLLow += meanL;
           sumOutLow += outflow;
         }
+        if (Number.isFinite(meanLC) && outflowC > 0) {
+          sumLCLow += meanLC;
+          sumOutCLow += outflowC;
+        }
+        if (Number.isFinite(meanLX) && meanLX > 0 && outflowX > 0) {
+          sumLXLow += meanLX;
+          sumOutXLow += outflowX;
+        }
       } else {
         highByAge[cell.ageKey] = months;
+        highDialByAge[cell.ageKey] = dialysisMonths;
+        highBridgeByAge[cell.ageKey] = bridgeMonths;
         if (Number.isFinite(meanL) && outflow > 0) {
           sumLHigh += meanL;
           sumOutHigh += outflow;
+        }
+        if (Number.isFinite(meanLC) && outflowC > 0) {
+          sumLCHigh += meanLC;
+          sumOutCHigh += outflowC;
+        }
+        if (Number.isFinite(meanLX) && meanLX > 0 && outflowX > 0) {
+          sumLXHigh += meanLX;
+          sumOutXHigh += outflowX;
         }
       }
     }
@@ -750,6 +951,14 @@ export function computeWaitTimeByYear(
     const highMonths = waitTimeMonths(sumLHigh, sumOutHigh);
     const totalMonths = waitTimeMonths(sumLLow + sumLHigh, sumOutLow + sumOutHigh);
 
+    const lowDialysis = waitTimeMonths(sumLCLow, sumOutCLow);
+    const highDialysis = waitTimeMonths(sumLCHigh, sumOutCHigh);
+    const totalDialysis = waitTimeMonths(sumLCLow + sumLCHigh, sumOutCLow + sumOutCHigh);
+
+    const lowBridge = waitTimeMonths(sumLXLow, sumOutXLow);
+    const highBridge = waitTimeMonths(sumLXHigh, sumOutXHigh);
+    const totalBridge = waitTimeMonths(sumLXLow + sumLXHigh, sumOutXLow + sumOutXHigh);
+
     out.push({
       year: y,
       totalMonths,
@@ -757,9 +966,262 @@ export function computeWaitTimeByYear(
       highCPRAMonths: highMonths,
       lowCPRAByAge: lowByAge,
       highCPRAByAge: highByAge,
+      dialysisTotalMonths: totalDialysis,
+      dialysisLowCPRAMonths: lowDialysis,
+      dialysisHighCPRAMonths: highDialysis,
+      dialysisLowCPRAByAge: lowDialByAge,
+      dialysisHighCPRAByAge: highDialByAge,
+      bridgeTotalMonths: totalBridge,
+      bridgeLowCPRAMonths: lowBridge,
+      bridgeHighCPRAMonths: highBridge,
+      bridgeLowCPRAByAge: lowBridgeByAge,
+      bridgeHighCPRAByAge: highBridgeByAge,
     });
   }
   return out;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Dialysis-burden metrics (Task Group 5)
+// ────────────────────────────────────────────────────────────────────────
+//
+// The Bridge page reframes the headline value of xenotransplantation
+// around dialysis displacement rather than just throughput or mortality.
+// Modelling assumption (codified in MARKOV_CHAIN_SPECIFICATION.md and the
+// Bridge intro card): every patient in state C is on active dialysis.
+// State H_xeno represents the same patient with a functioning xenograft
+// bridge (off dialysis); state H_std represents a definitive allokidney
+// recipient (also off dialysis).
+//
+// Headline metric: cumulative dialysis-years avoided over the horizon
+//
+//   dialysis_years_avoided(T) = (1/365) · ∫₀ᵀ [ C_base(τ) − C_scen(τ) ] dτ
+//
+// Approximated trapezoidally on the shared (xDays) grid. In replacement
+// mode this reduces to "person-years removed from the waitlist by xeno
+// substitution"; in bridge mode it captures the additional channel of
+// "patients holding a bridge xenograft instead of being on dialysis."
+//
+// Derived metrics:
+//   per_recipient_months_avoided = 12 · dialysis_years_avoided
+//                                       / cum_xeno_transplants(T)
+//   sessions_avoided             = dialysis_years_avoided · 365.25/7 · 3
+//                                  (3 sessions/week is the modal HD schedule)
+//
+// Time-share (stacked bar): fraction of horizon person-time spent in
+// each state. Computed as
+//   share_C = ∫C dt / ∫(C + H_xeno + H_std) dt
+//   share_X = ∫H_xeno dt / ∫(...)
+//   share_std = ∫H_std dt / ∫(...)
+//
+// Returns null when prerequisites are missing (e.g. no base scenario).
+export interface DialysisBurdenMetrics {
+  horizonYears: number;
+  // Cumulative person-years on dialysis avoided vs. base case.
+  dialysisYearsAvoided: number;
+  // = dialysisYearsAvoided × 12 / cumXenoAtHorizon. 0 when no xeno
+  // transplants occurred. Reported in months for user familiarity.
+  perRecipientMonthsAvoided: number;
+  // = dialysisYearsAvoided × 365.25/7 × 3, the count of 3-per-week
+  // outpatient hemodialysis sessions displaced over the horizon.
+  sessionsAvoided: number;
+  // Total cumulative xeno transplants at horizon (used as the denominator
+  // of perRecipientMonthsAvoided; surfaced so consumers can sanity-check).
+  cumXenoAtHorizon: number;
+  // Time-share (scenario): ∫C dt vs ∫H_xeno dt vs ∫H_std dt over the
+  // horizon, normalized to fractions of total person-time on the list
+  // OR holding a graft.
+  timeShare: { dialysis: number; bridge: number; postAllo: number };
+  // Same time-share decomposition for the base case (so the UI can show
+  // a side-by-side stacked bar). Always present alongside the scenario
+  // share since dialysisYearsAvoided requires a base scenario anyway.
+  baseTimeShare: { dialysis: number; bridge: number; postAllo: number };
+}
+
+// Sum the cell-level series across (cPRA × age) buckets into a single
+// per-x trajectory. Tolerates missing input (returns empty array).
+function sumAcrossCells(
+  series: Array<{ label: string; y: number[] }> | undefined,
+): number[] {
+  if (!series || series.length === 0) return [];
+  // Filter out aggregate rows ("total ...") so we don't double-count.
+  const cells = series.filter((s) => {
+    const lbl = (s.label || '').toLowerCase();
+    return !lbl.startsWith('total') && (lbl.includes('age') || lbl.includes('cpra'));
+  });
+  const source = cells.length > 0 ? cells : series;
+  const len = source[0]?.y?.length ?? 0;
+  const out = new Array<number>(len).fill(0);
+  for (const s of source) {
+    if (!s.y || s.y.length !== len) continue;
+    // Skip aggregate rows when we couldn't filter (fallback path).
+    const lbl = (s.label || '').toLowerCase();
+    if (cells.length === 0 && lbl.startsWith('total')) continue;
+    for (let i = 0; i < len; i++) out[i] += s.y[i] || 0;
+  }
+  return out;
+}
+
+// Trapezoidal integral of y(t) over [tStart, tEnd] given the x grid.
+// Linear interpolation at the boundaries; assumes x is sorted.
+function trapezoidalIntegral(
+  x: number[],
+  y: number[],
+  tStart: number,
+  tEnd: number,
+): number {
+  if (x.length === 0 || y.length === 0 || x.length !== y.length) return 0;
+  if (tEnd <= tStart) return 0;
+  const interp = (t: number): number => {
+    if (t <= x[0]) return y[0] || 0;
+    if (t >= x[x.length - 1]) return y[y.length - 1] || 0;
+    for (let i = 1; i < x.length; i++) {
+      if (x[i] >= t) {
+        const x0 = x[i - 1];
+        const x1 = x[i];
+        if (x1 === x0) return y[i] || 0;
+        const frac = (t - x0) / (x1 - x0);
+        return (y[i - 1] || 0) + frac * ((y[i] || 0) - (y[i - 1] || 0));
+      }
+    }
+    return y[y.length - 1] || 0;
+  };
+  let sum = 0;
+  let prevX = tStart;
+  let prevY = interp(tStart);
+  for (let i = 0; i < x.length; i++) {
+    if (x[i] <= tStart) continue;
+    if (x[i] >= tEnd) break;
+    const curX = x[i];
+    const curY = y[i] || 0;
+    sum += 0.5 * (prevY + curY) * (curX - prevX);
+    prevX = curX;
+    prevY = curY;
+  }
+  const endY = interp(tEnd);
+  sum += 0.5 * (prevY + endY) * (tEnd - prevX);
+  return sum;
+}
+
+// Sum H_xeno cells from the recipients_xeno series, or fall back to the
+// (legacy / non-bridge) recipients series when recipients_xeno is
+// absent. For replacement-mode JSONs without H_xeno semantics this
+// returns 0-filled.
+function sumRecipientsXeno(vizData: VizData): { x: number[]; y: number[] } {
+  if (vizData.recipients_xeno && vizData.recipients_xeno.x && vizData.recipients_xeno.x.length > 0) {
+    return {
+      x: vizData.recipients_xeno.x,
+      y: sumAcrossCells(vizData.recipients_xeno.series),
+    };
+  }
+  return { x: vizData.waitlist_sizes?.x ?? [], y: [] };
+}
+
+function sumRecipientsStd(vizData: VizData): { x: number[]; y: number[] } {
+  if (vizData.recipients_std && vizData.recipients_std.x && vizData.recipients_std.x.length > 0) {
+    return {
+      x: vizData.recipients_std.x,
+      y: sumAcrossCells(vizData.recipients_std.series),
+    };
+  }
+  return { x: vizData.waitlist_sizes?.x ?? [], y: [] };
+}
+
+function sumWaitlist(vizData: VizData): { x: number[]; y: number[] } {
+  if (!vizData.waitlist_sizes || !vizData.waitlist_sizes.x) return { x: [], y: [] };
+  return {
+    x: vizData.waitlist_sizes.x,
+    y: sumAcrossCells(vizData.waitlist_sizes.series),
+  };
+}
+
+function sumCumXeno(vizData: VizData): { x: number[]; y: number[] } {
+  const src = vizData.cumulative_xeno_transplants;
+  if (!src || !src.x || src.x.length === 0) return { x: [], y: [] };
+  return { x: src.x, y: sumAcrossCells(src.series) };
+}
+
+export function computeDialysisBurden(
+  vizData: VizData,
+  baseVizData: VizData | null,
+  horizonYears?: number,
+): DialysisBurdenMetrics | null {
+  if (!baseVizData) return null;
+  const wlScen = sumWaitlist(vizData);
+  const wlBase = sumWaitlist(baseVizData);
+  if (wlScen.x.length === 0 || wlBase.x.length === 0) return null;
+  const horizonDays = horizonYears
+    ? horizonYears * 365
+    : Math.min(
+        wlScen.x[wlScen.x.length - 1],
+        wlBase.x[wlBase.x.length - 1],
+      );
+  if (!Number.isFinite(horizonDays) || horizonDays <= 0) return null;
+
+  const intCScen = trapezoidalIntegral(wlScen.x, wlScen.y, 0, horizonDays);
+  const intCBase = trapezoidalIntegral(wlBase.x, wlBase.y, 0, horizonDays);
+  const dialysisDaysAvoided = Math.max(0, intCBase - intCScen);
+  const dialysisYearsAvoided = dialysisDaysAvoided / 365;
+
+  const hxScen = sumRecipientsXeno(vizData);
+  const stdScen = sumRecipientsStd(vizData);
+  const hxBase = sumRecipientsXeno(baseVizData);
+  const stdBase = sumRecipientsStd(baseVizData);
+
+  const intHxScen = hxScen.y.length > 0
+    ? trapezoidalIntegral(hxScen.x, hxScen.y, 0, horizonDays)
+    : 0;
+  const intStdScen = stdScen.y.length > 0
+    ? trapezoidalIntegral(stdScen.x, stdScen.y, 0, horizonDays)
+    : 0;
+  const intHxBase = hxBase.y.length > 0
+    ? trapezoidalIntegral(hxBase.x, hxBase.y, 0, horizonDays)
+    : 0;
+  const intStdBase = stdBase.y.length > 0
+    ? trapezoidalIntegral(stdBase.x, stdBase.y, 0, horizonDays)
+    : 0;
+
+  const totalScen = intCScen + intHxScen + intStdScen;
+  const totalBase = intCBase + intHxBase + intStdBase;
+  const safe = (num: number, denom: number): number =>
+    denom > 0 ? num / denom : 0;
+  const timeShare = {
+    dialysis: safe(intCScen, totalScen),
+    bridge: safe(intHxScen, totalScen),
+    postAllo: safe(intStdScen, totalScen),
+  };
+  const baseTimeShare = {
+    dialysis: safe(intCBase, totalBase),
+    bridge: safe(intHxBase, totalBase),
+    postAllo: safe(intStdBase, totalBase),
+  };
+
+  // Per-recipient months avoided uses CUMULATIVE xeno transplants at
+  // horizon as the denominator (each C → H_xeno transition is a "bridge
+  // event" — the unit we want to amortize the dialysis-time savings
+  // over). Falls back to 0 if no xeno transplants occurred.
+  const cumXeno = sumCumXeno(vizData);
+  const cumXenoAtHorizon = cumXeno.x.length > 0
+    ? interpolateCumulative(cumXeno.x, cumXeno.y, horizonDays)
+    : 0;
+  const perRecipientMonthsAvoided = cumXenoAtHorizon > 0
+    ? (dialysisYearsAvoided * 12) / cumXenoAtHorizon
+    : 0;
+
+  // 3 sessions/week × 365.25/7 weeks/year (calendar weeks, not 52,
+  // matches Medicare's HD billing convention).
+  const SESSIONS_PER_YEAR = (365.25 / 7) * 3;
+  const sessionsAvoided = dialysisYearsAvoided * SESSIONS_PER_YEAR;
+
+  return {
+    horizonYears: horizonDays / 365,
+    dialysisYearsAvoided,
+    perRecipientMonthsAvoided,
+    sessionsAvoided,
+    cumXenoAtHorizon,
+    timeShare,
+    baseTimeShare,
+  };
 }
 
 export interface TransformOptions {
@@ -769,6 +1231,9 @@ export interface TransformOptions {
   // and isolate the transplant + death components when verifying core
   // math. Production callers should leave this unset.
   wlRemovalRates?: { low: number; high: number };
+  // Horizon (years) for the dialysis-burden integral. Defaults to the
+  // shorter of the two scenarios' x[-1]/365.
+  dialysisBurdenHorizonYears?: number;
 }
 
 export function transformVizDataToSimulationData(
@@ -1830,6 +2295,9 @@ export function transformVizDataToSimulationData(
         averageWaitingTimeMonths: NaN,
         lowCPRA: NaN,
         highCPRA: NaN,
+        dialysisMonths: NaN,
+        dialysisLowCPRA: NaN,
+        dialysisHighCPRA: NaN,
       });
     }
   }
@@ -1955,11 +2423,25 @@ export function transformVizDataToSimulationData(
     : null;
   if (xenoWT && xenoWT.length > 0) {
     // Replace the placeholder year-by-year list built in pass #7 above.
+    const therapyMode = resolveTherapyMode(vizData);
+    const exposeBridge = therapyMode === 'bridge_v2';
+    const burden = computeDialysisBurden(
+      vizData,
+      baseVizData ?? null,
+      opts.dialysisBurdenHorizonYears,
+    );
+    if (burden) result.dialysisBurden = burden;
     result.waitingTimeData = xenoWT.map((row) => {
       const baseRow = baseWT?.find((b) => b.year === row.year);
       const reduction =
         baseRow && Number.isFinite(baseRow.totalMonths) && Number.isFinite(row.totalMonths)
           ? baseRow.totalMonths - row.totalMonths
+          : undefined;
+      const dialysisReduction =
+        baseRow &&
+        Number.isFinite(baseRow.dialysisTotalMonths) &&
+        Number.isFinite(row.dialysisTotalMonths)
+          ? baseRow.dialysisTotalMonths - row.dialysisTotalMonths
           : undefined;
       return {
         year: row.year,
@@ -1971,6 +2453,18 @@ export function transformVizDataToSimulationData(
         highCPRA: row.highCPRAMonths,
         baseLowCPRA: baseRow?.lowCPRAMonths,
         baseHighCPRA: baseRow?.highCPRAMonths,
+        dialysisMonths: row.dialysisTotalMonths,
+        baseDialysisMonths: baseRow?.dialysisTotalMonths,
+        dialysisReductionMonths: dialysisReduction,
+        dialysisLowCPRA: row.dialysisLowCPRAMonths,
+        dialysisHighCPRA: row.dialysisHighCPRAMonths,
+        baseDialysisLowCPRA: baseRow?.dialysisLowCPRAMonths,
+        baseDialysisHighCPRA: baseRow?.dialysisHighCPRAMonths,
+        // Only expose bridge-residence stats in bridge mode to avoid
+        // confusing consumers in replacement scenarios.
+        bridgeMonths: exposeBridge ? row.bridgeTotalMonths : undefined,
+        bridgeLowCPRA: exposeBridge ? row.bridgeLowCPRAMonths : undefined,
+        bridgeHighCPRA: exposeBridge ? row.bridgeHighCPRAMonths : undefined,
       };
     });
 
@@ -1988,6 +2482,12 @@ export function transformVizDataToSimulationData(
           highCPRA: row.highCPRAByAge,
           baseLowCPRA: baseRow?.lowCPRAByAge,
           baseHighCPRA: baseRow?.highCPRAByAge,
+          dialysisLowCPRA: row.dialysisLowCPRAByAge,
+          dialysisHighCPRA: row.dialysisHighCPRAByAge,
+          baseDialysisLowCPRA: baseRow?.dialysisLowCPRAByAge,
+          baseDialysisHighCPRA: baseRow?.dialysisHighCPRAByAge,
+          bridgeLowCPRA: exposeBridge ? row.bridgeLowCPRAByAge : undefined,
+          bridgeHighCPRA: exposeBridge ? row.bridgeHighCPRAByAge : undefined,
         };
       });
     }

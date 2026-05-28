@@ -1,16 +1,31 @@
 /**
  * WaitTimeChart — primary wait-time visualization.
  *
- * Renders the Little's-Law-derived average wait time over the simulation
- * horizon, with optional cPRA and age-group breakdowns and a base-case
- * comparison. Mirrors the structure of the "Waitlist Size Over Time" card
- * in SimulationCharts.tsx (same toggles, same color palette, same x-axis
- * configuration) so it slots seamlessly into either the Replacement or
- * Bridge therapy page.
+ * Renders Little's-Law-derived per-list-spell wait times. There are two
+ * complementary estimates the chart can surface (Task Group 3/4):
  *
- * Numbers are months. NaN values (e.g. a subgroup with zero outflow in a
- * given year) become null in the chart data so Recharts skips them
- * gracefully instead of drawing 0 or extending the line through gaps.
+ *   Time on dialysis (W_C)   — L = C (un-bridged candidates), outflow =
+ *                              tx_xeno + (tx_std − bridge_allo) +
+ *                              waitlist deaths + removals. This is the
+ *                              **headline** number: it drops when bridge
+ *                              therapy moves residence time off
+ *                              dialysis, regardless of whether the
+ *                              human-kidney supply changes.
+ *
+ *   Total wait (W)           — L = C ∪ H_xeno in bridge mode (so a
+ *                              bridged patient still counts toward the
+ *                              candidate pool until they receive a
+ *                              definitive allokidney). In replacement
+ *                              mode W ≡ W_C by construction.
+ *
+ *   Time on bridge (W_X)     — bridge mode only; mean residence time on
+ *                              a functioning xenograft per spell.
+ *                              Surfaced through the series-toggle UI for
+ *                              completeness; off by default.
+ *
+ * The chart prominently plots W_C (solid bold) and W (solid lighter,
+ * bridge mode only). Base-case lines for both follow the same pattern
+ * but dashed. cPRA / age toggles still apply.
  */
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,6 +41,7 @@ import {
 import { Hourglass } from 'lucide-react';
 import { ChartSeriesToggle } from './ChartSeriesToggle';
 import { AgeGroupToggle, AGE_GROUPS } from './AgeGroupToggle';
+import type { TherapyMode } from '@/utils/dataTransformer';
 
 interface WaitTimeRow {
   year: number;
@@ -36,6 +52,16 @@ interface WaitTimeRow {
   highCPRA: number;
   baseLowCPRA?: number;
   baseHighCPRA?: number;
+  dialysisMonths: number;
+  baseDialysisMonths?: number;
+  dialysisReductionMonths?: number;
+  dialysisLowCPRA: number;
+  dialysisHighCPRA: number;
+  baseDialysisLowCPRA?: number;
+  baseDialysisHighCPRA?: number;
+  bridgeMonths?: number;
+  bridgeLowCPRA?: number;
+  bridgeHighCPRA?: number;
 }
 
 interface WaitTimeByAgeRow {
@@ -44,6 +70,10 @@ interface WaitTimeByAgeRow {
   highCPRA: Record<string, number>;
   baseLowCPRA?: Record<string, number>;
   baseHighCPRA?: Record<string, number>;
+  dialysisLowCPRA?: Record<string, number>;
+  dialysisHighCPRA?: Record<string, number>;
+  baseDialysisLowCPRA?: Record<string, number>;
+  baseDialysisHighCPRA?: Record<string, number>;
 }
 
 interface WaitTimeChartProps {
@@ -51,6 +81,7 @@ interface WaitTimeChartProps {
   dataByAge?: WaitTimeByAgeRow[];
   highCPRAThreshold: number;
   simulationHorizon: number;
+  therapyMode?: TherapyMode;
 }
 
 const COLORS = {
@@ -77,16 +108,22 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
   dataByAge,
   highCPRAThreshold,
   simulationHorizon,
+  therapyMode = 'replacement',
 }) => {
-  // Series visibility — total xeno on by default; base case on so the
-  // wait-time reduction story tells itself.
+  const isBridge = therapyMode === 'bridge_v2';
+  // Series visibility — headline is "time on dialysis" (W_C). In bridge
+  // mode we also offer "total wait" (W) and "time on bridge" (W_X) as
+  // overlays, off by default so the dialysis story leads.
   const [seriesVisible, setSeriesVisible] = useState<Record<string, boolean>>({
-    total: true,
-    lowCPRA: false,
-    highCPRA: false,
-    baseTotal: true,
-    baseLowCPRA: false,
-    baseHighCPRA: false,
+    dialysis: true,           // W_C (headline)
+    dialysisLow: false,
+    dialysisHigh: false,
+    baseDialysis: true,       // base-case W_C (so the gap reads as savings)
+    baseDialysisLow: false,
+    baseDialysisHigh: false,
+    totalWait: false,         // W (combined) — only meaningful in bridge
+    baseTotalWait: false,
+    bridgeOnly: false,        // W_X — bridge mode only
   });
   const [ageGroups, setAgeGroups] = useState<Record<string, boolean>>({
     age0_18: true,
@@ -107,7 +144,7 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
         <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
           <CardTitle className="text-lg font-semibold text-primary flex items-center gap-2">
             <Hourglass className="w-5 h-5" />
-            Average Wait Time Over Time
+            {isBridge ? 'Time on Dialysis vs. Total Wait' : 'Average Wait Time Over Time'}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
@@ -121,23 +158,28 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
 
   const filtered = data.filter((d) => d.year <= simulationHorizon);
   const filteredByAge = dataByAge?.filter((d) => d.year <= simulationHorizon);
-  const hasBaseAggregate = filtered.some(
+  const hasBaseDialysis = filtered.some(
+    (d) => d.baseDialysisMonths !== undefined && Number.isFinite(d.baseDialysisMonths),
+  );
+  const hasBaseTotalWait = filtered.some(
     (d) => d.baseAverageWaitingTimeMonths !== undefined && Number.isFinite(d.baseAverageWaitingTimeMonths),
   );
 
   const xAxisDomain = [0.5, simulationHorizon + 0.5];
   const xAxisTicks = Array.from({ length: simulationHorizon }, (_, i) => i + 1);
 
-  // Per-year flattened rows for the age-stratified view. Mirrors the
-  // `prepareAgeDataForChart` helper in SimulationCharts so age-stratified
-  // and aggregate views share a consistent shape.
+  // Per-year flattened rows for the age-stratified view. Uses W_C
+  // (dialysis-only) cell-level values when available, matching the
+  // chart's headline framing.
   const ageChartData = (filteredByAge || []).map((row) => {
     const out: Record<string, number | null> = { year: row.year };
-    for (const ageKey of Object.keys(row.lowCPRA || {})) {
-      out[`lowCPRA_${ageKey}`] = clean(row.lowCPRA[ageKey]);
+    const low = row.dialysisLowCPRA ?? row.lowCPRA ?? {};
+    const high = row.dialysisHighCPRA ?? row.highCPRA ?? {};
+    for (const ageKey of Object.keys(low)) {
+      out[`lowCPRA_${ageKey}`] = clean(low[ageKey]);
     }
-    for (const ageKey of Object.keys(row.highCPRA || {})) {
-      out[`highCPRA_${ageKey}`] = clean(row.highCPRA[ageKey]);
+    for (const ageKey of Object.keys(high)) {
+      out[`highCPRA_${ageKey}`] = clean(high[ageKey]);
     }
     return out;
   });
@@ -145,13 +187,36 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
   // Aggregate rows with NaN sanitized.
   const aggregateChartData = filtered.map((row) => ({
     year: row.year,
-    total: clean(row.averageWaitingTimeMonths),
-    lowCPRA: clean(row.lowCPRA),
-    highCPRA: clean(row.highCPRA),
-    baseTotal: clean(row.baseAverageWaitingTimeMonths),
-    baseLowCPRA: clean(row.baseLowCPRA),
-    baseHighCPRA: clean(row.baseHighCPRA),
+    dialysis: clean(row.dialysisMonths),
+    dialysisLow: clean(row.dialysisLowCPRA),
+    dialysisHigh: clean(row.dialysisHighCPRA),
+    baseDialysis: clean(row.baseDialysisMonths),
+    baseDialysisLow: clean(row.baseDialysisLowCPRA),
+    baseDialysisHigh: clean(row.baseDialysisHighCPRA),
+    totalWait: clean(row.averageWaitingTimeMonths),
+    baseTotalWait: clean(row.baseAverageWaitingTimeMonths),
+    bridgeOnly: clean(row.bridgeMonths),
   }));
+
+  // Year-H summary annotation: how many months of dialysis the scenario
+  // saved per list-spell at the end of the displayed horizon.
+  const horizonRow = filtered.length > 0 ? filtered[filtered.length - 1] : null;
+  const savingsMonths =
+    horizonRow && Number.isFinite(horizonRow.dialysisReductionMonths)
+      ? (horizonRow.dialysisReductionMonths as number)
+      : null;
+  const horizonDialysis =
+    horizonRow && Number.isFinite(horizonRow.dialysisMonths)
+      ? horizonRow.dialysisMonths
+      : null;
+  const horizonTotalWait =
+    horizonRow && Number.isFinite(horizonRow.averageWaitingTimeMonths)
+      ? horizonRow.averageWaitingTimeMonths
+      : null;
+  const horizonBaseDialysis =
+    horizonRow && Number.isFinite(horizonRow.baseDialysisMonths ?? NaN)
+      ? (horizonRow.baseDialysisMonths as number)
+      : null;
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
@@ -174,12 +239,51 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
       <CardHeader className="border-b border-medical-border bg-gradient-to-br from-medical-surface to-medical-surface/50 pb-4">
         <CardTitle className="text-lg font-semibold text-primary flex items-center gap-2">
           <Hourglass className="w-5 h-5" />
-          Average Wait Time Over Time
+          {isBridge ? 'Time on Dialysis vs. Total Wait' : 'Average Wait Time Over Time'}
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-1.5">
-          Estimated mean wait per list-spell (Little's Law: L / outflow),
-          stratified by cPRA and age
+          {isBridge
+            ? 'Mean time on dialysis per list-spell (headline) and total wait until a definitive allokidney (overlay) — bridging conserves the queue but shifts who is on dialysis.'
+            : "Estimated mean wait per list-spell (Little's Law: L / outflow), stratified by cPRA and age."}
         </p>
+        {(savingsMonths !== null || horizonDialysis !== null) && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            {horizonDialysis !== null && (
+              <div className="rounded-md border border-medical-border bg-medical-surface/60 px-3 py-2">
+                <div className="text-muted-foreground">Time on dialysis @ year {horizonRow?.year}</div>
+                <div className="font-semibold text-primary text-base mt-0.5">
+                  {fmtMonths(horizonDialysis)}
+                  {horizonBaseDialysis !== null && (
+                    <span className="text-muted-foreground text-xs font-normal ml-1">
+                      (base {fmtMonths(horizonBaseDialysis)})
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {savingsMonths !== null && (
+              <div className="rounded-md border border-medical-border bg-medical-surface/60 px-3 py-2">
+                <div className="text-muted-foreground">Dialysis time saved per spell</div>
+                <div
+                  className={`font-semibold text-base mt-0.5 ${
+                    savingsMonths > 0 ? 'text-emerald-600' : savingsMonths < 0 ? 'text-amber-600' : 'text-foreground'
+                  }`}
+                >
+                  {savingsMonths > 0 ? '−' : savingsMonths < 0 ? '+' : ''}
+                  {fmtMonths(Math.abs(savingsMonths))}
+                </div>
+              </div>
+            )}
+            {isBridge && horizonTotalWait !== null && (
+              <div className="rounded-md border border-medical-border bg-medical-surface/60 px-3 py-2">
+                <div className="text-muted-foreground">Total wait (incl. bridge)</div>
+                <div className="font-semibold text-base mt-0.5 text-foreground">
+                  {fmtMonths(horizonTotalWait)}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="px-4 pt-4 pb-1">
         <ResponsiveContainer width="100%" height={390}>
@@ -208,14 +312,14 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
                 tick={{ fontSize: 12 }}
                 tickFormatter={(v: number) => v.toFixed(0)}
                 label={{
-                  value: 'Avg wait time (months)',
+                  value: isBridge ? 'Time on dialysis (months)' : 'Avg wait time (months)',
                   angle: -90,
                   position: 'left',
                   style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' },
                 }}
               />
               <Tooltip content={<CustomTooltip />} />
-              {seriesVisible.lowCPRA &&
+              {seriesVisible.dialysisLow &&
                 AGE_GROUPS.filter((g) => ageGroups[g.key]).map((group) => (
                   <Line
                     key={`lowCPRA_${group.key}`}
@@ -229,7 +333,7 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
                     connectNulls={false}
                   />
                 ))}
-              {seriesVisible.highCPRA &&
+              {seriesVisible.dialysisHigh &&
                 AGE_GROUPS.filter((g) => ageGroups[g.key]).map((group) => (
                   <Line
                     key={`highCPRA_${group.key}`}
@@ -269,79 +373,118 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
                 tick={{ fontSize: 12 }}
                 tickFormatter={(v: number) => v.toFixed(0)}
                 label={{
-                  value: 'Avg wait time (months)',
+                  value: 'Months',
                   angle: -90,
                   position: 'left',
                   style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' },
                 }}
               />
               <Tooltip content={<CustomTooltip />} />
-              {seriesVisible.total && (
+              {/* Headline: time on dialysis (W_C) */}
+              {seriesVisible.dialysis && (
                 <Line
                   type="monotone"
-                  dataKey="total"
+                  dataKey="dialysis"
                   stroke={COLORS.primary}
                   strokeWidth={3}
-                  name="Total (Xeno)"
+                  name={isBridge ? 'Time on dialysis' : 'Avg wait time'}
                   dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1.5 }}
                   connectNulls={false}
                 />
               )}
-              {seriesVisible.lowCPRA && (
+              {seriesVisible.dialysisLow && (
                 <Line
                   type="monotone"
-                  dataKey="lowCPRA"
+                  dataKey="dialysisLow"
                   stroke={COLORS.secondary}
                   strokeWidth={2}
-                  name={`Low cPRA (0-${highCPRAThreshold}%) - Xeno`}
+                  name={`Low cPRA (0-${highCPRAThreshold}%)`}
                   dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 1 }}
                   connectNulls={false}
                 />
               )}
-              {seriesVisible.highCPRA && (
+              {seriesVisible.dialysisHigh && (
                 <Line
                   type="monotone"
-                  dataKey="highCPRA"
+                  dataKey="dialysisHigh"
                   stroke={COLORS.tertiary}
                   strokeWidth={2}
-                  name={`High cPRA (${highCPRAThreshold}-100%) - Xeno`}
+                  name={`High cPRA (${highCPRAThreshold}-100%)`}
                   dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 1 }}
                   connectNulls={false}
                 />
               )}
-              {seriesVisible.baseTotal && hasBaseAggregate && (
+              {seriesVisible.baseDialysis && hasBaseDialysis && (
                 <Line
                   type="monotone"
-                  dataKey="baseTotal"
+                  dataKey="baseDialysis"
                   stroke={COLORS.primary}
                   strokeWidth={2.5}
                   strokeDasharray="5 5"
-                  name="Total (Base Case)"
+                  name={isBridge ? 'Time on dialysis (Base)' : 'Avg wait time (Base)'}
                   dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1 }}
                   connectNulls={false}
                 />
               )}
-              {seriesVisible.baseLowCPRA && (
+              {seriesVisible.baseDialysisLow && hasBaseDialysis && (
                 <Line
                   type="monotone"
-                  dataKey="baseLowCPRA"
+                  dataKey="baseDialysisLow"
                   stroke={COLORS.secondary}
                   strokeWidth={1.5}
                   strokeDasharray="5 5"
-                  name={`Low cPRA (0-${highCPRAThreshold}%) - Base`}
+                  name={`Low cPRA (Base)`}
                   dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 0.8 }}
                   connectNulls={false}
                 />
               )}
-              {seriesVisible.baseHighCPRA && (
+              {seriesVisible.baseDialysisHigh && hasBaseDialysis && (
                 <Line
                   type="monotone"
-                  dataKey="baseHighCPRA"
+                  dataKey="baseDialysisHigh"
                   stroke={COLORS.tertiary}
                   strokeWidth={1.5}
                   strokeDasharray="5 5"
-                  name={`High cPRA (${highCPRAThreshold}-100%) - Base`}
+                  name={`High cPRA (Base)`}
                   dot={{ fill: COLORS.tertiary, strokeWidth: 1, r: 0.8 }}
+                  connectNulls={false}
+                />
+              )}
+              {/* Bridge-only overlays: total-wait (W) + time-on-bridge (W_X) */}
+              {isBridge && seriesVisible.totalWait && (
+                <Line
+                  type="monotone"
+                  dataKey="totalWait"
+                  stroke={COLORS.primary}
+                  strokeWidth={2}
+                  strokeDasharray="1 3"
+                  name="Total wait (incl. bridge)"
+                  dot={{ fill: COLORS.primary, strokeWidth: 1, r: 1 }}
+                  connectNulls={false}
+                />
+              )}
+              {isBridge && seriesVisible.baseTotalWait && hasBaseTotalWait && (
+                <Line
+                  type="monotone"
+                  dataKey="baseTotalWait"
+                  stroke={COLORS.primary}
+                  strokeWidth={1.5}
+                  strokeDasharray="1 5"
+                  opacity={0.6}
+                  name="Total wait (Base)"
+                  dot={{ r: 0 }}
+                  connectNulls={false}
+                />
+              )}
+              {isBridge && seriesVisible.bridgeOnly && (
+                <Line
+                  type="monotone"
+                  dataKey="bridgeOnly"
+                  stroke={COLORS.secondary}
+                  strokeWidth={2}
+                  strokeDasharray="3 3"
+                  name="Time on bridge"
+                  dot={{ fill: COLORS.secondary, strokeWidth: 1, r: 1 }}
                   connectNulls={false}
                 />
               )}
@@ -353,21 +496,30 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
           series={
             usingAgeView
               ? [
-                  { key: 'lowCPRA', label: 'Low cPRA', color: COLORS.secondary },
-                  { key: 'highCPRA', label: 'High cPRA', color: COLORS.tertiary },
+                  { key: 'dialysisLow', label: 'Low cPRA', color: COLORS.secondary },
+                  { key: 'dialysisHigh', label: 'High cPRA', color: COLORS.tertiary },
                 ]
               : [
-                  { key: 'total', label: 'Total (Xeno)', color: COLORS.primary },
-                  { key: 'lowCPRA', label: 'Low cPRA (Xeno)', color: COLORS.secondary },
-                  { key: 'highCPRA', label: 'High cPRA (Xeno)', color: COLORS.tertiary },
-                  ...(hasBaseAggregate
-                    ? [{ key: 'baseTotal', label: 'Total (Base)', color: COLORS.primary }]
+                  { key: 'dialysis', label: isBridge ? 'Time on dialysis' : 'Avg wait', color: COLORS.primary },
+                  { key: 'dialysisLow', label: 'Low cPRA', color: COLORS.secondary },
+                  { key: 'dialysisHigh', label: 'High cPRA', color: COLORS.tertiary },
+                  ...(hasBaseDialysis
+                    ? [{ key: 'baseDialysis', label: isBridge ? 'Dialysis (Base)' : 'Avg wait (Base)', color: COLORS.primary }]
                     : []),
-                  ...(hasBaseAggregate
-                    ? [{ key: 'baseLowCPRA', label: 'Low cPRA (Base)', color: COLORS.secondary }]
+                  ...(hasBaseDialysis
+                    ? [{ key: 'baseDialysisLow', label: 'Low cPRA (Base)', color: COLORS.secondary }]
                     : []),
-                  ...(hasBaseAggregate
-                    ? [{ key: 'baseHighCPRA', label: 'High cPRA (Base)', color: COLORS.tertiary }]
+                  ...(hasBaseDialysis
+                    ? [{ key: 'baseDialysisHigh', label: 'High cPRA (Base)', color: COLORS.tertiary }]
+                    : []),
+                  ...(isBridge
+                    ? [{ key: 'totalWait', label: 'Total wait', color: COLORS.primary }]
+                    : []),
+                  ...(isBridge && hasBaseTotalWait
+                    ? [{ key: 'baseTotalWait', label: 'Total wait (Base)', color: COLORS.primary }]
+                    : []),
+                  ...(isBridge
+                    ? [{ key: 'bridgeOnly', label: 'Time on bridge', color: COLORS.secondary }]
                     : []),
                 ]
           }
@@ -387,13 +539,15 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
         )}
 
         <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
-          Estimated via Little's Law (W = L / λ_out) per year using mean waitlist size
-          and total outflow (transplants + waitlist deaths + waitlist removals).
+          Estimated via Little's Law (W = L / λ_out) per year.{' '}
+          {isBridge
+            ? 'Time on dialysis uses L = C (un-bridged candidates) with outflow = tx_xeno + (tx_std − bridge_allo) + waitlist deaths + removals; total wait uses L = C + H_xeno (bridged patients still count as candidates) with outflow = tx_std + waitlist deaths + bridge deaths + removals.'
+            : 'L = candidates on the waitlist; outflow = transplants + waitlist deaths + waitlist removals.'}{' '}
+          The estimator is a state-based approximation — it does not track
+          individual waiting trajectories, so single-year boundary effects
+          (year 1 transient, year-H tail) should not be over-interpreted.
           Per-subgroup values are flow-weighted aggregates of their constituent
-          (cPRA × age) cells. Years with zero outflow (typically high-cPRA cells at
-          year&nbsp;1) are omitted, as is the final year when the simulator's
-          time grid extends past its last event time (a backend-side boundary
-          artifact that would otherwise show as a spurious uptick).
+          (cPRA × age) cells.
         </p>
       </CardContent>
     </Card>

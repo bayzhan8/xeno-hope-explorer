@@ -21,6 +21,7 @@ import SegmentedControl from '@/components/SegmentedControl';
 import ModeNav from '@/components/ModeNav';
 import WaitTimeChart from '@/components/WaitTimeChart';
 import MortalityComparison from '@/components/MortalityComparison';
+import DialysisBurden from '@/components/DialysisBurden';
 
 import {
   composeConfigName,
@@ -490,6 +491,22 @@ const Bridge: React.FC = () => {
                   saved, waitlist reduction, and wait-time reduction at the
                   selected mortality assumption.
                 </p>
+                <p className="text-xs text-muted-foreground leading-relaxed mt-3 border-t border-medical-border pt-3">
+                  <strong>Two reading frames.</strong> The page distinguishes
+                  &ldquo;system effects&rdquo; (queue-wide outcomes — total
+                  wait, throughput, lives saved) from &ldquo;treated-population
+                  effects&rdquo; (what changes for a bridged patient — time on
+                  dialysis avoided, time on the bridge, mortality while
+                  waiting). With a fixed human-kidney supply the system-level
+                  wait until a definitive transplant is approximately
+                  conserved; the treated-population channel — dialysis-time
+                  displacement — is where bridge therapy delivers most of its
+                  clinical value.{' '}
+                  <strong>Modelling assumption.</strong> All waitlisted
+                  candidates (state C) are assumed to be on active dialysis.
+                  Bridged patients (state H<sub>xeno</sub>) and post-allo
+                  recipients (state H<sub>std</sub>) are off dialysis.
+                </p>
               </div>
             </div>
           </CardContent>
@@ -584,19 +601,41 @@ const Bridge: React.FC = () => {
                 <div>
                   <div className="mb-6 pb-4 border-b border-medical-border">
                     <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
-                      Wait Time on the List
+                      Dialysis Burden Avoided
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Average time a candidate spends on the waitlist <em>per list-spell</em>,
-                      estimated each year via Little's Law (W = L / λ_out). Outflow includes
-                      transplants, waitlist deaths, and waitlist removals. Bridge patients
-                      may have multiple spells if their xenograft fails — this measures each
-                      spell, not lifetime waiting. The dip-and-plateau you may see in waitlist
-                      size (patients cycling back after graft failure) shows up here as a{' '}
-                      <em>sustained</em> reduction in per-spell wait time, because xeno
-                      throughput stays elevated. Exact in steady state, approximate during
-                      transients (especially years 1–5). Toggle cPRA group or age cohort to
-                      see who benefits most.
+                      Bridging xenotransplants the patient <em>off dialysis</em> even when the
+                      human-kidney supply is unchanged. We model state C as &ldquo;on
+                      dialysis&rdquo; and integrate the difference in C between this scenario
+                      and the no-xeno base, giving cumulative person-years of dialysis
+                      avoided. This is independent of throughput — it's the clinical
+                      &ldquo;quality-of-life&rdquo; channel of bridge therapy.
+                    </p>
+                  </div>
+                  <DialysisBurden
+                    metrics={simulationData.dialysisBurden}
+                    horizonYears={params.simulationHorizon}
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-6 pb-4 border-b border-medical-border">
+                    <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">
+                      Wait Time: Dialysis vs. Total
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      A fixed human-kidney supply means the <em>total</em> wait (until a
+                      definitive allokidney) is approximately conserved under bridging —
+                      what changes is its <em>composition</em>. We track two estimates per
+                      list-spell via Little's Law. <strong>Time on dialysis</strong>{' '}
+                      (headline, bold) uses L = C, so bridging shrinks it as residence
+                      time shifts off dialysis. <strong>Total wait</strong> (overlay,
+                      dotted) uses L = C + H<sub>xeno</sub> because a bridged patient is
+                      still a candidate for a definitive allo. <span className="italic">
+                      Interpretation</span>: in the treated population, dialysis time
+                      drops materially; in the system at large, the queue is almost
+                      conserved (and may even rise slightly when mortality reductions
+                      enlarge the candidate pool).
                     </p>
                   </div>
                   <WaitTimeChart
@@ -604,6 +643,7 @@ const Bridge: React.FC = () => {
                     dataByAge={simulationData.waitingTimeDataByAge}
                     highCPRAThreshold={params.highCPRAThreshold}
                     simulationHorizon={params.simulationHorizon}
+                    therapyMode={simulationData.therapyMode}
                   />
                 </div>
 
