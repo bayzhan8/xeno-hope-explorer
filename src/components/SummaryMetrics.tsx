@@ -119,8 +119,8 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
   const waitLabel = isBridge ? 'Time on Dialysis' : 'Average Wait Time';
   const waitReductionLabel = isBridge ? 'Dialysis Time Saved' : 'Wait Time Reduction';
   const waitTooltip = isBridge
-    ? `Estimated time the typical patient spends on dialysis before getting a transplant, at year ${horizon}. A bridge keeps people alive on a working kidney, so this falls — even when the total time until a permanent human kidney is unchanged. (Computed with Little's Law: average number on dialysis ÷ rate they leave dialysis.)`
-    : `Estimated time the typical patient waits for a transplant, at year ${horizon}. (Computed with Little's Law: average number waiting ÷ rate they leave the waitlist via transplant, death, or removal.)`;
+    ? `Typical time a patient spends on dialysis before a transplant (year ${horizon}). A bridge can lower this even when the total wait for a human kidney is unchanged.`
+    : `Typical time a patient waits for a transplant (year ${horizon}).`;
 
   // Throughput math. metrics.xenoTransplants is already horizon-sliced by
   // calculateSummaryMetrics (it interpolates the cumulative procedure
@@ -335,7 +335,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs text-xs leading-relaxed">
                     In this model, one xenotransplant event consumes one
-                    xenokidney and is one procedure — they are the same
+                    xenokidney and is one procedure. They are the same
                     physical thing. "Intended" is the supply rate the
                     scenario would produce if the eligible waitlist were
                     always populated; "Delivered" is the procedures the

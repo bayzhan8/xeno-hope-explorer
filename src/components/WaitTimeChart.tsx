@@ -243,7 +243,7 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-1.5">
           {isBridge
-            ? 'Mean time on dialysis per list-spell (headline) and total wait until a definitive allokidney (overlay) — bridging conserves the queue but shifts who is on dialysis.'
+            ? 'Mean time on dialysis per list-spell (headline) and total wait until a definitive allokidney (overlay). Bridging conserves the queue but shifts who is on dialysis.'
             : "Estimated mean wait per list-spell (Little's Law: L / outflow), stratified by cPRA and age."}
         </p>
         {(savingsMonths !== null || horizonDialysis !== null) && (
@@ -539,15 +539,12 @@ const WaitTimeChart: React.FC<WaitTimeChartProps> = ({
         )}
 
         <p className="text-[10px] text-muted-foreground mt-2 leading-snug">
-          Estimated via Little's Law (W = L / λ_out) per year.{' '}
+          Estimated each year via Little's Law (W = L / λ_out).{' '}
           {isBridge
-            ? 'Time on dialysis uses L = C (un-bridged candidates) with outflow = tx_xeno + (tx_std − bridge_allo) + waitlist deaths + removals; total wait uses L = C + H_xeno (bridged patients still count as candidates) with outflow = tx_std + waitlist deaths + bridge deaths + removals.'
-            : 'L = candidates on the waitlist; outflow = transplants + waitlist deaths + waitlist removals.'}{' '}
-          The estimator is a state-based approximation — it does not track
-          individual waiting trajectories, so single-year boundary effects
-          (year 1 transient, year-H tail) should not be over-interpreted.
-          Per-subgroup values are flow-weighted aggregates of their constituent
-          (cPRA × age) cells.
+            ? 'Time on dialysis counts only un-bridged candidates; total wait also counts bridged patients still waiting for a human kidney.'
+            : 'Outflow = transplants + waitlist deaths + removals.'}{' '}
+          Single-year endpoints are approximate; subgroup values are
+          flow-weighted.
         </p>
       </CardContent>
     </Card>

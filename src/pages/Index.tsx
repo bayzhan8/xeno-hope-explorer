@@ -206,8 +206,8 @@ const Index = () => {
                   <em>definitive</em> transplant for high-cPRA patients. A
                   successful xenotransplant removes the recipient from the
                   waitlist; only a graft failure brings them back. The
-                  primary effects are queue-side — more transplants
-                  performed, smaller waitlist, fewer waitlist deaths from
+                  primary effects are queue-side: more transplants
+                  performed, a smaller waitlist, and fewer waitlist deaths from
                   prolonged queue pressure. Mortality and wait-time
                   improvements follow as queue dynamics shift.
                 </p>
@@ -224,8 +224,8 @@ const Index = () => {
                   <strong>Different paradigm?</strong> If you want to model
                   the xenokidney as a <em>temporary bridge</em> that keeps
                   high-cPRA patients alive while they wait for a permanent
-                  human transplant — with mortality, dialysis-burden, and
-                  survival-to-allotransplant as the headline metrics —
+                  human transplant, with mortality, dialysis-burden, and
+                  survival-to-allotransplant as the headline metrics,
                   switch to the <em>Bridge Therapy</em> tab above. The two
                   paradigms ask different scientific questions and
                   optimize different outcomes.
@@ -304,13 +304,10 @@ const Index = () => {
                       Wait Time on the List
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Average time a candidate spends on the waitlist <em>per list-spell</em>,
-                      estimated each year via Little's Law (W = L / λ_out). Outflow includes
-                      transplants, waitlist deaths, and waitlist removals. A patient whose
-                      xenograft fails and who relists is counted as multiple spells — this
-                      measures each spell, not lifetime waiting. Exact in steady state,
-                      approximate during transients (especially years 1–5 of any new scenario).
-                      Compare scenario vs base case, and break down by cPRA group or age cohort.
+                      Average time a candidate waits for a transplant each year,
+                      estimated via Little's Law. Single-year endpoints are
+                      approximate. Compare scenario vs base, or break down by
+                      cPRA group or age.
                     </p>
                   </div>
                   <WaitTimeChart
@@ -386,7 +383,7 @@ const Index = () => {
                     {/* Introduction - Full */}
                     <div>
                       <p>
-                        To understand how xenotransplantation might reshape kidney transplant outcomes, we need a way to model the complex dynamics of the transplant waiting list. Patients arrive, receive transplants, experience graft failures, and unfortunately, some die—all while the system continuously evolves. This simulation uses a <strong className="text-foreground">continuous-time Markov chain</strong> to capture these dynamics, treating each patient transition as a probabilistic event that occurs at rates determined by real-world data.
+                        To understand how xenotransplantation might reshape kidney transplant outcomes, we need a way to model the complex dynamics of the transplant waiting list. Patients arrive, receive transplants, experience graft failures, and unfortunately some die, all while the system continuously evolves. This simulation uses a <strong className="text-foreground">continuous-time Markov chain</strong> to capture these dynamics, treating each patient transition as a probabilistic event that occurs at rates determined by real-world data.
                       </p>
                     </div>
 
@@ -397,7 +394,7 @@ const Index = () => {
                         The kidney transplant system is a complex network of patient flows. Each day, new patients join the waiting list, some receive transplants (from human donors or potentially xenotransplants), others experience graft failures and return to the list, and tragically, some die while waiting or after transplantation. The question we're asking is: <em className="text-foreground">What happens if we introduce xenotransplantation as an option for high-cPRA patients?</em>
                       </p>
                       <p className="mt-2">
-                        To answer this, we need to track how patients move between different states over time. We partition patients by their calculated panel reactive antibody (cPRA) level—a measure of how difficult it is to find a compatible donor. Patients with cPRA ≥ {params.highCPRAThreshold}% face significantly longer wait times and higher mortality rates, making them ideal candidates for xenotransplantation.
+                        To answer this, we need to track how patients move between different states over time. We partition patients by their calculated panel reactive antibody (cPRA) level, a measure of how difficult it is to find a compatible donor. Patients with cPRA ≥ {params.highCPRAThreshold}% face significantly longer wait times and higher mortality rates, making them ideal candidates for xenotransplantation.
                       </p>
                     </div>
 
@@ -408,11 +405,11 @@ const Index = () => {
                         At any moment, each patient exists in one of six possible states:
                       </p>
                       <ul className="list-disc list-inside space-y-1.5 ml-4 text-xs">
-                        <li><strong className="text-foreground">C<sub>L</sub></strong> and <strong className="text-foreground">C<sub>H</sub></strong> — Low and high-cPRA candidates waiting on the list</li>
-                        <li><strong className="text-foreground">H<sub>L</sub></strong> — Low-cPRA recipients with human donor kidneys</li>
-                        <li><strong className="text-foreground">H<sub>H_std</sub></strong> — High-cPRA recipients with standard human donor kidneys</li>
-                        <li><strong className="text-foreground">H<sub>H_xeno</sub></strong> — High-cPRA recipients with xenotransplanted kidneys</li>
-                        <li><strong className="text-foreground">D</strong> — Deceased (an absorbing state, tracked cumulatively)</li>
+                        <li><strong className="text-foreground">C<sub>L</sub></strong> and <strong className="text-foreground">C<sub>H</sub></strong>: Low and high-cPRA candidates waiting on the list</li>
+                        <li><strong className="text-foreground">H<sub>L</sub></strong>: Low-cPRA recipients with human donor kidneys</li>
+                        <li><strong className="text-foreground">H<sub>H_std</sub></strong>: High-cPRA recipients with standard human donor kidneys</li>
+                        <li><strong className="text-foreground">H<sub>H_xeno</sub></strong>: High-cPRA recipients with xenotransplanted kidneys</li>
+                        <li><strong className="text-foreground">D</strong>: Deceased (an absorbing state, tracked cumulatively)</li>
                       </ul>
                       <p className="mt-3 text-xs">
                         The model tracks how many patients are in each state at any given time, and how these numbers change as events occur.
@@ -429,14 +426,14 @@ const Index = () => {
                       </summary>
                       <div className="mt-3 pl-4 border-l-2 border-muted space-y-2 text-xs">
                         <p>
-                          The simulation works by generating events—transplants, deaths, arrivals, and so on—that occur at rates determined by the current state of the system. Think of it like this: if there are 1,000 patients on the waiting list and the death rate is 0.1% per day, we expect about 1 death per day. But these events are probabilistic, not deterministic.
+                          The simulation works by generating events (transplants, deaths, arrivals, and so on) that occur at rates determined by the current state of the system. Think of it like this: if there are 1,000 patients on the waiting list and the death rate is 0.1% per day, we expect about 1 death per day. But these events are probabilistic, not deterministic.
                         </p>
                         <p className="mt-2">
                           We distinguish between two types of rates:
                         </p>
                         <ul className="list-disc list-inside space-y-1.5 ml-4 mt-1">
-                          <li><strong className="text-foreground">Absolute rates</strong> (α<sub>L</sub>, α<sub>H</sub>, τ<sub>L</sub>, τ<sub>H</sub>) — These are fixed numbers, like "91 new patients join the high-cPRA waitlist per day," regardless of how many patients are currently waiting.</li>
-                          <li><strong className="text-foreground">Population-dependent rates</strong> (δ<sub>wl</sub>, δ<sub>h</sub>, δ<sub>x</sub>, ρ, ρ<sub>x</sub>, θ) — These scale with the current population. If 1,000 patients are waiting and the death rate is 0.1% per day, we expect 1 death. If 2,000 are waiting, we expect 2 deaths.</li>
+                          <li><strong className="text-foreground">Absolute rates</strong> (α<sub>L</sub>, α<sub>H</sub>, τ<sub>L</sub>, τ<sub>H</sub>): These are fixed numbers, like "91 new patients join the high-cPRA waitlist per day," regardless of how many patients are currently waiting.</li>
+                          <li><strong className="text-foreground">Population-dependent rates</strong> (δ<sub>wl</sub>, δ<sub>h</sub>, δ<sub>x</sub>, ρ, ρ<sub>x</sub>, θ): These scale with the current population. If 1,000 patients are waiting and the death rate is 0.1% per day, we expect 1 death. If 2,000 are waiting, we expect 2 deaths.</li>
                         </ul>
                       </div>
                     </details>
@@ -451,7 +448,7 @@ const Index = () => {
                       </summary>
                       <div className="mt-3 pl-4 border-l-2 border-muted text-xs space-y-2">
                         <p>
-                          One of the model's most important features is how it handles transplant allocation. When high-cPRA candidates are available, they receive priority for transplants. But what happens when we run out of high-cPRA candidates? In reality, those transplant opportunities don't disappear—they get reallocated to low-cPRA patients. This is captured by the rule:
+                          One of the model's most important features is how it handles transplant allocation. When high-cPRA candidates are available, they receive priority for transplants. But what happens when we run out of high-cPRA candidates? In reality, those transplant opportunities don't disappear; they get reallocated to low-cPRA patients. This is captured by the rule:
                         </p>
                         <p className="mt-2 ml-4 italic font-mono bg-muted/50 p-2 rounded">
                           τ<sub>L</sub> = τ<sub>L_base</sub> + τ<sub>H_base</sub> when C<sub>H</sub> = 0
@@ -496,22 +493,22 @@ const Index = () => {
                         </p>
                         <ol className="list-decimal list-inside space-y-2 ml-2 mt-2">
                           <li>
-                            <strong className="text-foreground">Start</strong> — Initialize the system with real 2022 data: how many patients were waiting, how many had received transplants, and so on. No xenotransplants exist yet.
+                            <strong className="text-foreground">Start.</strong> Initialize the system with real 2022 data: how many patients were waiting, how many had received transplants, and so on. No xenotransplants exist yet.
                           </li>
                           <li>
-                            <strong className="text-foreground">Calculate rates</strong> — At the current time <em>t</em>, compute all possible event rates. The total rate Λ(<em>t</em>) is the sum of all individual rates.
+                            <strong className="text-foreground">Calculate rates.</strong> At the current time <em>t</em>, compute all possible event rates. The total rate Λ(<em>t</em>) is the sum of all individual rates.
                           </li>
                           <li>
-                            <strong className="text-foreground">Wait for next event</strong> — The time until the next event is exponentially distributed with rate Λ(<em>t</em>). On average, events occur more frequently when rates are higher.
+                            <strong className="text-foreground">Wait for next event.</strong> The time until the next event is exponentially distributed with rate Λ(<em>t</em>). On average, events occur more frequently when rates are higher.
                           </li>
                           <li>
-                            <strong className="text-foreground">Choose event type</strong> — Which event happens? The probability of event type <em>i</em> is proportional to its rate: <em>p</em><sub><em>i</em></sub> = λ<sub><em>i</em></sub>(<em>t</em>) / Λ(<em>t</em>). Faster events are more likely.
+                            <strong className="text-foreground">Choose event type.</strong> Which event happens? The probability of event type <em>i</em> is proportional to its rate: <em>p</em><sub><em>i</em></sub> = λ<sub><em>i</em></sub>(<em>t</em>) / Λ(<em>t</em>). Faster events are more likely.
                           </li>
                           <li>
-                            <strong className="text-foreground">Update states</strong> — Apply the event. A transplant moves a patient from C to H. A death removes a patient. A graft failure moves a patient from H back to C.
+                            <strong className="text-foreground">Update states.</strong> Apply the event. A transplant moves a patient from C to H. A death removes a patient. A graft failure moves a patient from H back to C.
                           </li>
                           <li>
-                            <strong className="text-foreground">Repeat</strong> — Continue until we reach the time horizon ({params.simulationHorizon} years) or until all rates become zero.
+                            <strong className="text-foreground">Repeat.</strong> Continue until we reach the time horizon ({params.simulationHorizon} years) or until all rates become zero.
                           </li>
                         </ol>
                       </div>
