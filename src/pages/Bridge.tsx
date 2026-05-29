@@ -38,8 +38,6 @@ import {
   loadParetoDataset,
   livesSavedFromViz,
   livesSavedCIHalfWidth,
-  waitlistReductionFromViz,
-  waitlistReductionCIHalfWidth,
   waitTimeReductionFromViz,
 } from '@/utils/pareto';
 import { nonZeroSupplyPoints, effectiveThreshold, nearestSupplyPoint } from '@/utils/supplyGrid';
@@ -85,10 +83,6 @@ const Bridge: React.FC = () => {
   const [supplySeries, setSupplySeries] = useState<ParetoSeries[] | null>(null);
   const [supplyLoading, setSupplyLoading] = useState(true);
   const [supplyError, setSupplyError] = useState<string | null>(null);
-
-  const [survivalSeries, setSurvivalSeries] = useState<ParetoSeries[] | null>(null);
-  const [survivalLoading, setSurvivalLoading] = useState(true);
-  const [survivalError, setSurvivalError] = useState<string | null>(null);
 
   const [waitTimeSeries, setWaitTimeSeries] = useState<ParetoSeries[] | null>(null);
   const [waitTimeLoading, setWaitTimeLoading] = useState(true);
@@ -289,81 +283,6 @@ const Bridge: React.FC = () => {
     subgroups,
     overlay,
     params.survivalMonths,
-    params.simulationHorizon,
-    params.postTransplantDeathRate,
-  ]);
-
-  // ── Pareto: graft survival (months) vs waitlist reduction ────────────
-  // Sweep survivalMonths ∈ {6, 12, 18, 24, 36} at the user's currently-
-  // selected proportion/threshold/strategy. If proportion is 0 there's
-  // nothing to plot so we surface a friendly message instead.
-  useEffect(() => {
-    let cancelled = false;
-    setSurvivalSeries(null);
-    async function loadSurvival() {
-      setSurvivalLoading(true);
-      setSurvivalError(null);
-      if (params.xeno_n === 0) {
-        if (!cancelled) {
-          setSurvivalSeries([]);
-          setSurvivalLoading(false);
-        }
-        return;
-      }
-      try {
-        const tasks = subgroups.map(async (sg) => {
-          // Each subgroup's supply grid differs (e.g. 85% has 3,000/5,000 but
-          // not 4,000). Snap the user's selected N to this subgroup's nearest
-          // valid grid point so the overlaid line actually has data instead of
-          // 404ing and silently disappearing.
-          const sgN = nearestSupplyPoint(sg.strategy, sg.threshold, params.xeno_n);
-          const ds = await loadParetoDataset({
-            mode: 'bridge',
-            highCPRAThreshold: sg.threshold,
-            strategy: sg.strategy,
-            targetYear: params.simulationHorizon,
-            metric: waitlistReductionFromViz,
-            metricCI: waitlistReductionCIHalfWidth,
-            // x is months — comparable across all subgroups, no axis switch needed.
-            // Pin the current death-multiplier so every point on the
-            // curve reflects the user's mortality assumption.
-            points: BRIDGE_SURVIVAL_MONTHS.map((m): {
-              label: string;
-              x: number;
-              xeno_n: number;
-              surv: BridgeSurvivalMonths;
-              postTransplantDeathRate: number;
-            } => ({
-              label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
-              x: m,
-              xeno_n: sgN,
-              surv: m,
-              postTransplantDeathRate: params.postTransplantDeathRate,
-            })),
-          });
-          if (ds.points.length === 0) return null;
-          return { dataset: ds, label: sg.label, color: sg.color };
-        });
-        const settled = (await Promise.all(tasks)).filter(
-          (s): s is ParetoSeries => s !== null,
-        );
-        if (!cancelled) setSurvivalSeries(settled);
-      } catch (err) {
-        if (!cancelled) {
-          console.error('[Bridge:survival Pareto] failed:', err);
-          setSurvivalError(err instanceof Error ? err.message : 'Could not build survival curve');
-        }
-      } finally {
-        if (!cancelled) setSurvivalLoading(false);
-      }
-    }
-    loadSurvival();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    subgroups,
-    params.xeno_n,
     params.simulationHorizon,
     params.postTransplantDeathRate,
   ]);
@@ -743,7 +662,7 @@ const Bridge: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card className="border-medical-border shadow-md">
                   <CardHeader>
                     <CardTitle className="text-base font-semibold text-foreground">
@@ -790,48 +709,6 @@ const Bridge: React.FC = () => {
                       formatY={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       view={view}
                     />
-                  </CardContent>
-                </Card>
-
-                <Card className="border-medical-border shadow-md">
-                  <CardHeader>
-                    <CardTitle className="text-base font-semibold text-foreground">
-                      Graft survival &nbsp;↔&nbsp; Waitlist reduction
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      Sweeps 6 · 12 · 18 · 24 · 36 mo at{' '}
-                      {params.xeno_n.toLocaleString()}/yr.{' '}
-                      {overlay === 'off'
-                        ? `${params.highCPRAThreshold}%+ cPRA, strategy = ${params.targetingStrategy ?? 'standard'}`
-                        : overlay === 'thresholds'
-                          ? 'One curve per cPRA threshold (snapped to each grid\u2019s nearest supply).'
-                          : 'One curve per allocation strategy (snapped to each grid\u2019s nearest supply).'}
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    {params.xeno_n === 0 ? (
-                      <div
-                        className="flex items-center justify-center text-sm text-muted-foreground italic"
-                        style={{ height: 320 }}
-                      >
-                        Set xeno supply &gt; 0 to see how graft survival affects the waitlist.
-                      </div>
-                    ) : (
-                      <ParetoChart
-                        datasets={survivalSeries}
-                        loading={survivalLoading}
-                        error={survivalError}
-                        xLabel="Mean graft survival (months)"
-                        yLabel={view === 'marginal'
-                          ? 'Δ Waitlist reduction per Δ months'
-                          : `Waitlist reduction at year ${params.simulationHorizon}`}
-                        formatX={(v) => `${v} mo`}
-                        formatY={(v) =>
-                          v.toLocaleString(undefined, { maximumFractionDigits: 0 })
-                        }
-                        view={view}
-                      />
-                    )}
                   </CardContent>
                 </Card>
 

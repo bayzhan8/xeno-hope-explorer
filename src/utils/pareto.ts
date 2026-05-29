@@ -3,8 +3,9 @@
  *
  * Three metrics are exposed for use as a Pareto y-axis:
  *
- *   1. `livesSavedFromViz`           — base − scenario waitlist deaths
- *      at year H (the headline "did the intervention save lives" number).
+ *   1. `livesSavedFromViz`           — base − scenario TOTAL deaths
+ *      (waitlist + post-tx) at year H (the honest "lives saved" number,
+ *      matching the summary card's headline).
  *   2. `waitlistReductionFromViz`    — base − scenario waitlist size at
  *      year H (does the intervention shrink the queue).
  *   3. `waitTimeReductionFromViz`    — base − scenario wait time per
@@ -244,19 +245,16 @@ export function waitlistDeathsAtYear(
 }
 
 /**
- * Lives saved = WAITLIST deaths reduction (base − scenario) at `targetYear`.
+ * Lives saved = NET TOTAL deaths prevented (base − scenario) at
+ * `targetYear`, counting waitlist + post-transplant deaths.
  *
- * IMPORTANT: We deliberately use waitlist deaths only, NOT total
- * (waitlist + post-tx) deaths. Reason: a bridge xenograft moves a patient
- * off the waitlist for ~1 year, exposing them to ~1 yr of post-tx
- * mortality risk in exchange. For high-cPRA recipients those two hazards
- * roughly cancel at the simulation horizon, so total-death reduction is
- * dominated by Monte-Carlo noise (often slightly negative). The
- * clinically interesting signal is "deaths AVOIDED on the waitlist", which
- * matches the definition the existing landing-page summary card uses
- * (see `calculateSummaryMetrics` in dataTransformer.ts: it sums
- * `netDeathsPreventedPerYearData`, which for bridge configs is
- * client-side derived from `waitlist_deaths_per_year` diffs).
+ * This matches the honest headline "Lives Saved" the summary card shows
+ * (`livesSavedTotal` in dataTransformer.ts), so the curve and the headline
+ * can't contradict each other. Total deaths is the unbiased figure: it
+ * does NOT hide post-transplant mortality the intervention introduces.
+ * The trade-off is that this difference is noisier than the waitlist-only
+ * view (it can dip slightly negative), but that's the honest signal — we
+ * fall back to waitlist deaths only if total isn't available in the JSON.
  *
  * Falls back to the legacy `cumulative_deaths` Total series only if
  * `cumulative_waitlist_deaths` isn't present in EITHER viz JSON.
@@ -266,14 +264,15 @@ export function livesSavedFromViz(
   baseViz: VizLike,
   targetYear: number,
 ): number | null {
-  const scen = waitlistDeathsAtYear(scenarioViz, targetYear);
-  const base = waitlistDeathsAtYear(baseViz, targetYear);
-  if (scen !== null && base !== null) return base - scen;
-
   const scenT = totalDeathsAtYear(scenarioViz, targetYear);
   const baseT = totalDeathsAtYear(baseViz, targetYear);
-  if (scenT === null || baseT === null) return null;
-  return baseT - scenT;
+  if (scenT !== null && baseT !== null) return baseT - scenT;
+
+  // Fallback: waitlist-only deaths if the total-death charts are absent.
+  const scen = waitlistDeathsAtYear(scenarioViz, targetYear);
+  const base = waitlistDeathsAtYear(baseViz, targetYear);
+  if (scen === null || base === null) return null;
+  return base - scen;
 }
 
 /** Total waitlist size at `targetYear`. */
@@ -335,18 +334,19 @@ export function waitTimeAtYearFromViz(
   const rows = computeWaitTimeByYear(enriched, { wlRemovalRates });
   if (!rows || rows.length === 0) return null;
 
-  // Prefer the exact year if present; otherwise the largest emitted year
-  // ≤ targetYear (handles the frozen-tail case where year H got dropped).
+  // Use dialysis-only wait (W_C, L = C) to match the WaitTimeChart's
+  // "Time on dialysis" headline. In replacement mode this is identical to
+  // the combined wait (no bridge), so the same code serves both pages.
   const targetInt = Math.floor(targetYear);
-  let best: { year: number; totalMonths: number } | null = null;
+  let best: { year: number; months: number } | null = null;
   for (const r of rows) {
-    if (!Number.isFinite(r.totalMonths)) continue;
+    if (!Number.isFinite(r.dialysisTotalMonths)) continue;
     if (r.year <= targetInt && (best === null || r.year > best.year)) {
-      best = { year: r.year, totalMonths: r.totalMonths };
+      best = { year: r.year, months: r.dialysisTotalMonths };
     }
   }
   if (best === null) return null;
-  return best.totalMonths;
+  return best.months;
 }
 
 /**
