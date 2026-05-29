@@ -21,6 +21,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 interface MetricSummary {
   waitlistReduction: number;
   deathsPrevented: number;
+  // Honest lives-saved decomposition (base − scenario at the horizon).
+  // `livesSavedTotal` nets the waitlist-death drop against the post-transplant
+  // deaths a transplant introduces — the unbiased headline. The two parts let
+  // the card show where the number comes from. All undefined when no base
+  // scenario is loaded (then we fall back to the waitlist-only figure).
+  livesSavedTotal?: number;
+  livesSavedWaitlist?: number;
+  postTxDeathsAdded?: number; // positive = extra deaths after transplant
   totalTransplants: number;
   xenoTransplants: number;
   penetrationRate: number;
@@ -111,8 +119,8 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
   const waitLabel = isBridge ? 'Time on Dialysis' : 'Average Wait Time';
   const waitReductionLabel = isBridge ? 'Dialysis Time Saved' : 'Wait Time Reduction';
   const waitTooltip = isBridge
-    ? "Little's-Law estimate of time on dialysis per list-spell (W_C). L = candidates on dialysis (state C); outflow = transplants leaving C + waitlist deaths + waitlist removals. Drops as bridging shifts residence time off dialysis, even when the total wait until a definitive transplant is conserved."
-    : `Snapshot estimate via Little's Law (W = L / outflow) at year ${horizon} of the xeno scenario. Outflow = transplants + waitlist deaths + waitlist removals. Measures mean time per list-spell.`;
+    ? `Estimated time the typical patient spends on dialysis before getting a transplant, at year ${horizon}. A bridge keeps people alive on a working kidney, so this falls — even when the total time until a permanent human kidney is unchanged. (Computed with Little's Law: average number on dialysis ÷ rate they leave dialysis.)`
+    : `Estimated time the typical patient waits for a transplant, at year ${horizon}. (Computed with Little's Law: average number waiting ÷ rate they leave the waitlist via transplant, death, or removal.)`;
 
   // Throughput math. metrics.xenoTransplants is already horizon-sliced by
   // calculateSummaryMetrics (it interpolates the cumulative procedure
@@ -202,6 +210,33 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
   const dialysisYears = metrics.dialysisYearsAvoided;
   const hasDialysisBurden =
     dialysisYears !== undefined && Number.isFinite(dialysisYears);
+
+  // ── Lives Saved (honest, total) ───────────────────────────────────────────
+  // Headline = NET deaths avoided across every death type, not the
+  // waitlist-only number (which always looks good because a transplant just
+  // moves a patient from the waitlist bucket into the post-transplant bucket).
+  // When no base case is loaded we can't net the buckets, so we fall back to
+  // the waitlist-only figure and say so plainly.
+  const fmtSignedCount = (n: number): string =>
+    `${n >= 0 ? '+' : '−'}${formatNumber(Math.abs(n))}`;
+  const hasLivesBreakdown =
+    metrics.livesSavedTotal !== undefined && Number.isFinite(metrics.livesSavedTotal);
+  const livesSavedValue = hasLivesBreakdown
+    ? metrics.livesSavedTotal!
+    : metrics.deathsPrevented;
+  const livesSavedColor = livesSavedValue >= 0 ? 'text-success' : 'text-destructive';
+  const livesSavedSubtitle = hasLivesBreakdown
+    ? `Net across all deaths vs. base case: ${fmtSignedCount(metrics.livesSavedWaitlist ?? 0)} on the waitlist, ${fmtSignedCount(-(metrics.postTxDeathsAdded ?? 0))} after a transplant`
+    : 'Fewer deaths on the waitlist vs. base case (load a base case to net out deaths after transplant)';
+  const livesSavedMetric = {
+    title: 'Lives Saved',
+    value: formatNumber(livesSavedValue),
+    icon: <Heart className={`w-5 h-5 ${livesSavedColor}`} />,
+    trend: getTrendIcon(livesSavedValue),
+    subtitle: livesSavedSubtitle,
+    color: livesSavedColor,
+  };
+
   const replacementStandardMetrics = [
     {
       title: 'Waitlist Reduction',
@@ -211,14 +246,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
       subtitle: `Fewer patients waiting vs. base case at year ${horizon}`,
       color: 'text-primary',
     },
-    {
-      title: 'Lives Saved',
-      value: formatNumber(metrics.deathsPrevented),
-      icon: <Heart className="w-5 h-5 text-success" />,
-      trend: getTrendIcon(metrics.deathsPrevented),
-      subtitle: 'Waitlist deaths prevented vs. base case',
-      color: 'text-success',
-    },
+    livesSavedMetric,
     {
       title: 'Total Transplants',
       value: formatNumber(metrics.totalTransplants),
@@ -229,15 +257,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
     },
   ];
   const bridgeStandardMetrics = [
-    {
-      title: 'Lives Saved',
-      value: formatNumber(metrics.deathsPrevented),
-      icon: <Heart className="w-5 h-5 text-success" />,
-      trend: getTrendIcon(metrics.deathsPrevented),
-      // Bridge's central scientific claim — emphasized in the subtitle.
-      subtitle: 'Waitlist deaths prevented · the bridge\'s central claim',
-      color: 'text-success',
-    },
+    livesSavedMetric,
     {
       title: 'Dialysis-Years Avoided',
       value: hasDialysisBurden ? fmtYears(dialysisYears!) : '—',
@@ -485,9 +505,9 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
               <p className="text-xs text-muted-foreground">
                 {hasWaitData
                   ? isBridge
-                    ? `Per list-spell, year ${horizon} · L = candidates on dialysis only`
-                    : `Per list-spell, year ${horizon} (Little's Law estimate)`
-                  : 'Insufficient outflow at horizon — wait time undefined'}
+                    ? `Typical time a patient spends on dialysis before a transplant (year ${horizon})`
+                    : `Typical time a patient waits for a transplant (year ${horizon})`
+                  : 'Not enough transplants at this point to estimate a wait'}
               </p>
             </div>
           </CardContent>

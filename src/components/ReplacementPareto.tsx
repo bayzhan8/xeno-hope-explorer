@@ -38,7 +38,9 @@ import SegmentedControl from '@/components/SegmentedControl';
 import {
   loadParetoDataset,
   livesSavedFromViz,
+  livesSavedCIHalfWidth,
   waitlistReductionFromViz,
+  waitlistReductionCIHalfWidth,
   waitTimeReductionFromViz,
 } from '@/utils/pareto';
 import { getXenoBaseRate } from '@/utils/dataTransformer';
@@ -191,6 +193,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
             strategy: sg.strategy,
             targetYear: simulationHorizon,
             metric: livesSavedFromViz,
+            metricCI: livesSavedCIHalfWidth,
             // Each subgroup sweeps its own absolute kidneys/yr grid.
             // `kidneysPerYear` plots N directly (curves land on disjoint x
             // ranges — that's the point: makes the scale disparity visible).
@@ -317,6 +320,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
             strategy: sg.strategy,
             targetYear: simulationHorizon,
             metric: waitlistReductionFromViz,
+            metricCI: waitlistReductionCIHalfWidth,
             // Graft-failure x is already a multiplier in BOTH overlay
             // modes — no axis switch needed.
             points: GRAFT_FAILURE_MULTIPLIERS.map((m) => ({

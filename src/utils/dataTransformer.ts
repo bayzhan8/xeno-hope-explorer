@@ -186,6 +186,24 @@ interface SimulationData {
     baseLowWaitlistDeaths?: number;
     baseHighWaitlistDeaths?: number;
   }>;
+  // Honest "lives saved" decomposition (cumulative, per year). Every death
+  // in the model is one of: a waitlist death (died waiting / on dialysis) or
+  // a post-transplant death (died with a human or xeno graft). "Lives saved"
+  // measured on WAITLIST deaths alone overstates the benefit — a transplant
+  // just moves a patient from the waitlist bucket into the post-tx bucket, so
+  // it must be netted against post-tx deaths to give the true number. We carry
+  // both the scenario and base totals so the summary can report the honest net
+  // (total) figure plus the breakdown. Only populated when a base scenario is
+  // loaded and the viz JSON carries the cumulative *Total* death series.
+  deathsBreakdownByYear?: Array<{
+    year: number;
+    scenarioTotal: number;
+    scenarioWaitlist: number;
+    scenarioPostTx: number;
+    baseTotal: number;
+    baseWaitlist: number;
+    basePostTx: number;
+  }>;
   // Legacy scalar fields: end-of-series cumulative procedure count for
   // backwards compatibility. Prefer the *Series fields below + horizon
   // slicing via interpolateCumulative; these legacy values can over-report
@@ -2493,6 +2511,46 @@ export function transformVizDataToSimulationData(
     }
   }
 
+  // ── Honest lives-saved decomposition ──────────────────────────────────────
+  // Pull the cumulative *Total* series for all three death buckets, for both
+  // the scenario and the (N=0) base, and emit per-year values interpolated at
+  // each integer year. calculateSummaryMetrics turns these into a net (total)
+  // lives-saved figure plus its waitlist / post-tx components, so the headline
+  // number isn't the cherry-picked waitlist-only reduction.
+  if (baseVizData) {
+    const cumTotal = (viz: VizData | null, keys: string[], wanted: string[]) => {
+      const chart = (viz as any)?.[keys[0]] ?? (keys[1] ? (viz as any)?.[keys[1]] : undefined);
+      if (!chart?.series || !chart?.x) return null;
+      const y = findSeries(chart.series, wanted);
+      if (!y) return null;
+      return { xDays: chart.x as number[], y };
+    };
+    const sTot = cumTotal(vizData, ['cumulative_deaths'], ['total deaths', 'total']);
+    const sWl = cumTotal(vizData, ['cumulative_waitlist_deaths'], ['total waitlist deaths', 'total']);
+    const sPt = cumTotal(vizData, ['cumulative_post_tx_deaths'], ['total post-tx deaths', 'total post tx deaths', 'total']);
+    const bTot = cumTotal(baseVizData, ['cumulative_deaths'], ['total deaths', 'total']);
+    const bWl = cumTotal(baseVizData, ['cumulative_waitlist_deaths'], ['total waitlist deaths', 'total']);
+    const bPt = cumTotal(baseVizData, ['cumulative_post_tx_deaths'], ['total post-tx deaths', 'total post tx deaths', 'total']);
+    if (sTot && sWl && bTot && bWl) {
+      const maxDays = Math.max(...sTot.xDays);
+      const maxYear = Math.floor(daysToYears(maxDays));
+      const at = (s: { xDays: number[]; y: number[] } | null, yr: number) =>
+        s ? interpolateCumulative(s.xDays, s.y, yr * 365) : 0;
+      result.deathsBreakdownByYear = [];
+      for (let yr = 1; yr <= maxYear; yr++) {
+        result.deathsBreakdownByYear.push({
+          year: yr,
+          scenarioTotal: at(sTot, yr),
+          scenarioWaitlist: at(sWl, yr),
+          scenarioPostTx: at(sPt, yr),
+          baseTotal: at(bTot, yr),
+          baseWaitlist: at(bWl, yr),
+          basePostTx: at(bPt, yr),
+        });
+      }
+    }
+  }
+
   return result;
 }
 
@@ -2504,6 +2562,9 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     return {
       waitlistReduction: 0,
       deathsPrevented: 0,
+      livesSavedTotal: undefined as number | undefined,
+      livesSavedWaitlist: undefined as number | undefined,
+      postTxDeathsAdded: undefined as number | undefined,
       totalTransplants: 0,
       xenoTransplants: 0,
       penetrationRate: 0,
@@ -2666,9 +2727,35 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
   const dialysisPerRecipientMonthsAvoided = burden?.perRecipientMonthsAvoided;
   const sessionsAvoided = burden?.sessionsAvoided;
 
+  // Honest lives-saved decomposition at the horizon (base − scenario, all
+  // cumulative). `livesSavedTotal` nets the favorable waitlist-death drop
+  // against the post-transplant deaths a transplant introduces, so it's the
+  // figure that won't bias a policymaker. `undefined` when no base scenario
+  // is loaded (then the UI falls back to the waitlist-only number with a
+  // clear label).
+  let livesSavedTotal: number | undefined;
+  let livesSavedWaitlist: number | undefined;
+  let postTxDeathsAdded: number | undefined;
+  const breakdown = data.deathsBreakdownByYear;
+  if (breakdown && breakdown.length) {
+    const row =
+      breakdown.find((d) => d.year === horizon) ??
+      breakdown.filter((d) => d.year <= horizon).slice(-1)[0] ??
+      breakdown[breakdown.length - 1];
+    if (row) {
+      livesSavedTotal = row.baseTotal - row.scenarioTotal;
+      livesSavedWaitlist = row.baseWaitlist - row.scenarioWaitlist;
+      // Positive = MORE post-tx deaths than base (the cost side of the ledger).
+      postTxDeathsAdded = row.scenarioPostTx - row.basePostTx;
+    }
+  }
+
   return {
     waitlistReduction: waitlistReductionVsBase,
     deathsPrevented: totalDeathsPrevented,
+    livesSavedTotal,
+    livesSavedWaitlist,
+    postTxDeathsAdded,
     totalTransplants,
     xenoTransplants,
     bridgeAlloTransplants,

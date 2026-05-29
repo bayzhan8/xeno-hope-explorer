@@ -19,6 +19,8 @@ import {
   waitlistReductionFromViz,
   waitTimeAtYearFromViz,
   waitTimeReductionFromViz,
+  livesSavedCIHalfWidth,
+  waitlistReductionCIHalfWidth,
   classifyCurveShape,
   toMarginalDataset,
   loadParetoDataset,
@@ -203,6 +205,65 @@ describe('viz extractors (totalDeathsAtYear / livesSavedFromViz / waitlistAtYear
     const scen = buildViz({ wl: Array.from({ length: 11 }, (_, i) => 1000 + 30 * i) });
     expect(waitlistReductionFromViz(scen, base, 10)).toBe(200);
   });
+});
+
+describe('CI half-width helpers (Monte-Carlo uncertainty bands)', () => {
+  const xDays = [0, 365, 730, 1095, 1460, 1825, 2190, 2555, 2920, 3285, 3650];
+  // Viz with a Total series that carries y_std and a trial count.
+  const vizWithStd = (
+    key: 'cumulative_waitlist_deaths' | 'waitlist_sizes',
+    y: number[],
+    yStd: number[],
+    n: number,
+  ) => ({
+    total_days: 3650,
+    num_experiments: n,
+    [key]: { x: xDays, series: [{ label: `Total ${key}`, y, y_std: yStd }] },
+  });
+
+  it('livesSavedCIHalfWidth combines independent SEs as z·√(SE_base²+SE_scen²)', () => {
+    // Both sides: SD=30 at year 10, N=9 → SE = 30/3 = 10 each.
+    // SE_diff = √(10²+10²) = √200 ≈ 14.142; half-width = 1.95996·14.142 ≈ 27.72.
+    const flat = (v: number) => Array(11).fill(v);
+    const base = vizWithStd('cumulative_waitlist_deaths', flat(1000), flat(30), 9);
+    const scen = vizWithStd('cumulative_waitlist_deaths', flat(600), flat(30), 9);
+    const ci = livesSavedCIHalfWidth(scen, base, 10);
+    expect(ci).not.toBeNull();
+    expect(ci!).toBeCloseTo(1.959963984540054 * Math.sqrt(200), 4);
+  });
+
+  it('waitlistReductionCIHalfWidth reads waitlist_sizes y_std', () => {
+    const flat = (v: number) => Array(11).fill(v);
+    const base = vizWithStd('waitlist_sizes', flat(1000), flat(0), 10);
+    const scen = vizWithStd('waitlist_sizes', flat(800), flat(60), 10);
+    // SE_base=0, SE_scen=60/√10. half-width = 1.95996·60/√10.
+    const ci = waitlistReductionCIHalfWidth(scen, base, 10);
+    expect(ci!).toBeCloseTo(1.959963984540054 * (60 / Math.sqrt(10)), 4);
+  });
+
+  it('returns null when y_std is absent (legacy viz JSONs → no band)', () => {
+    const base = buildVizNoStd();
+    const scen = buildVizNoStd();
+    expect(livesSavedCIHalfWidth(scen, base, 10)).toBeNull();
+  });
+
+  it('returns null when trial count is missing or < 2', () => {
+    const flat = (v: number) => Array(11).fill(v);
+    const base = vizWithStd('cumulative_waitlist_deaths', flat(1000), flat(30), 1);
+    const scen = vizWithStd('cumulative_waitlist_deaths', flat(600), flat(30), 1);
+    expect(livesSavedCIHalfWidth(scen, base, 10)).toBeNull();
+  });
+
+  function buildVizNoStd() {
+    return {
+      total_days: 3650,
+      num_experiments: 10,
+      cumulative_waitlist_deaths: {
+        x: xDays,
+        series: [{ label: 'Total waitlist deaths', y: Array(11).fill(100) }],
+      },
+    };
+  }
 });
 
 describe('wait-time extractors (Little\'s Law)', () => {

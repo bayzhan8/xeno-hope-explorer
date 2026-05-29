@@ -25,8 +25,9 @@
  */
 import React from 'react';
 import {
-  LineChart,
+  ComposedChart,
   Line,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -251,14 +252,29 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
     for (const p of s.dataset.points) allXs.add(p.x);
   }
   const xsSorted = [...allXs].sort((a, b) => a - b);
+  // CI bands are only meaningful on the raw cumulative curve. In the
+  // marginal (Δy/Δx) view the per-segment differencing would require
+  // propagating covariance we don't store, so we suppress bands there.
+  const showBands = view === 'cumulative';
   const chartData = xsSorted.map((x) => {
-    const row: Record<string, number | undefined> = { x };
+    const row: Record<string, number | [number, number] | undefined> = { x };
     for (const s of series) {
       const p = s.dataset.points.find((pt) => pt.x === x);
-      if (p) row[s.label] = p.y;
+      if (p) {
+        row[s.label] = p.y;
+        // Range-area datum: recharts renders a band when the value is a
+        // [low, high] tuple. Only emitted when this point has a CI.
+        if (showBands && p.yCI !== undefined && Number.isFinite(p.yCI)) {
+          row[`${s.label}__band`] = [p.y - p.yCI, p.y + p.yCI];
+        }
+      }
     }
     return row;
   });
+  // Whether ANY series carries a CI → controls band rendering + legend note.
+  const hasBand = showBands && series.some((s) =>
+    s.dataset.points.some((p) => p.yCI !== undefined && Number.isFinite(p.yCI)),
+  );
 
   // Each series's classification + knee, computed once.
   const seriesMeta = series.map((s) => {
@@ -277,7 +293,7 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
   return (
     <div className="space-y-2">
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={chartData} margin={{ top: 24, right: 24, left: 16, bottom: 28 }}>
+        <ComposedChart data={chartData} margin={{ top: 24, right: 24, left: 16, bottom: 28 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--medical-border))" />
           <XAxis
             type="number"
@@ -318,9 +334,17 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
                   <div className="font-medium text-foreground mb-1">
                     {xLabel}: {formatX(xVal)}
                   </div>
-                  {payload.map((entry) => {
+                  {payload
+                    // Drop the band's range-area entry; the CI is shown
+                    // inline on the matching line entry below.
+                    .filter((entry) => !String(entry.dataKey).endsWith('__band'))
+                    .map((entry) => {
                     const sLabel = entry.dataKey as string;
                     const meta = seriesMeta.find((m) => m.series.label === sLabel);
+                    const ciPoint = meta?.series.dataset.points.find(
+                      (pt) => Math.abs(pt.x - xVal) < 1e-9,
+                    );
+                    const ci = ciPoint?.yCI;
                     const isKnee =
                       meta?.knee && Math.abs(meta.knee.x - xVal) < 1e-9;
                     // When a supply axis is in play AND we know this
@@ -352,6 +376,11 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
                         <span className="text-foreground">
                           {isMulti ? `${sLabel}: ` : ''}
                           {formatY(entry.value as number)}
+                          {ci !== undefined && Number.isFinite(ci) && (
+                            <span className="text-muted-foreground">
+                              {' '}± {formatY(ci)}
+                            </span>
+                          )}
                         </span>
                         {supplyNote && (
                           <span className="text-[10px] text-muted-foreground">
@@ -370,6 +399,20 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
               );
             }}
           />
+          {hasBand && series.map((s) => (
+            <Area
+              key={`${s.label}__band`}
+              type="monotone"
+              dataKey={`${s.label}__band`}
+              stroke="none"
+              fill={s.color}
+              fillOpacity={0.14}
+              connectNulls
+              isAnimationActive={false}
+              activeDot={false}
+              legendType="none"
+            />
+          ))}
           {series.map((s) => (
             <Line
               key={s.label}
@@ -411,8 +454,13 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
               />
             ) : null,
           )}
-        </LineChart>
+        </ComposedChart>
       </ResponsiveContainer>
+      {hasBand && (
+        <p className="text-[10px] text-muted-foreground text-center -mt-1">
+          Shaded band = 95% confidence interval (Monte-Carlo trial error).
+        </p>
+      )}
 
       {/* Legend with per-curve color swatch + (optional) shape chip. In
           single-curve mode we show only the shape chip + caption; in

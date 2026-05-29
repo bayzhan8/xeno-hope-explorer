@@ -37,7 +37,9 @@ import {
 import {
   loadParetoDataset,
   livesSavedFromViz,
+  livesSavedCIHalfWidth,
   waitlistReductionFromViz,
+  waitlistReductionCIHalfWidth,
   waitTimeReductionFromViz,
 } from '@/utils/pareto';
 import { nonZeroSupplyPoints, effectiveThreshold } from '@/utils/supplyGrid';
@@ -246,6 +248,7 @@ const Bridge: React.FC = () => {
             strategy: sg.strategy,
             targetYear: params.simulationHorizon,
             metric: livesSavedFromViz,
+            metricCI: livesSavedCIHalfWidth,
             // Each subgroup sweeps its own absolute kidneys/yr grid.
             // Overlay-off renders kidneys/yr on x; overlay-on switches to
             // N/baseRate so curves with different baseRates align.
@@ -315,6 +318,7 @@ const Bridge: React.FC = () => {
             strategy: sg.strategy,
             targetYear: params.simulationHorizon,
             metric: waitlistReductionFromViz,
+            metricCI: waitlistReductionCIHalfWidth,
             // x is months — comparable across all subgroups, no axis switch needed.
             // Pin the current death-multiplier so every point on the
             // curve reflects the user's mortality assumption.

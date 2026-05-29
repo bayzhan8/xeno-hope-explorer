@@ -30,6 +30,14 @@ interface Series<T> {
   label: string;
   y?: T[];
   values?: T[];
+  /**
+   * Optional trial-to-trial standard deviation, same length/grid as `y`.
+   * Emitted by the backend only for the Total aggregate of the headline
+   * metrics (see workflow_age_cpra.create_viz_data). Absent on legacy
+   * viz JSONs → all CI helpers below return null and the chart degrades
+   * to no band.
+   */
+  y_std?: T[];
 }
 
 interface ChartLike {
@@ -40,6 +48,8 @@ interface ChartLike {
 
 interface VizLike {
   total_days?: number;
+  /** Monte-Carlo trial count used to average this config (for SE = SD/√N). */
+  num_experiments?: number;
   waitlist_sizes?: ChartLike;
   cumulative_waitlist_deaths?: ChartLike;
   cumulative_post_tx_deaths?: ChartLike;
@@ -51,6 +61,9 @@ interface VizLike {
   cumulative_std_transplants?: ChartLike;
   waitlist_deaths_per_year?: ChartLike;
 }
+
+/** 95% normal-approx multiplier for CI half-widths. */
+const Z95 = 1.959963984540054;
 
 /**
  * Find the "Total *" series in a chart (case-insensitive). Falls back to the
@@ -113,6 +126,96 @@ function valueAtYear(chart: ChartLike | undefined, targetYear: number): number |
     }
   }
   return yArr[yArr.length - 1];
+}
+
+/**
+ * Standard ERROR of the mean for the Total series of `chart` at
+ * `targetYear`, i.e. trial SD / √(num trials). Returns null when the
+ * backend didn't emit `y_std` for this metric (legacy viz JSONs) or when
+ * the trial count is unknown. The SD is interpolated to the target year
+ * the same way the mean is.
+ */
+function seAtYear(
+  chart: ChartLike | undefined,
+  targetYear: number,
+  numExperiments: number | undefined,
+): number | null {
+  if (!chart?.series?.length || !numExperiments || numExperiments < 2) return null;
+  const total =
+    chart.series.find(
+      (s) => typeof s.label === 'string' && /^total/i.test(s.label),
+    ) ?? chart.series[chart.series.length - 1];
+  const std = total.y_std;
+  if (!std?.length) return null;
+
+  const xs: number[] | undefined = chart.x ??
+    (chart.year_labels?.map((l) => Number(l)) as number[] | undefined);
+  if (!xs?.length || xs.length !== std.length) return null;
+  const maxX = xs[xs.length - 1];
+  const xsYears = maxX > 50 ? xs.map((d) => d / 365) : xs;
+
+  // Interpolate the SD to the target year (mirrors valueAtYear).
+  let sd: number;
+  if (targetYear <= xsYears[0]) sd = std[0];
+  else if (targetYear >= xsYears[xsYears.length - 1]) sd = std[std.length - 1];
+  else {
+    sd = std[std.length - 1];
+    for (let i = 1; i < xsYears.length; i += 1) {
+      if (xsYears[i] >= targetYear) {
+        const x0 = xsYears[i - 1], x1 = xsYears[i];
+        const t = x1 === x0 ? 0 : (targetYear - x0) / (x1 - x0);
+        sd = std[i - 1] + t * (std[i] - std[i - 1]);
+        break;
+      }
+    }
+  }
+  return sd / Math.sqrt(numExperiments);
+}
+
+/**
+ * 95% CI half-width for a "base − scenario" difference metric at
+ * `targetYear`. base and scenario are independent Monte-Carlo runs, so the
+ * variances add: SE_diff = √(SE_base² + SE_scen²); half-width = z₉₅·SE_diff.
+ * Returns null if either side lacks stored uncertainty.
+ */
+function differenceCIHalfWidth(
+  chart: (v: VizLike) => ChartLike | undefined,
+  scenarioViz: VizLike,
+  baseViz: VizLike,
+  targetYear: number,
+): number | null {
+  const seScen = seAtYear(chart(scenarioViz), targetYear, scenarioViz.num_experiments);
+  const seBase = seAtYear(chart(baseViz), targetYear, baseViz.num_experiments);
+  if (seScen === null || seBase === null) return null;
+  return Z95 * Math.sqrt(seScen * seScen + seBase * seBase);
+}
+
+/** 95% CI half-width for lives saved (waitlist-deaths reduction). */
+export function livesSavedCIHalfWidth(
+  scenarioViz: VizLike,
+  baseViz: VizLike,
+  targetYear: number,
+): number | null {
+  return differenceCIHalfWidth(
+    (v) => v.cumulative_waitlist_deaths,
+    scenarioViz,
+    baseViz,
+    targetYear,
+  );
+}
+
+/** 95% CI half-width for waitlist reduction (waitlist-size difference). */
+export function waitlistReductionCIHalfWidth(
+  scenarioViz: VizLike,
+  baseViz: VizLike,
+  targetYear: number,
+): number | null {
+  return differenceCIHalfWidth(
+    (v) => v.waitlist_sizes,
+    scenarioViz,
+    baseViz,
+    targetYear,
+  );
 }
 
 // ─── Public metric extractors ───────────────────────────────────────────────
@@ -562,6 +665,12 @@ export interface ParetoPoint {
   label: string;
   configName: string;
   inflection: boolean;
+  /**
+   * Optional 95% CI half-width for `y` (so the band is [y − yCI, y + yCI]).
+   * Present only when the loader was given a `metricCI` AND the viz JSONs
+   * carry `y_std` (fresh runs). Charts that find it render a shaded band.
+   */
+  yCI?: number;
 }
 
 export interface ParetoDataset {
@@ -612,6 +721,12 @@ export interface LoadParetoOptions {
    * and the target year. Return `null` to drop the point.
    */
   metric: (scenarioViz: VizLike, baseViz: VizLike, targetYear: number) => number | null;
+  /**
+   * Optional: 95% CI half-width for the metric at the target year. When
+   * provided and non-null, each point carries `yCI` and the chart draws a
+   * confidence band. Returns null per-point when uncertainty is unavailable.
+   */
+  metricCI?: (scenarioViz: VizLike, baseViz: VizLike, targetYear: number) => number | null;
   points: ParetoPointSpec[];
 }
 
@@ -631,7 +746,7 @@ export interface LoadParetoOptions {
  * letting the chart degrade gracefully (e.g. show 4/5 points + a warning).
  */
 export async function loadParetoDataset(opts: LoadParetoOptions): Promise<ParetoDataset> {
-  const { mode, highCPRAThreshold, strategy, targetYear, metric, points } = opts;
+  const { mode, highCPRAThreshold, strategy, targetYear, metric, metricCI, points } = opts;
 
   const tasks = points.map(async (spec): Promise<ParetoPoint | null> => {
     const effectiveStrategy = spec.strategy ?? strategy;
@@ -674,12 +789,18 @@ export async function loadParetoDataset(opts: LoadParetoOptions): Promise<Pareto
 
       const y = metric(scenarioViz as VizLike, baseViz as VizLike, targetYear);
       if (y === null || !Number.isFinite(y)) return null;
+      let yCI: number | undefined;
+      if (metricCI) {
+        const ci = metricCI(scenarioViz as VizLike, baseViz as VizLike, targetYear);
+        if (ci !== null && Number.isFinite(ci)) yCI = ci;
+      }
       return {
         x: spec.x,
         y,
         label: spec.label,
         configName: scenarioName,
         inflection: false,
+        ...(yCI !== undefined ? { yCI } : {}),
       };
     } catch (err) {
       console.warn(
