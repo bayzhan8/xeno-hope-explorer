@@ -4,16 +4,16 @@
  * Three charts:
  *
  *   1. Xeno supply ↔ Lives saved
- *      Sweep `xeno_proportion ∈ {0.5, 1, 1.5, 2}` while holding the
- *      user's currently-selected relist & death multipliers fixed.
+ *      Sweep the per-(strategy, threshold) absolute supply grid (kidneys/yr,
+ *      N=0 dropped) while holding the user's relist & death multipliers fixed.
  *
  *   2. Xeno supply ↔ Wait-time reduction
  *      Same supply sweep, y = months saved per list-spell at year H
  *      (Little's Law).
  *
  *   3. Xeno graft failure rate ↔ Waitlist reduction
- *      Sweep `xenoGraftFailureRate ∈ {0.5, 1, 1.5, 2}` while holding the
- *      user's xeno_proportion & death multiplier fixed. Lower multiplier
+ *      Sweep `xenoGraftFailureRate ∈ XENO_RELIST_MULTIPLIERS` while holding
+ *      the user's supply (xeno_n) & death multiplier fixed. Lower multiplier
  *      = grafts last longer = bigger waitlist reduction (decreasing curve;
  *      kneedle handles either direction).
  *
@@ -42,9 +42,12 @@ import {
   waitTimeReductionFromViz,
 } from '@/utils/pareto';
 import { getXenoBaseRate } from '@/utils/dataTransformer';
+import { nonZeroSupplyPoints, effectiveThreshold } from '@/utils/supplyGrid';
+import { XENO_RELIST_MULTIPLIERS } from '@/utils/configFinder';
 import {
   type OverlayMode,
   type ParetoView,
+  type SupplyAxis,
   THRESHOLDS,
   THRESHOLD_PALETTE,
   THRESHOLD_LABEL,
@@ -56,7 +59,7 @@ import {
 } from '@/components/paretoOverlay';
 
 export interface ReplacementParetoProps {
-  xeno_proportion: number;
+  xeno_n: number;
   xenoGraftFailureRate: number;
   postTransplantDeathRate: number;
   highCPRAThreshold: number;
@@ -64,16 +67,10 @@ export interface ReplacementParetoProps {
   simulationHorizon: number;
 }
 
-// Sweep ranges — match the slider snap points in `SimulationControls.tsx`.
-// We omit 0 from both because the answer at 0 supply or 0 multiplier is
-// either trivial (0 lives saved at prop=0) or non-physical (0× failure
-// rate means grafts never fail, which is degenerate).
-//
-// Note: the standard replacement folder on Supabase only has data for
-// these 4 supply points; densifying to 6 (0.5/1/1.5/2/3/4) is gated on
-// new MC runs and will land in a follow-up.
-const SUPPLY_PROPS = [0.5, 1, 1.5, 2] as const;
-const GRAFT_FAILURE_MULTIPLIERS = [0.5, 1, 1.5, 2] as const;
+// The supply sweep is now per-(strategy, threshold): each subgroup sweeps its
+// own absolute kidneys/yr grid (from supply_grid), dropping the N=0 base case
+// (trivially 0 lives saved). The graft-failure sweep uses the relisting grid.
+const GRAFT_FAILURE_MULTIPLIERS = XENO_RELIST_MULTIPLIERS;
 
 /**
  * Resolve which subgroup list to sweep over for a given overlay mode.
@@ -103,7 +100,9 @@ function buildSubgroups(
   if (overlay === 'strategies') {
     return STRATEGIES.map((s) => ({
       kind: 'strategy' as const,
-      threshold: highCPRAThreshold,
+      // cpraAll strategies only have data at 99 — pin them there so their
+      // curve loads instead of 404ing against an 85/95 folder.
+      threshold: effectiveThreshold(s, highCPRAThreshold),
       strategy: s,
       label: STRATEGY_LABEL[s],
       color: STRATEGY_PALETTE[s],
@@ -126,7 +125,7 @@ function buildSubgroups(
 }
 
 const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
-  xeno_proportion,
+  xeno_n,
   xenoGraftFailureRate,
   postTransplantDeathRate,
   highCPRAThreshold,
@@ -136,9 +135,13 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
   const strategy = targetingStrategy || 'standard';
 
   // Toolbar state. Defaults: overlay off (matches the previous UI),
-  // cumulative view (the headline, easy-to-read direction).
+  // cumulative view (the headline, easy-to-read direction), and
+  // supply axis = kidneys/yr (the clinically meaningful unit when
+  // looking at a single subgroup; users can flip to × multiplier
+  // for cross-subgroup shape comparison).
   const [overlay, setOverlay] = useState<OverlayMode>('off');
   const [view, setView] = useState<ParetoView>('cumulative');
+  const [supplyAxis, setSupplyAxis] = useState<SupplyAxis>('kidneysPerYear');
 
   const subgroups = useMemo(
     () => buildSubgroups(overlay, highCPRAThreshold, strategy),
@@ -158,14 +161,6 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
   const [graftSeries, setGraftSeries] = useState<ParetoSeries[] | null>(null);
   const [graftLoading, setGraftLoading] = useState(true);
   const [graftError, setGraftError] = useState<string | null>(null);
-
-  // Display rate for the current (threshold, strategy) pair — used in
-  // captions only. When overlay is on, this is the "anchor" subgroup
-  // (the user's selection) since per-curve rates differ.
-  const xenoBaseRate = useMemo(
-    () => getXenoBaseRate(strategy, highCPRAThreshold),
-    [strategy, highCPRAThreshold],
-  );
 
   // ── Helper: load all subgroups for a given (sweep, metric) and
   // return them as a ParetoSeries[] in subgroup order. Failures are
@@ -196,25 +191,25 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
             strategy: sg.strategy,
             targetYear: simulationHorizon,
             metric: livesSavedFromViz,
-            // When overlay is OFF, x = kidneys/yr (raw rate, what the
-            // user selected on the slider). When overlay is ON, x =
-            // multiplier so curves with different baseRate align on
-            // the same axis.
-            points: SUPPLY_PROPS.map((p) => ({
-              label: overlay === 'off'
-                ? `${Math.round(baseRate * p).toLocaleString()}/yr`
-                : `${p}×`,
-              x: overlay === 'off' ? Math.round(baseRate * p) : p,
-              xeno_proportion: p,
+            // Each subgroup sweeps its own absolute kidneys/yr grid.
+            // `kidneysPerYear` plots N directly (curves land on disjoint x
+            // ranges — that's the point: makes the scale disparity visible).
+            // `multiplier` plots N/baseRate so curve SHAPES are comparable.
+            points: nonZeroSupplyPoints(sg.strategy, sg.threshold).map((n) => ({
+              label: supplyAxis === 'kidneysPerYear'
+                ? `${n.toLocaleString()}/yr`
+                : `${(baseRate > 0 ? n / baseRate : 0).toFixed(1)}×`,
+              x: supplyAxis === 'kidneysPerYear' ? n : (baseRate > 0 ? n / baseRate : 0),
+              xeno_n: n,
               xenoGraftFailureRate,
               postTransplantDeathRate,
             })),
           });
           if (ds.points.length === 0) return null;
-          return { dataset: ds, label: sg.label, color: sg.color };
+          return { dataset: ds, label: sg.label, color: sg.color, baseRate };
         });
         const settled = (await Promise.all(tasks)).filter(
-          (s): s is ParetoSeries => s !== null,
+          (s): s is NonNullable<typeof s> => s !== null,
         );
         if (!cancelled) setSupplySeries(settled);
       } catch (err) {
@@ -234,7 +229,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
     };
   }, [
     subgroups,
-    overlay,
+    supplyAxis,
     simulationHorizon,
     xenoGraftFailureRate,
     postTransplantDeathRate,
@@ -257,18 +252,18 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
             targetYear: simulationHorizon,
             metric: (scen, base, target) =>
               waitTimeReductionFromViz(scen, base, target, sg.threshold),
-            points: SUPPLY_PROPS.map((p) => ({
-              label: overlay === 'off'
-                ? `${Math.round(baseRate * p).toLocaleString()}/yr`
-                : `${p}×`,
-              x: overlay === 'off' ? Math.round(baseRate * p) : p,
-              xeno_proportion: p,
+            points: nonZeroSupplyPoints(sg.strategy, sg.threshold).map((n) => ({
+              label: supplyAxis === 'kidneysPerYear'
+                ? `${n.toLocaleString()}/yr`
+                : `${(baseRate > 0 ? n / baseRate : 0).toFixed(1)}×`,
+              x: supplyAxis === 'kidneysPerYear' ? n : (baseRate > 0 ? n / baseRate : 0),
+              xeno_n: n,
               xenoGraftFailureRate,
               postTransplantDeathRate,
             })),
           });
           if (ds.points.length === 0) return null;
-          return { dataset: ds, label: sg.label, color: sg.color };
+          return { dataset: ds, label: sg.label, color: sg.color, baseRate };
         });
         const settled = (await Promise.all(tasks)).filter(
           (s): s is ParetoSeries => s !== null,
@@ -291,7 +286,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
     };
   }, [
     subgroups,
-    overlay,
+    supplyAxis,
     simulationHorizon,
     xenoGraftFailureRate,
     postTransplantDeathRate,
@@ -304,10 +299,10 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
     async function load() {
       setGraftLoading(true);
       setGraftError(null);
-      // At xeno_proportion=0 there are no xenografts and the multiplier
-      // sweep is meaningless across every subgroup; surface a friendly
-      // empty state instead of triggering a wave of empty fetches.
-      if (xeno_proportion === 0) {
+      // At N=0 there are no xenografts and the multiplier sweep is
+      // meaningless across every subgroup; surface a friendly empty state
+      // instead of triggering a wave of empty fetches.
+      if (xeno_n === 0) {
         if (!cancelled) {
           setGraftSeries([]);
           setGraftLoading(false);
@@ -327,7 +322,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
             points: GRAFT_FAILURE_MULTIPLIERS.map((m) => ({
               label: `${m.toFixed(1)}×`,
               x: m,
-              xeno_proportion,
+              xeno_n,
               xenoGraftFailureRate: m,
               postTransplantDeathRate,
             })),
@@ -354,15 +349,21 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [subgroups, simulationHorizon, xeno_proportion, postTransplantDeathRate]);
+  }, [subgroups, simulationHorizon, xeno_n, postTransplantDeathRate]);
 
-  // ── Computed: chart axis labels / formatters that depend on overlay ──
+  // ── Computed: chart axis labels / formatters that depend on supplyAxis ─
+  // Note: supplyAxis is now independent of overlay. Picking `multiplier`
+  // is the natural choice when overlaying multiple subgroups (curves
+  // align on the same x-axis); picking `kidneysPerYear` lets you read
+  // absolute supply directly off the axis (curves with different base
+  // rates land on disjoint x ranges, which surfaces the scale gap
+  // between strategies).
   const supplyXLabel =
-    overlay === 'off'
-      ? 'Xeno supply rate (procedures / yr, intended)'
-      : 'Xeno supply (× base, comparable across subgroups)';
+    supplyAxis === 'kidneysPerYear'
+      ? 'Xeno supply rate (kidneys / yr, intended)'
+      : 'Xeno supply (× base human-kidney transplant rate)';
   const supplyFormatX =
-    overlay === 'off'
+    supplyAxis === 'kidneysPerYear'
       ? (v: number) => v.toLocaleString()
       : (v: number) => `${v}×`;
 
@@ -397,7 +398,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
         </p>
       </div>
 
-      {/* Toolbar: overlay + view selectors */}
+      {/* Toolbar: overlay + supply-axis + view selectors */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-4">
         <SegmentedControl<OverlayMode>
           label="Overlay:"
@@ -415,6 +416,24 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               value: 'strategies',
               label: 'All 5 strategies',
               hint: 'Compare the same sweep across all five allocation strategies (Standard, 60+ high cPRA, 45+ high cPRA, 60+ any, 45+ any).',
+            },
+          ]}
+        />
+        <SegmentedControl<SupplyAxis>
+          label="Supply x-axis:"
+          ariaLabel="Supply x-axis units"
+          value={supplyAxis}
+          onChange={setSupplyAxis}
+          options={[
+            {
+              value: 'kidneysPerYear',
+              label: 'Kidneys / yr',
+              hint: 'x = absolute intended xeno kidneys per year (prop × base rate). Reads directly as a policy lever; curves with different base rates sit on disjoint x ranges (this makes the cross-strategy scale gap visible).',
+            },
+            {
+              value: 'multiplier',
+              label: '× Multiplier',
+              hint: 'x = N ÷ base human-kidney transplant rate. Normalizes each subgroup so curve SHAPES are directly comparable — tooltip shows the equivalent kidneys/yr per curve.',
             },
           ]}
         />
@@ -445,24 +464,23 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               Xeno supply &nbsp;↔&nbsp; Lives saved
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              {overlay === 'off' ? (
+              Sweeps the supply grid{' '}
+              {overlay === 'off'
+                ? `(${nonZeroSupplyPoints(strategy, highCPRAThreshold)
+                    .map((n) => `${n.toLocaleString()}/yr`)
+                    .join(' · ')}) `
+                : ''}
+              at relist = {xenoGraftFailureRate.toFixed(1)}×, death ={' '}
+              {postTransplantDeathRate.toFixed(1)}×
+              {overlay === 'off' && `, ${highCPRAThreshold}%+ cPRA, strategy = ${strategy}`}.
+              {overlay !== 'off' && (
                 <>
-                  Sweeps{' '}
-                  {SUPPLY_PROPS
-                    .map((m) => `${Math.round(xenoBaseRate * m).toLocaleString()}/yr`)
-                    .join(' · ')}{' '}
-                  at relist = {xenoGraftFailureRate.toFixed(1)}×, death ={' '}
-                  {postTransplantDeathRate.toFixed(1)}×, {highCPRAThreshold}%+
-                  cPRA, strategy = {strategy}
-                </>
-              ) : (
-                <>
-                  Sweeps {SUPPLY_PROPS.map((m) => `${m}×`).join(' · ')} supply at
-                  relist = {xenoGraftFailureRate.toFixed(1)}×, death ={' '}
-                  {postTransplantDeathRate.toFixed(1)}×.
                   {' '}{overlay === 'thresholds'
-                    ? 'One curve per cPRA threshold.'
-                    : 'One curve per allocation strategy.'}
+                    ? 'One curve per cPRA threshold — each sweeps its own supply grid.'
+                    : 'One curve per allocation strategy — each sweeps its own supply grid.'}
+                  {supplyAxis === 'multiplier'
+                    ? ' x = N ÷ base rate so curve shapes align (hover for kidneys/yr).'
+                    : ' x = absolute kidneys/yr (curves land on disjoint ranges).'}
                 </>
               )}
             </p>
@@ -477,6 +495,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               formatX={supplyFormatX}
               formatY={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               view={view}
+              supplyAxis={supplyAxis}
             />
           </CardContent>
         </Card>
@@ -503,6 +522,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               formatX={supplyFormatX}
               formatY={(v) => `${v.toFixed(1)} mo`}
               view={view}
+              supplyAxis={supplyAxis}
             />
           </CardContent>
         </Card>
@@ -514,8 +534,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
             </CardTitle>
             <p className="text-xs text-muted-foreground">
               Sweeps {GRAFT_FAILURE_MULTIPLIERS.map((m) => `${m.toFixed(1)}×`).join(' · ')}{' '}
-              at {Math.round(xenoBaseRate * xeno_proportion).toLocaleString()}/yr
-              ({xeno_proportion}× supply), death ={' '}
+              at {xeno_n.toLocaleString()}/yr, death ={' '}
               {postTransplantDeathRate.toFixed(1)}×.{' '}
               {overlay === 'off'
                 ? `${highCPRAThreshold}%+ cPRA, strategy = ${strategy}.`
@@ -526,12 +545,12 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
             </p>
           </CardHeader>
           <CardContent>
-            {xeno_proportion === 0 ? (
+            {xeno_n === 0 ? (
               <div
                 className="flex items-center justify-center text-sm text-muted-foreground italic"
                 style={{ height: 320 }}
               >
-                Set xeno proportion &gt; 0 to see how graft failure rate
+                Set xeno supply &gt; 0 to see how graft failure rate
                 affects the waitlist.
               </div>
             ) : (

@@ -17,6 +17,29 @@
 export type OverlayMode = 'off' | 'thresholds' | 'strategies';
 export type ParetoView = 'cumulative' | 'marginal';
 
+/**
+ * X-axis units for the *supply* Pareto cards (lives saved vs. supply,
+ * wait-time vs. supply). Task Group 6.1 — "Supply Normalization": at a
+ * given `xeno_proportion` the absolute kidneys/yr varies ~92× across
+ * strategies (192 for age60_cpraHigh to 17,705 for age45_cpraAll at
+ * prop=1.0), so we let the user pick the unit explicitly:
+ *
+ *   'multiplier'      — x = xeno_proportion (× human-kidney base rate).
+ *                       Curves from different subgroups align on the
+ *                       same x-axis (1× means "double the bin's natural
+ *                       transplant rate") so the SHAPE of the response
+ *                       is directly comparable, but the absolute supply
+ *                       differs per curve.
+ *   'kidneysPerYear'  — x = absolute intended xeno kidneys offered per
+ *                       year (= prop × baseRate). Same absolute number
+ *                       means the same policy lever pulled, regardless
+ *                       of which subgroup you targeted. Curves with very
+ *                       different baseRates land on very different parts
+ *                       of the axis — that's the point: it makes the
+ *                       scale disparity visible.
+ */
+export type SupplyAxis = 'multiplier' | 'kidneysPerYear';
+
 // Threshold palette: lighter → darker as the cohort gets stricter
 // (more sensitised → higher cPRA). Picked so the colors read in the
 // "more difficult cohort" direction at a glance.

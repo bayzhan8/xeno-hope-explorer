@@ -5,9 +5,14 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Info, ChevronDown, ChevronUp, Target, HeartPulse } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { getXenoBaseRate } from '@/utils/dataTransformer';
 import { fmtMeanTime, fmtAnnualRate } from '@/utils/chartFormat';
-import { XENO_DEATH_MULTIPLIERS } from '@/utils/configFinder';
+import { XENO_DEATH_MULTIPLIERS, XENO_RELIST_MULTIPLIERS } from '@/utils/configFinder';
+import {
+  supplyPoints,
+  availableThresholds,
+  isCpraAllStrategy,
+  normalizeSelection,
+} from '@/utils/supplyGrid';
 import {
   Select,
   SelectContent,
@@ -20,9 +25,9 @@ interface SimulationParams {
   xenoGraftFailureRate: number;
   postTransplantDeathRate: number;
   simulationHorizon: number;
-  xeno_proportion: number;
+  xeno_n: number; // absolute xeno supply (kidneys/yr) from the supply grid
   highCPRAThreshold: number;
-  targetingStrategy?: string;  // NEW: "standard", "age60_cpraHigh", "age45_cpraHigh", "age60_cpraAll", "age45_cpraAll"
+  targetingStrategy?: string;  // "standard", "age60_cpraHigh", "age45_cpraHigh", "age60_cpraAll", "age45_cpraAll"
 }
 
 interface SimulationControlsProps {
@@ -45,20 +50,42 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
     onParamsChange({ ...params, [key]: value });
   };
 
-  const snapTo = (value: number, allowedValues: number[]) => {
-    return allowedValues.reduce(
-      (prev, curr) => (Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev),
-      allowedValues[0]
-    );
-  };
-
   const toggleHorizon = () => {
     updateParam('simulationHorizon', params.simulationHorizon === 5 ? 10 : 5);
   };
 
   const strategy = params.targetingStrategy || 'standard';
-  const xenoBaseRate = getXenoBaseRate(strategy, params.highCPRAThreshold);
-  const xenoKidneysPerYear = Math.round(xenoBaseRate * params.xeno_proportion);
+  const xenoKidneysPerYear = params.xeno_n;
+
+  // Discrete supply grid for the current (strategy, threshold) cell. The
+  // slider snaps to these absolute kidneys/yr values (which differ per cell).
+  const supplyGridPoints = supplyPoints(strategy, params.highCPRAThreshold);
+  const supplyIdx = Math.max(0, supplyGridPoints.indexOf(params.xeno_n));
+  const thresholdOptions = availableThresholds(strategy);
+
+  // When the strategy changes, snap the threshold (cpraAll -> 99) and the
+  // supply N to the new cell's grid so we never request a config that
+  // wasn't run.
+  const changeStrategy = (value: string) => {
+    const norm = normalizeSelection(value, params.highCPRAThreshold, params.xeno_n);
+    onParamsChange({
+      ...params,
+      targetingStrategy: value,
+      highCPRAThreshold: norm.threshold,
+      xeno_n: norm.xeno_n,
+    });
+  };
+
+  const changeThreshold = (threshold: number) => {
+    const norm = normalizeSelection(strategy, threshold, params.xeno_n);
+    onParamsChange({ ...params, highCPRAThreshold: norm.threshold, xeno_n: norm.xeno_n });
+  };
+
+  const formatCompact = (n: number): string => {
+    if (n < 1000) return n.toLocaleString();
+    if (n < 10000) return `${(n / 1000).toFixed(1)}k`;
+    return `${Math.round(n / 1000)}k`;
+  };
 
   // Graft failure / death base rates by cPRA threshold. Stored at the
   // precision they were estimated, but only ever displayed to one
@@ -111,9 +138,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
             <Select
               value={params.targetingStrategy || 'standard'}
-              onValueChange={(value) => {
-                onParamsChange({ ...params, targetingStrategy: value });
-              }}
+              onValueChange={changeStrategy}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select allocation strategy" />
@@ -146,13 +171,13 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
           <div className="space-y-3 pb-4 border-b border-medical-border">
             <Label className="text-sm font-medium">High cPRA Definition</Label>
             <div className="flex gap-2">
-              {[85, 95, 99].map((threshold) => {
+              {thresholdOptions.map((threshold) => {
                 const isActive = params.highCPRAThreshold === threshold;
                 return (
                   <button
                     key={threshold}
                     type="button"
-                    onClick={() => updateParam('highCPRAThreshold', threshold)}
+                    onClick={() => changeThreshold(threshold)}
                     className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       isActive
                         ? 'border-2 border-primary bg-primary text-primary-foreground'
@@ -166,7 +191,11 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             </div>
             <div className="text-xs text-muted-foreground flex items-start gap-2">
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-              <span>Defines who counts as "high cPRA" in this simulation.</span>
+              <span>
+                {isCpraAllStrategy(strategy)
+                  ? 'Age-only (any cPRA) strategies are cPRA-threshold-invariant — fixed at 99%+.'
+                  : 'Defines who counts as "high cPRA" in this simulation.'}
+              </span>
             </div>
           </div>
 
@@ -177,22 +206,27 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
               <span className="text-sm font-semibold text-primary">{xenoKidneysPerYear.toLocaleString()}</span>
             </div>
             <Slider
-              value={[params.xeno_proportion]}
-              onValueChange={(value) => updateParam('xeno_proportion', snapTo(value[0], [0, 0.5, 1, 1.5, 2]))}
-              max={2}
+              value={[supplyIdx]}
+              onValueChange={(value) => {
+                const idx = Math.min(supplyGridPoints.length - 1, Math.max(0, Math.round(value[0])));
+                updateParam('xeno_n', supplyGridPoints[idx]);
+              }}
+              max={Math.max(0, supplyGridPoints.length - 1)}
               min={0}
-              step={0.5}
+              step={1}
               className="w-full"
             />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              {[0, 0.5, 1, 1.5, 2].map((m) => (
-                <span key={m}>{Math.round(xenoBaseRate * m).toLocaleString()}</span>
+            <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
+              {supplyGridPoints.map((n) => (
+                <span key={n} className="whitespace-nowrap">{formatCompact(n)}</span>
               ))}
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">
-                {xenoKidneysPerYear.toLocaleString()} xeno procedures/year offered on top of existing human transplants
-                {' '}({params.xeno_proportion}x of {xenoBaseRate.toLocaleString()} base rate).
+                {xenoKidneysPerYear === 0
+                  ? 'No xeno kidneys — baseline scenario.'
+                  : `${xenoKidneysPerYear.toLocaleString()} xeno procedures/year offered on top of existing human transplants.`}
+                {' '}Supply levels are fixed absolute counts chosen so allocation strategies can be compared head-to-head.
                 Actual delivered count may be lower if the eligible waitlist drains (see Throughput card).
               </p>
               <button
@@ -241,20 +275,25 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 <div className="text-xs text-muted-foreground">{meanTimeToGraftFailure} until rejection</div>
               </div>
             </div>
-            <Slider
-              value={[params.xenoGraftFailureRate]}
-              onValueChange={(value) => updateParam('xenoGraftFailureRate', snapTo(value[0], [0, 0.5, 1, 1.5, 2]))}
-              max={2}
-              min={0}
-              step={0.5}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>0x</span>
-              <span>0.5x</span>
-              <span>1x</span>
-              <span>1.5x</span>
-              <span>2x</span>
+            <div className="grid grid-cols-4 gap-2">
+              {XENO_RELIST_MULTIPLIERS.map((mult) => {
+                const isActive = params.xenoGraftFailureRate === mult;
+                return (
+                  <button
+                    key={mult}
+                    type="button"
+                    onClick={() => updateParam('xenoGraftFailureRate', mult)}
+                    className={`px-2 py-2 text-xs font-medium rounded-md transition-colors ${
+                      isActive
+                        ? 'border-2 border-primary bg-primary text-primary-foreground'
+                        : 'border border-input bg-background text-foreground hover:bg-muted'
+                    }`}
+                    aria-pressed={isActive}
+                  >
+                    {mult.toFixed(1)}×
+                  </button>
+                );
+              })}
             </div>
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">

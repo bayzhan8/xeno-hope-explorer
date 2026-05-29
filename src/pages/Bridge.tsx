@@ -40,6 +40,7 @@ import {
   waitlistReductionFromViz,
   waitTimeReductionFromViz,
 } from '@/utils/pareto';
+import { nonZeroSupplyPoints, effectiveThreshold } from '@/utils/supplyGrid';
 import {
   type OverlayMode,
   type ParetoView,
@@ -58,7 +59,7 @@ const Bridge: React.FC = () => {
     survivalMonths: 12,
     postTransplantDeathRate: 1.0,
     simulationHorizon: 10,
-    xeno_proportion: 1,
+    xeno_n: 1000, // kidneys/yr — present in every (strategy, threshold) grid cell
     highCPRAThreshold: 95,
     targetingStrategy: 'standard',
   });
@@ -114,7 +115,9 @@ const Bridge: React.FC = () => {
     if (overlay === 'strategies') {
       return STRATEGIES.map((s) => ({
         kind: 'strategy' as const,
-        threshold: params.highCPRAThreshold,
+        // cpraAll strategies only have data at 99 — pin them there so their
+        // curve loads instead of 404ing against an 85/95 folder.
+        threshold: effectiveThreshold(s, params.highCPRAThreshold),
         strategy: s,
         label: STRATEGY_LABEL[s],
         color: STRATEGY_PALETTE[s],
@@ -151,7 +154,7 @@ const Bridge: React.FC = () => {
         const configName = composeConfigName(
           'bridge',
           {
-            xeno_proportion: params.xeno_proportion,
+            xeno_n: params.xeno_n,
             postTransplantDeathRate: params.postTransplantDeathRate,
           },
           strategy,
@@ -162,7 +165,7 @@ const Bridge: React.FC = () => {
         // user has selected.
         const baseConfigName = composeConfigName(
           'bridge',
-          { xeno_proportion: 0, postTransplantDeathRate: 1.0 },
+          { xeno_n: 0, postTransplantDeathRate: 1.0 },
           strategy,
         );
 
@@ -209,7 +212,7 @@ const Bridge: React.FC = () => {
       cancelled = true;
     };
   }, [
-    params.xeno_proportion,
+    params.xeno_n,
     params.survivalMonths,
     params.simulationHorizon,
     params.highCPRAThreshold,
@@ -218,13 +221,11 @@ const Bridge: React.FC = () => {
   ]);
 
   // ── Pareto: xeno supply (kidneys/year) vs lives saved ────────────────
-  // Sweep xeno_proportion ∈ {0.5, 1, 1.5, 2, 3, 4} at the user's currently-
-  // selected survival/threshold/strategy. We deliberately omit prop=0 from
-  // the curve because at prop=0 the answer is trivially 0 lives saved.
-  // The 3× and 4× points are extra-wide so the curve's saturation point is
-  // visible: at the 99 % threshold the patient pool is small enough that
-  // 2× already consumes ~99.6 % of supply, so without 3-4× the chart can
-  // never show the asymptote where extra supply stops adding lives.
+  // Sweep each subgroup's absolute supply grid (from supply_grid) at the
+  // user's currently-selected survival/threshold/strategy. N=0 is omitted
+  // because the answer there is trivially 0 lives saved. The grid's
+  // wide upper points expose the saturation asymptote where extra supply
+  // stops adding lives.
   const xenoBaseRate = useMemo(
     () => getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold),
     [params.targetingStrategy, params.highCPRAThreshold],
@@ -245,19 +246,18 @@ const Bridge: React.FC = () => {
             strategy: sg.strategy,
             targetYear: params.simulationHorizon,
             metric: livesSavedFromViz,
-            // 0.5 → 4× spans the supply Pareto over an order of
-            // magnitude (the bridge MC sweep uploaded all 6 points).
-            // Overlay-off renders kidneys/yr on x; overlay-on switches
-            // to multiplier so curves with different baseRates align.
+            // Each subgroup sweeps its own absolute kidneys/yr grid.
+            // Overlay-off renders kidneys/yr on x; overlay-on switches to
+            // N/baseRate so curves with different baseRates align.
             //
             // Pin the current death-multiplier so every point on the
             // curve reflects the user's mortality assumption.
-            points: [0.5, 1, 1.5, 2, 3, 4].map((p) => ({
+            points: nonZeroSupplyPoints(sg.strategy, sg.threshold).map((n) => ({
               label: overlay === 'off'
-                ? `${Math.round(baseRate * p).toLocaleString()}/yr`
-                : `${p}×`,
-              x: overlay === 'off' ? Math.round(baseRate * p) : p,
-              xeno_proportion: p,
+                ? `${n.toLocaleString()}/yr`
+                : `${(baseRate > 0 ? n / baseRate : 0).toFixed(1)}×`,
+              x: overlay === 'off' ? n : (baseRate > 0 ? n / baseRate : 0),
+              xeno_n: n,
               surv: params.survivalMonths,
               postTransplantDeathRate: params.postTransplantDeathRate,
             })),
@@ -300,7 +300,7 @@ const Bridge: React.FC = () => {
     async function loadSurvival() {
       setSurvivalLoading(true);
       setSurvivalError(null);
-      if (params.xeno_proportion === 0) {
+      if (params.xeno_n === 0) {
         if (!cancelled) {
           setSurvivalSeries([]);
           setSurvivalLoading(false);
@@ -321,13 +321,13 @@ const Bridge: React.FC = () => {
             points: BRIDGE_SURVIVAL_MONTHS.map((m): {
               label: string;
               x: number;
-              xeno_proportion: number;
+              xeno_n: number;
               surv: BridgeSurvivalMonths;
               postTransplantDeathRate: number;
             } => ({
               label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
               x: m,
-              xeno_proportion: params.xeno_proportion,
+              xeno_n: params.xeno_n,
               surv: m,
               postTransplantDeathRate: params.postTransplantDeathRate,
             })),
@@ -354,7 +354,7 @@ const Bridge: React.FC = () => {
     };
   }, [
     subgroups,
-    params.xeno_proportion,
+    params.xeno_n,
     params.simulationHorizon,
     params.postTransplantDeathRate,
   ]);
@@ -372,7 +372,7 @@ const Bridge: React.FC = () => {
     async function loadWaitTime() {
       setWaitTimeLoading(true);
       setWaitTimeError(null);
-      if (params.xeno_proportion === 0) {
+      if (params.xeno_n === 0) {
         if (!cancelled) {
           setWaitTimeSeries([]);
           setWaitTimeLoading(false);
@@ -391,13 +391,13 @@ const Bridge: React.FC = () => {
             points: BRIDGE_SURVIVAL_MONTHS.map((m): {
               label: string;
               x: number;
-              xeno_proportion: number;
+              xeno_n: number;
               surv: BridgeSurvivalMonths;
               postTransplantDeathRate: number;
             } => ({
               label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
               x: m,
-              xeno_proportion: params.xeno_proportion,
+              xeno_n: params.xeno_n,
               surv: m,
               postTransplantDeathRate: params.postTransplantDeathRate,
             })),
@@ -426,7 +426,7 @@ const Bridge: React.FC = () => {
     };
   }, [
     subgroups,
-    params.xeno_proportion,
+    params.xeno_n,
     params.simulationHorizon,
     params.postTransplantDeathRate,
   ]);
@@ -588,7 +588,7 @@ const Bridge: React.FC = () => {
                   <SummaryMetrics
                     metrics={metrics}
                     horizon={params.simulationHorizon}
-                    xenoIntendedPerYear={Math.round(xenoBaseRate * params.xeno_proportion)}
+                    xenoIntendedPerYear={params.xeno_n}
                   />
                 </div>
 
@@ -677,8 +677,8 @@ const Bridge: React.FC = () => {
                     highCPRAThreshold={params.highCPRAThreshold}
                     simulationHorizon={params.simulationHorizon}
                     xenoBaseRate={xenoBaseRate}
-                    xenoProportion={params.xeno_proportion}
-                    xenoIntendedPerYear={Math.round(xenoBaseRate * params.xeno_proportion)}
+                    xenoProportion={xenoBaseRate > 0 ? params.xeno_n / xenoBaseRate : 0}
+                    xenoIntendedPerYear={params.xeno_n}
                     targetingStrategy={params.targetingStrategy || 'standard'}
                   />
                 </div>
@@ -752,17 +752,20 @@ const Bridge: React.FC = () => {
                     <p className="text-xs text-muted-foreground">
                       {overlay === 'off' ? (
                         <>
-                          Sweeps {[0.5, 1, 1.5, 2, 3, 4]
-                            .map((m) => `${Math.round(xenoBaseRate * m).toLocaleString()}/yr`)
-                            .join(' · ')}{' '}
+                          Sweeps the supply grid ({nonZeroSupplyPoints(
+                            params.targetingStrategy ?? 'standard',
+                            params.highCPRAThreshold,
+                          )
+                            .map((n) => `${n.toLocaleString()}/yr`)
+                            .join(' · ')}){' '}
                           at {params.survivalMonths}-mo bridge,{' '}
                           {params.highCPRAThreshold}%+ cPRA, strategy ={' '}
                           {params.targetingStrategy ?? 'standard'}
                         </>
                       ) : (
                         <>
-                          Sweeps {[0.5, 1, 1.5, 2, 3, 4].map((m) => `${m}×`).join(' · ')}{' '}
-                          supply at {params.survivalMonths}-mo bridge.{' '}
+                          Sweeps each subgroup's supply grid at{' '}
+                          {params.survivalMonths}-mo bridge.{' '}
                           {overlay === 'thresholds'
                             ? 'One curve per cPRA threshold.'
                             : 'One curve per allocation strategy.'}
@@ -797,8 +800,7 @@ const Bridge: React.FC = () => {
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
                       Sweeps 6 · 12 · 18 · 24 · 36 mo at{' '}
-                      {Math.round(xenoBaseRate * params.xeno_proportion).toLocaleString()}/yr
-                      ({params.xeno_proportion}× supply).{' '}
+                      {params.xeno_n.toLocaleString()}/yr.{' '}
                       {overlay === 'off'
                         ? `${params.highCPRAThreshold}%+ cPRA, strategy = ${params.targetingStrategy ?? 'standard'}`
                         : overlay === 'thresholds'
@@ -807,12 +809,12 @@ const Bridge: React.FC = () => {
                     </p>
                   </CardHeader>
                   <CardContent>
-                    {params.xeno_proportion === 0 ? (
+                    {params.xeno_n === 0 ? (
                       <div
                         className="flex items-center justify-center text-sm text-muted-foreground italic"
                         style={{ height: 320 }}
                       >
-                        Set xeno proportion &gt; 0 to see how graft survival affects the waitlist.
+                        Set xeno supply &gt; 0 to see how graft survival affects the waitlist.
                       </div>
                     ) : (
                       <ParetoChart
@@ -840,18 +842,17 @@ const Bridge: React.FC = () => {
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
                       Same {[6, 12, 18, 24, 36].map((m) => (m % 12 === 0 ? `${m / 12} yr` : `${m} mo`)).join(' · ')}{' '}
-                      survival sweep at {Math.round(xenoBaseRate * params.xeno_proportion).toLocaleString()}/yr
-                      ({params.xeno_proportion}× supply). y = months saved per list-spell at year{' '}
+                      survival sweep at {params.xeno_n.toLocaleString()}/yr. y = months saved per list-spell at year{' '}
                       {params.simulationHorizon} (Little's Law).
                     </p>
                   </CardHeader>
                   <CardContent>
-                    {params.xeno_proportion === 0 ? (
+                    {params.xeno_n === 0 ? (
                       <div
                         className="flex items-center justify-center text-sm text-muted-foreground italic"
                         style={{ height: 320 }}
                       >
-                        Set xeno proportion &gt; 0 to see how graft survival affects wait time.
+                        Set xeno supply &gt; 0 to see how graft survival affects wait time.
                       </div>
                     ) : (
                       <ParetoChart

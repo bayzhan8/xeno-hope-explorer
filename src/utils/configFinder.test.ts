@@ -11,45 +11,38 @@ import {
   resolveVizUrls,
   getBridgeMortalityRates,
   BRIDGE_DEATH_MULTIPLIERS,
+  XENO_RELIST_MULTIPLIERS,
 } from './configFinder';
 
+// All names now encode supply as an ABSOLUTE count `n{round(N)}` and format
+// relist/death via `toFixed(1)` (= Python str(float)). N=0 collapses to the
+// canonical `n0_relist1p0_death1p0` (backend dedup). Must match
+// run_age_experiments.py / run_all_targeting_experiments.py /
+// run_bridge_experiments.py::config_name_for + supply_grid.supply_token.
+
 describe('composeConfigName — bridge mode', () => {
-  it('standard: defaults death multiplier to 1.0 with targeting-style float fmt', () => {
+  it('standard: encodes n{N}, defaults death multiplier to 1.0', () => {
     expect(
-      composeConfigName('bridge', { xeno_proportion: 1.0 }, 'standard'),
-    ).toBe('xeno_age_prop1p0_relist1p0_death1p0');
+      composeConfigName('bridge', { xeno_n: 1000 }, 'standard'),
+    ).toBe('xeno_age_n1000_relist1p0_death1p0');
     expect(
-      composeConfigName('bridge', { xeno_proportion: 0 }, 'standard'),
-    ).toBe('xeno_age_prop0p0_relist1p0_death1p0');
+      composeConfigName('bridge', { xeno_n: 250 }, 'standard'),
+    ).toBe('xeno_age_n250_relist1p0_death1p0');
+  });
+
+  it('N=0 collapses to the canonical base case (relist1p0_death1p0)', () => {
     expect(
-      composeConfigName('bridge', { xeno_proportion: 1.5 }, 'standard'),
-    ).toBe('xeno_age_prop1p5_relist1p0_death1p0');
+      composeConfigName('bridge', { xeno_n: 0 }, 'standard'),
+    ).toBe('xeno_age_n0_relist1p0_death1p0');
   });
 
   it('targeted: prefixes with the strategy name, same default death=1.0', () => {
     expect(
-      composeConfigName('bridge', { xeno_proportion: 0.5 }, 'age60_cpraHigh'),
-    ).toBe('age60_cpraHigh_prop0p5_relist1p0_death1p0');
+      composeConfigName('bridge', { xeno_n: 500 }, 'age60_cpraHigh'),
+    ).toBe('age60_cpraHigh_n500_relist1p0_death1p0');
     expect(
-      composeConfigName('bridge', { xeno_proportion: 2 }, 'age45_cpraAll'),
-    ).toBe('age45_cpraAll_prop2p0_relist1p0_death1p0');
-  });
-
-  it('handles extended supply proportions (3×, 4×) added for asymptote visibility', () => {
-    // Backend's str(3.0)="3.0" → "3p0" must match the frontend's
-    // formatTargeting(3) = (3).toFixed(1).replace('.', 'p') = "3p0".
-    expect(
-      composeConfigName('bridge', { xeno_proportion: 3 }, 'standard'),
-    ).toBe('xeno_age_prop3p0_relist1p0_death1p0');
-    expect(
-      composeConfigName('bridge', { xeno_proportion: 4 }, 'standard'),
-    ).toBe('xeno_age_prop4p0_relist1p0_death1p0');
-    expect(
-      composeConfigName('bridge', { xeno_proportion: 3 }, 'age60_cpraHigh'),
-    ).toBe('age60_cpraHigh_prop3p0_relist1p0_death1p0');
-    expect(
-      composeConfigName('bridge', { xeno_proportion: 4 }, 'age45_cpraAll'),
-    ).toBe('age45_cpraAll_prop4p0_relist1p0_death1p0');
+      composeConfigName('bridge', { xeno_n: 2000 }, 'age45_cpraAll'),
+    ).toBe('age45_cpraAll_n2000_relist1p0_death1p0');
   });
 
   it('ignores xenoGraftFailureRate (bridge pickle bakes per-age survival)', () => {
@@ -59,134 +52,96 @@ describe('composeConfigName — bridge mode', () => {
     expect(
       composeConfigName(
         'bridge',
-        { xeno_proportion: 1, xenoGraftFailureRate: 5 },
+        { xeno_n: 1000, xenoGraftFailureRate: 5 },
         'standard',
       ),
-    ).toBe('xeno_age_prop1p0_relist1p0_death1p0');
+    ).toBe('xeno_age_n1000_relist1p0_death1p0');
   });
 
   it('honours postTransplantDeathRate for the canonical {1.0, 1.2} grid', () => {
-    // Contract the backend sweep relies on: composing a config name for
-    // each XENO_DEATH_MULTIPLIERS value MUST match
-    // `run_bridge_experiments.py::config_name_for(strategy, prop, k)`.
-    // If this drifts the Bridge page silently 404s on the mortality
-    // picker.
     expect(
-      composeConfigName(
-        'bridge',
-        { xeno_proportion: 1, postTransplantDeathRate: 1.0 },
-        'standard',
-      ),
-    ).toBe('xeno_age_prop1p0_relist1p0_death1p0');
+      composeConfigName('bridge', { xeno_n: 1000, postTransplantDeathRate: 1.0 }, 'standard'),
+    ).toBe('xeno_age_n1000_relist1p0_death1p0');
     expect(
-      composeConfigName(
-        'bridge',
-        { xeno_proportion: 1, postTransplantDeathRate: 1.2 },
-        'standard',
-      ),
-    ).toBe('xeno_age_prop1p0_relist1p0_death1p2');
+      composeConfigName('bridge', { xeno_n: 1000, postTransplantDeathRate: 1.2 }, 'standard'),
+    ).toBe('xeno_age_n1000_relist1p0_death1p2');
     expect(
-      composeConfigName(
-        'bridge',
-        { xeno_proportion: 0.5, postTransplantDeathRate: 1.2 },
-        'age45_cpraHigh',
-      ),
-    ).toBe('age45_cpraHigh_prop0p5_relist1p0_death1p2');
-  });
-
-  it('formatter still handles historical multipliers (env-var override path)', () => {
-    // The 4-point sweep {0.5, 1.0, 1.5, 2.0} is still reachable via the
-    // `BRIDGE_DEATH_MULTIPLIERS` env var on the backend; the frontend
-    // formatter must keep producing the matching names so an operator
-    // can hand-build a URL to those historical configs.
-    expect(
-      composeConfigName(
-        'bridge',
-        { xeno_proportion: 1, postTransplantDeathRate: 0.5 },
-        'standard',
-      ),
-    ).toBe('xeno_age_prop1p0_relist1p0_death0p5');
-    expect(
-      composeConfigName(
-        'bridge',
-        { xeno_proportion: 1, postTransplantDeathRate: 2 },
-        'standard',
-      ),
-    ).toBe('xeno_age_prop1p0_relist1p0_death2p0');
+      composeConfigName('bridge', { xeno_n: 500, postTransplantDeathRate: 1.2 }, 'age45_cpraHigh'),
+    ).toBe('age45_cpraHigh_n500_relist1p0_death1p2');
   });
 
   it('every BRIDGE_DEATH_MULTIPLIERS value round-trips into a death_<k>p<...> suffix', () => {
-    // Sanity-check the picker/sweep contract for every supported
-    // multiplier so we don't ship a picker option that can't address
-    // an uploaded Supabase config.
     expect(BRIDGE_DEATH_MULTIPLIERS).toEqual([1.0, 1.2]);
     for (const m of BRIDGE_DEATH_MULTIPLIERS) {
       const name = composeConfigName(
         'bridge',
-        { xeno_proportion: 1, postTransplantDeathRate: m },
+        { xeno_n: 1000, postTransplantDeathRate: m },
         'standard',
       );
       const suffix = m.toFixed(1).replace('.', 'p');
-      expect(name).toBe(`xeno_age_prop1p0_relist1p0_death${suffix}`);
+      expect(name).toBe(`xeno_age_n1000_relist1p0_death${suffix}`);
     }
   });
 });
 
-describe('composeConfigName — replacement mode (regression guard)', () => {
-  it('standard mode preserves the historical "1" not "1p0" formatting', () => {
+describe('composeConfigName — replacement mode', () => {
+  it('standard mode now uses uniform "1p0" formatting (str(float))', () => {
     expect(
       composeConfigName(
         'replacement',
-        { xeno_proportion: 1, xenoGraftFailureRate: 1, postTransplantDeathRate: 1 },
+        { xeno_n: 1000, xenoGraftFailureRate: 1, postTransplantDeathRate: 1 },
         'standard',
       ),
-    ).toBe('xeno_age_prop1_relist1_death1');
+    ).toBe('xeno_age_n1000_relist1p0_death1p0');
     expect(
       composeConfigName(
         'replacement',
-        { xeno_proportion: 0.5, xenoGraftFailureRate: 1.5, postTransplantDeathRate: 2 },
+        { xeno_n: 500, xenoGraftFailureRate: 0.8, postTransplantDeathRate: 1.2 },
         'standard',
       ),
-    ).toBe('xeno_age_prop0p5_relist1p5_death2');
+    ).toBe('xeno_age_n500_relist0p8_death1p2');
   });
 
-  it('targeted mode uses targeting-style float formatting', () => {
+  it('targeted mode uses the same n{N}/float formatting', () => {
     expect(
       composeConfigName(
         'replacement',
-        { xeno_proportion: 1, xenoGraftFailureRate: 1, postTransplantDeathRate: 1 },
+        { xeno_n: 250, xenoGraftFailureRate: 1, postTransplantDeathRate: 1.2 },
         'age60_cpraHigh',
       ),
-    ).toBe('age60_cpraHigh_prop1p0_relist1p0_death1p0');
+    ).toBe('age60_cpraHigh_n250_relist1p0_death1p2');
   });
 
-  it('formats the new canonical death=1.2 multiplier in both modes', () => {
-    // Replacement and Bridge now share XENO_DEATH_MULTIPLIERS = {1.0, 1.2}.
-    // Standard replacement mode uses str() → "1.2" → "1p2"; targeted
-    // mode uses toFixed(1) → "1.2" → "1p2"; bridge mode uses targeting-
-    // style. Lock down all three so the new picker option can address
-    // the upcoming Supabase configs.
+  it('N=0 collapses to the canonical base case regardless of multipliers', () => {
+    // Replacement runners only emit the canonical n0_relist1p0_death1p0,
+    // so the frontend MUST ignore the relist/death pickers at N=0.
     expect(
       composeConfigName(
         'replacement',
-        { xeno_proportion: 1, xenoGraftFailureRate: 1, postTransplantDeathRate: 1.2 },
+        { xeno_n: 0, xenoGraftFailureRate: 0.5, postTransplantDeathRate: 1.2 },
         'standard',
       ),
-    ).toBe('xeno_age_prop1_relist1_death1p2');
+    ).toBe('xeno_age_n0_relist1p0_death1p0');
     expect(
       composeConfigName(
         'replacement',
-        { xeno_proportion: 1, xenoGraftFailureRate: 1, postTransplantDeathRate: 1.2 },
-        'age60_cpraHigh',
+        { xeno_n: 0, xenoGraftFailureRate: 0.5, postTransplantDeathRate: 1.2 },
+        'age45_cpraAll',
       ),
-    ).toBe('age60_cpraHigh_prop1p0_relist1p0_death1p2');
-    expect(
-      composeConfigName(
-        'bridge',
-        { xeno_proportion: 1, postTransplantDeathRate: 1.2 },
+    ).toBe('age45_cpraAll_n0_relist1p0_death1p0');
+  });
+
+  it('every XENO_RELIST_MULTIPLIERS value round-trips into a relist_<k>p<...> suffix', () => {
+    expect(XENO_RELIST_MULTIPLIERS).toEqual([0.5, 0.8, 1.0, 1.2]);
+    for (const r of XENO_RELIST_MULTIPLIERS) {
+      const name = composeConfigName(
+        'replacement',
+        { xeno_n: 1000, xenoGraftFailureRate: r, postTransplantDeathRate: 1 },
         'standard',
-      ),
-    ).toBe('xeno_age_prop1p0_relist1p0_death1p2');
+      );
+      const suffix = r.toFixed(1).replace('.', 'p');
+      expect(name).toBe(`xeno_age_n1000_relist${suffix}_death1p0`);
+    }
   });
 });
 

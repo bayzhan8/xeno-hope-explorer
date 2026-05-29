@@ -574,9 +574,8 @@ export interface ParetoDataset {
  * triple lets the same loader compose names for both the standard and
  * targeted strategies.
  *
- * For BRIDGE mode the relist/death multipliers are always 1.0 (baked into
- * the input pickle) so the only varying axes are `xeno_proportion` and
- * `surv`.
+ * For BRIDGE mode the relist multiplier is always 1.0 (baked into the input
+ * pickle) so the only varying axes are `xeno_n` (supply) and `surv`.
  *
  * For REPLACEMENT mode the relist/death multipliers ARE part of the config
  * name, so a Pareto sweep over e.g. graft-failure multiplier needs to vary
@@ -585,11 +584,12 @@ export interface ParetoDataset {
  * when omitted (matching the canonical "no-multiplier" baseline).
  */
 export interface ParetoPointSpec {
-  /** Display label (e.g. "0.5x" or "12 mo"). */
+  /** Display label (e.g. "250/yr" or "12 mo"). */
   label: string;
   /** Numeric x-axis value associated with this point. */
   x: number;
-  xeno_proportion: number;
+  /** Absolute xeno supply in kidneys/yr (a value from the supply grid). */
+  xeno_n: number;
   /** Bridge-only: graft survival in months. Required when mode='bridge'. */
   surv?: BridgeSurvivalMonths;
   /** Replacement-only: relisting/graft-failure multiplier. Defaults to 1. */
@@ -643,7 +643,7 @@ export async function loadParetoDataset(opts: LoadParetoOptions): Promise<Pareto
       const scenarioName = composeConfigName(
         mode,
         {
-          xeno_proportion: spec.xeno_proportion,
+          xeno_n: spec.xeno_n,
           xenoGraftFailureRate: xrate,
           postTransplantDeathRate: drate,
         },
@@ -657,7 +657,7 @@ export async function loadParetoDataset(opts: LoadParetoOptions): Promise<Pareto
       // self-consistent across the curve.
       const baseName = composeConfigName(
         mode,
-        { xeno_proportion: 0, xenoGraftFailureRate: 1, postTransplantDeathRate: 1 },
+        { xeno_n: 0, xenoGraftFailureRate: 1, postTransplantDeathRate: 1 },
         effectiveStrategy,
       );
 
@@ -684,7 +684,7 @@ export async function loadParetoDataset(opts: LoadParetoOptions): Promise<Pareto
     } catch (err) {
       console.warn(
         `[Pareto] failed to load point label="${spec.label}" x=${spec.x} ` +
-        `surv=${spec.surv} prop=${spec.xeno_proportion}:`,
+        `surv=${spec.surv} n=${spec.xeno_n}:`,
         err,
       );
       return null;
