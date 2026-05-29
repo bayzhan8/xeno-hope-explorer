@@ -193,7 +193,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span>
                 {isCpraAllStrategy(strategy)
-                  ? 'Age-only (any cPRA) strategies are cPRA-threshold-invariant — fixed at 99%+.'
+                  ? 'Age-only (any cPRA) strategies do not depend on the cPRA threshold, so they stay fixed at 99%+.'
                   : 'Defines who counts as "high cPRA" in this simulation.'}
               </span>
             </div>
@@ -224,10 +224,8 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">
                 {xenoKidneysPerYear === 0
-                  ? 'No xeno kidneys — baseline scenario.'
-                  : `${xenoKidneysPerYear.toLocaleString()} xeno procedures/year offered on top of existing human transplants.`}
-                {' '}Supply levels are fixed absolute counts chosen so allocation strategies can be compared head-to-head.
-                Actual delivered count may be lower if the eligible waitlist drains (see Throughput card).
+                  ? 'No xeno kidneys (baseline scenario).'
+                  : `${xenoKidneysPerYear.toLocaleString()} xeno procedures offered per year.`}
               </p>
               <button
                 type="button"
@@ -258,6 +256,13 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 <p className="mt-2">
                   For example, Standard 1x with 85+ cPRA adds {(2841).toLocaleString()} xeno kidneys/year.
                   Age 60+ Any cPRA at 0.5x adds {Math.round(8728 * 0.5).toLocaleString()}/year.
+                </p>
+                <p className="mt-2">
+                  These offered counts are added on top of existing human
+                  transplants and are fixed absolute numbers so allocation
+                  strategies compare head-to-head. The actual delivered count
+                  may be lower if the eligible waitlist drains (see Throughput
+                  card).
                 </p>
               </div>
             )}
@@ -295,14 +300,14 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 );
               })}
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-end justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 Modeled as a multiplier on a standard human kidney's graft-failure rate (1.0x = same as standard)
               </p>
               <button
                 type="button"
                 onClick={() => toggleSection('graftFailure')}
-                className="text-xs text-primary hover:underline flex items-center gap-1"
+                className="text-xs text-primary hover:underline flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
               >
                 Read more
                 {expandedSections.graftFailure ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -311,7 +316,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
             {expandedSections.graftFailure && (
               <div className="text-xs text-muted-foreground space-y-2 p-3 bg-muted rounded-md border border-medical-border">
                 <p className="font-medium text-foreground">Xeno Graft Failure Rate (Kidney Rejection)</p>
-                <p>We model a xeno kidney as a <strong>standard human kidney scaled by a multiplier</strong>. At 1.0x, xeno graft failure matches the SRTR-derived rate for a standard human kidney in the same cPRA bin. Below are those reference (1.0x) rates by cPRA threshold &mdash; with the corresponding mean time until the graft fails and the recipient is re-listed back on the waiting list:</p>
+                <p>We model a xeno kidney as a <strong>standard human kidney scaled by a multiplier</strong>. At 1.0x, xeno graft failure matches the SRTR-derived rate for a standard human kidney in the same cPRA bin. Below are those reference (1.0x) rates by cPRA threshold, with the corresponding mean time until the graft fails and the recipient is re-listed back on the waiting list:</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>85+ cPRA: {fmtAnnualRate(5.6)} → {fmtMeanTime(5.6)} until rejection</li>
                   <li>95+ cPRA: {fmtAnnualRate(6.8)} → {fmtMeanTime(6.8)} until rejection</li>
@@ -371,7 +376,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 );
               })}
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-end justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 Modeled as a multiplier on a standard human kidney's post-transplant
                 death rate (1.0× = same as standard, 1.2× = 20% higher).
@@ -379,7 +384,7 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
               <button
                 type="button"
                 onClick={() => toggleSection('postTxDeath')}
-                className="text-xs text-primary hover:underline flex items-center gap-1 flex-shrink-0 ml-2"
+                className="text-xs text-primary hover:underline flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
               >
                 Read more
                 {expandedSections.postTxDeath ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -404,8 +409,8 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
                 <div className="mt-2 pt-2 border-t border-medical-border">
                   <p className="font-medium text-foreground mb-1">Understanding the Multipliers</p>
                   <ul className="list-disc list-inside space-y-1 ml-2 mt-1">
-                    <li><strong>1.0×</strong> — xeno post-tx mortality matches a standard human kidney (optimistic baseline)</li>
-                    <li><strong>1.2×</strong> — xeno post-tx mortality is 20% higher than a human kidney (realistic central estimate)</li>
+                    <li><strong>1.0×</strong>: xeno post-tx mortality matches a standard human kidney (optimistic baseline)</li>
+                    <li><strong>1.2×</strong>: xeno post-tx mortality is 20% higher than a human kidney (realistic central estimate)</li>
                   </ul>
                   <p className="mt-2">
                     Currently selected: <strong>{fmtMultiplier(params.postTransplantDeathRate)}</strong> on {params.highCPRAThreshold}+ cPRA<br />

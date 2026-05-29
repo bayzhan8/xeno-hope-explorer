@@ -42,7 +42,7 @@ import {
   waitlistReductionCIHalfWidth,
   waitTimeReductionFromViz,
 } from '@/utils/pareto';
-import { nonZeroSupplyPoints, effectiveThreshold } from '@/utils/supplyGrid';
+import { nonZeroSupplyPoints, effectiveThreshold, nearestSupplyPoint } from '@/utils/supplyGrid';
 import {
   type OverlayMode,
   type ParetoView,
@@ -312,6 +312,11 @@ const Bridge: React.FC = () => {
       }
       try {
         const tasks = subgroups.map(async (sg) => {
+          // Each subgroup's supply grid differs (e.g. 85% has 3,000/5,000 but
+          // not 4,000). Snap the user's selected N to this subgroup's nearest
+          // valid grid point so the overlaid line actually has data instead of
+          // 404ing and silently disappearing.
+          const sgN = nearestSupplyPoint(sg.strategy, sg.threshold, params.xeno_n);
           const ds = await loadParetoDataset({
             mode: 'bridge',
             highCPRAThreshold: sg.threshold,
@@ -331,7 +336,7 @@ const Bridge: React.FC = () => {
             } => ({
               label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
               x: m,
-              xeno_n: params.xeno_n,
+              xeno_n: sgN,
               surv: m,
               postTransplantDeathRate: params.postTransplantDeathRate,
             })),
@@ -385,6 +390,10 @@ const Bridge: React.FC = () => {
       }
       try {
         const tasks = subgroups.map(async (sg) => {
+          // Snap to this subgroup's nearest valid grid point (see the
+          // waitlist-reduction sweep above) so e.g. the 85% line doesn't
+          // vanish when the user picks an N that only exists on other grids.
+          const sgN = nearestSupplyPoint(sg.strategy, sg.threshold, params.xeno_n);
           const ds = await loadParetoDataset({
             mode: 'bridge',
             highCPRAThreshold: sg.threshold,
@@ -401,7 +410,7 @@ const Bridge: React.FC = () => {
             } => ({
               label: m % 12 === 0 ? `${m / 12} yr` : `${m} mo`,
               x: m,
-              xeno_n: params.xeno_n,
+              xeno_n: sgN,
               surv: m,
               postTransplantDeathRate: params.postTransplantDeathRate,
             })),
@@ -481,8 +490,8 @@ const Bridge: React.FC = () => {
                   About Bridge Therapy
                 </h3>
                 <p className="text-sm text-foreground leading-relaxed font-medium">
-                  Bridge Therapy keeps high-cPRA patients alive — and off
-                  dialysis — while they wait for a definitive human
+                  Bridge Therapy keeps high-cPRA patients alive and off
+                  dialysis while they wait for a definitive human
                   allokidney. The xenokidney is <em>temporary support</em>,
                   not a replacement transplant: bridged patients remain
                   candidates for the same scarce human-kidney supply.
@@ -493,7 +502,7 @@ const Bridge: React.FC = () => {
                   which they typically return to the waitlist. The{' '}
                   <em>central</em> lever is &ldquo;mortality while
                   bridged&rdquo;: relative to the post-allo baseline, is xeno
-                  support better, equivalent, or worse — and how does that
+                  support better, equivalent, or worse, and how does that
                   compare with dialysis mortality on the waitlist? The
                   mortality panel shows that comparison directly; the Pareto
                   curves below then show how supply and graft survival
@@ -581,12 +590,9 @@ const Bridge: React.FC = () => {
                       Key Outcomes Summary
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Bridge-paradigm headline metrics over a{' '}
-                      {params.simulationHorizon}-year horizon: lives saved,
-                      dialysis-years avoided, time on dialysis per spell.
-                      Throughput (xeno procedures performed) is reported in
-                      the card below for completeness but is not the goal of
-                      this paradigm.
+                      Headline metrics over {params.simulationHorizon} years:
+                      lives saved, dialysis-years avoided, and time on dialysis.
+                      Throughput is shown below for reference, not as the goal.
                     </p>
                   </div>
                   <SummaryMetrics
@@ -602,13 +608,11 @@ const Bridge: React.FC = () => {
                       Mortality at a Glance
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Where does &ldquo;mortality while bridged&rdquo; sit
-                      relative to the alternatives (dialysis on the
-                      waitlist; living with a definitive human allokidney)?
-                      This is the bridge's central scientific claim — every
-                      downstream metric (lives saved, waitlist size, wait
-                      time) is a consequence of how this comparison resolves
-                      at your selected mortality multiplier.
+                      How does mortality on a bridge compare with the
+                      alternatives (dialysis, or a definitive human kidney)?
+                      This is the bridge's central claim, and every other metric
+                      follows from how it resolves at your chosen mortality
+                      multiplier.
                     </p>
                   </div>
                   <MortalityComparison
@@ -623,12 +627,11 @@ const Bridge: React.FC = () => {
                       Dialysis Burden Avoided
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Bridging xenotransplants the patient <em>off dialysis</em> even when the
-                      human-kidney supply is unchanged. We model state C as &ldquo;on
-                      dialysis&rdquo; and integrate the difference in C between this scenario
-                      and the no-xeno base, giving cumulative person-years of dialysis
-                      avoided. This is independent of throughput — it's the clinical
-                      &ldquo;quality-of-life&rdquo; channel of bridge therapy.
+                      A bridge gets patients <em>off dialysis</em> even when the
+                      human-kidney supply is unchanged. We total the
+                      person-years of dialysis avoided versus the no-xeno base.
+                      This is the quality-of-life benefit, separate from how many
+                      transplants happen.
                     </p>
                   </div>
                   <DialysisBurden
@@ -643,18 +646,13 @@ const Bridge: React.FC = () => {
                       Wait Time: Dialysis vs. Total
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      A fixed human-kidney supply means the <em>total</em> wait (until a
-                      definitive allokidney) is approximately conserved under bridging —
-                      what changes is its <em>composition</em>. We track two estimates per
-                      list-spell via Little's Law. <strong>Time on dialysis</strong>{' '}
-                      (headline, bold) uses L = C, so bridging shrinks it as residence
-                      time shifts off dialysis. <strong>Total wait</strong> (overlay,
-                      dotted) uses L = C + H<sub>xeno</sub> because a bridged patient is
-                      still a candidate for a definitive allo. <span className="italic">
-                      Interpretation</span>: in the treated population, dialysis time
-                      drops materially; in the system at large, the queue is almost
-                      conserved (and may even rise slightly when mortality reductions
-                      enlarge the candidate pool).
+                      With human-kidney supply fixed, the <em>total</em> wait for
+                      a definitive allokidney barely changes; what changes is its{' '}
+                      <em>composition</em>. <strong>Time on dialysis</strong>{' '}
+                      (headline) falls as patients spend their wait on a working
+                      bridge instead. <strong>Total wait</strong> (dotted overlay)
+                      stays roughly flat because bridged patients are still in the
+                      queue.
                     </p>
                   </div>
                   <WaitTimeChart
@@ -697,12 +695,10 @@ const Bridge: React.FC = () => {
                   Tradeoff Curves
                 </h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  How additional xeno supply and longer graft survival convert
-                  to lives saved, waitlist reduction, and wait-time reduction
-                  at year {params.simulationHorizon}. Use the toolbar to
-                  overlay subgroups (cPRA thresholds or allocation strategies)
-                  on the same axes, and to switch between cumulative and
-                  per-step marginal views.
+                  How more xeno supply and longer graft survival translate into
+                  lives saved, waitlist reduction, and wait-time reduction by
+                  year {params.simulationHorizon}. Use the toolbar to overlay
+                  cPRA groups or strategies on the same axes.
                 </p>
               </div>
 
@@ -790,7 +786,7 @@ const Bridge: React.FC = () => {
                         : `Lives saved by year ${params.simulationHorizon}`}
                       formatX={overlay === 'off'
                         ? (v) => v.toLocaleString()
-                        : (v) => `${v}×`}
+                        : (v) => `${v.toFixed(1)}×`}
                       formatY={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       view={view}
                     />
@@ -808,8 +804,8 @@ const Bridge: React.FC = () => {
                       {overlay === 'off'
                         ? `${params.highCPRAThreshold}%+ cPRA, strategy = ${params.targetingStrategy ?? 'standard'}`
                         : overlay === 'thresholds'
-                          ? 'One curve per cPRA threshold.'
-                          : 'One curve per allocation strategy.'}
+                          ? 'One curve per cPRA threshold (snapped to each grid\u2019s nearest supply).'
+                          : 'One curve per allocation strategy (snapped to each grid\u2019s nearest supply).'}
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -846,7 +842,8 @@ const Bridge: React.FC = () => {
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
                       Same {[6, 12, 18, 24, 36].map((m) => (m % 12 === 0 ? `${m / 12} yr` : `${m} mo`)).join(' · ')}{' '}
-                      survival sweep at {params.xeno_n.toLocaleString()}/yr. y = months saved per list-spell at year{' '}
+                      survival sweep at {params.xeno_n.toLocaleString()}/yr
+                      {overlay === 'off' ? '' : ' (nearest grid point per subgroup)'}. y = months saved per patient at year{' '}
                       {params.simulationHorizon} (Little's Law).
                     </p>
                   </CardHeader>

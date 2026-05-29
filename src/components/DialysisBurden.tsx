@@ -154,7 +154,7 @@ const DialysisBurden: React.FC<DialysisBurdenProps> = ({ metrics, horizonYears }
           Person-years of dialysis avoided vs. the no-xeno base case,
           assuming every waitlisted candidate (state <em>C</em>) is on
           active dialysis. Independent of whether the human-kidney supply
-          changes — even a queue-neutral bridge displaces dialysis time.
+          changes, since even a queue-neutral bridge displaces dialysis time.
         </p>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">

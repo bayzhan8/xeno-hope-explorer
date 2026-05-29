@@ -558,7 +558,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
           <p className="text-xs text-muted-foreground mt-1.5">Patients on the kidney waitlist at year-end, stratified by cPRA level</p>
           <ChartContextHeader
             population={`All candidates on U.S. kidney waitlist (cPRA threshold: ${highCPRAThreshold}%)`}
-            measure="Snapshot count (stock) — patients currently waiting"
+            measure="Snapshot count (stock): patients currently waiting"
             timing="Year-end snapshot · years 1–10"
             supplyTag={supplyTag}
           />
@@ -589,7 +589,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
                     { key: `total_${g.key}`, label: `Total · age ${g.label}y`, color: g.color },
                   ]),
                   'patients waiting (head count)',
-                  'Age breakdown shown — toggle "Age Group Breakdown" off to see baseline overlays',
+                  'Age breakdown shown. Toggle "Age Group Breakdown" off to see baseline overlays',
                 )} />
                 {/* Total age groups (low + high cPRA) */}
                 {waitlistSeriesVisible.total && AGE_GROUPS.filter(group => ageGroupsPerChart.waitlist[group.key]).map(group => (
@@ -775,10 +775,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
           <p className="text-xs text-muted-foreground mt-1.5">Patients living with a functioning kidney graft, split by organ source</p>
           <ChartContextHeader
             population={`Recipients of human or xeno kidneys (cPRA threshold: ${highCPRAThreshold}%)`}
-            measure="Snapshot count (stock) — patients alive with a working graft"
+            measure="Snapshot count (stock): patients alive with a working graft"
             timing="Year-end snapshot · years 1–10"
             supplyTag={supplyTag}
-            note="This is a stock, not a flow. Recipients leave through death or graft failure — graft failures return them to the waitlist."
+            note="This is a stock, not a flow. Recipients leave through death or graft failure, and graft failures return them to the waitlist."
           />
         </CardHeader>
         <CardContent className="px-4 pt-4 pb-1">
@@ -981,10 +981,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
           <p className="text-xs text-muted-foreground mt-1.5">Running total of deaths since simulation start, split by waitlist vs. post-transplant</p>
           <ChartContextHeader
             population={`All simulated patients (waitlist + recipients), cPRA threshold ${highCPRAThreshold}%`}
-            measure="Cumulative count (flow) — total deaths since year 0"
+            measure="Cumulative count (flow): total deaths since year 0"
             timing="Running total · year-end snapshots, years 1–10"
             supplyTag={supplyTag}
-            note="Cumulative — curves only ever go up. Year-over-year change equals deaths in that year."
+            note="Cumulative, so curves only ever go up. Year-over-year change equals deaths in that year."
           />
         </CardHeader>
         <CardContent className="px-4 pt-4 pb-1">
@@ -1189,10 +1189,10 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
           <p className="text-xs text-muted-foreground mt-1.5">Deaths that happened while patients were still waiting, counted in each year</p>
           <ChartContextHeader
             population={`Patients on the waitlist during each year (cPRA threshold: ${highCPRAThreshold}%)`}
-            measure="Annual flow — deaths that occurred during the year"
+            measure="Annual flow: deaths that occurred during the year"
             timing="One value per simulation year · years 1–10"
             supplyTag={supplyTag}
-            note="Post-transplant deaths are NOT counted here — those appear in the Cumulative Deaths chart's post-tx breakdown."
+            note="Post-transplant deaths are NOT counted here; those appear in the Cumulative Deaths chart's post-tx breakdown."
           />
         </CardHeader>
         <CardContent className="px-4 pt-4 pb-1">
@@ -1476,7 +1476,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
           <p className="text-xs text-muted-foreground mt-1.5">All deaths counted in each year, regardless of where the patient was (waitlist or post-transplant)</p>
           <ChartContextHeader
             population={`All simulated patients (waitlist + post-tx recipients), cPRA threshold ${highCPRAThreshold}%`}
-            measure="Annual flow — deaths during the year (waitlist + post-tx combined)"
+            measure="Annual flow: deaths during the year (waitlist + post-tx combined)"
             timing="One value per simulation year · years 1–10"
             supplyTag={supplyTag}
             note="This combines waitlist deaths AND post-transplant deaths. See Waitlist Deaths per Year for the waitlist-only view."
@@ -1612,7 +1612,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
           <p className="text-xs text-muted-foreground mt-1.5">Lives saved annually vs. the matched baseline scenario (positive = fewer deaths than baseline)</p>
           <ChartContextHeader
             population={`All simulated patients, cPRA threshold ${highCPRAThreshold}%`}
-            measure="Annual flow — (baseline deaths) minus (intervention deaths)"
+            measure="Annual flow: (baseline deaths) minus (intervention deaths)"
             timing="One value per simulation year · years 1–10"
             baseline="Same scenario with 0 xeno kidneys/yr (no xeno supply)"
             supplyTag={supplyTag}

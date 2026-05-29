@@ -437,7 +437,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
             {
               value: 'multiplier',
               label: '× Multiplier',
-              hint: 'x = N ÷ base human-kidney transplant rate. Normalizes each subgroup so curve SHAPES are directly comparable — tooltip shows the equivalent kidneys/yr per curve.',
+              hint: 'x = N ÷ base human-kidney transplant rate. Normalizes each subgroup so curve SHAPES are directly comparable; the tooltip shows the equivalent kidneys/yr per curve.',
             },
           ]}
         />
@@ -468,25 +468,14 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               Xeno supply &nbsp;↔&nbsp; Lives saved
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Sweeps the supply grid{' '}
+              How many lives are saved by year {simulationHorizon} as you offer
+              more xeno kidneys per year (your current graft-failure and
+              mortality settings are held fixed).{' '}
               {overlay === 'off'
-                ? `(${nonZeroSupplyPoints(strategy, highCPRAThreshold)
-                    .map((n) => `${n.toLocaleString()}/yr`)
-                    .join(' · ')}) `
-                : ''}
-              at relist = {xenoGraftFailureRate.toFixed(1)}×, death ={' '}
-              {postTransplantDeathRate.toFixed(1)}×
-              {overlay === 'off' && `, ${highCPRAThreshold}%+ cPRA, strategy = ${strategy}`}.
-              {overlay !== 'off' && (
-                <>
-                  {' '}{overlay === 'thresholds'
-                    ? 'One curve per cPRA threshold — each sweeps its own supply grid.'
-                    : 'One curve per allocation strategy — each sweeps its own supply grid.'}
-                  {supplyAxis === 'multiplier'
-                    ? ' x = N ÷ base rate so curve shapes align (hover for kidneys/yr).'
-                    : ' x = absolute kidneys/yr (curves land on disjoint ranges).'}
-                </>
-              )}
+                ? `Shown for ${highCPRAThreshold}%+ cPRA (${strategy}).`
+                : overlay === 'thresholds'
+                  ? 'One line per cPRA group.'
+                  : 'One line per allocation strategy.'}
             </p>
           </CardHeader>
           <CardContent>
@@ -510,10 +499,9 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               Xeno supply &nbsp;↔&nbsp; Wait-time reduction
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Same supply sweep as the Lives-saved card. y = base −
-              scenario wait time per list-spell at year{' '}
-              {simulationHorizon} (months saved), via Little's Law on the
-              same viz JSONs that drive the Wait-Time chart above.
+              How many months of waiting are saved per patient by year{' '}
+              {simulationHorizon} as you offer more xeno kidneys per year.
+              Higher means patients reach a transplant sooner.
             </p>
           </CardHeader>
           <CardContent>
@@ -537,15 +525,15 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               Xeno graft failure rate &nbsp;↔&nbsp; Waitlist reduction
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Sweeps {GRAFT_FAILURE_MULTIPLIERS.map((m) => `${m.toFixed(1)}×`).join(' · ')}{' '}
-              at {xeno_n.toLocaleString()}/yr, death ={' '}
-              {postTransplantDeathRate.toFixed(1)}×.{' '}
+              How much smaller the waitlist gets by year {simulationHorizon} as
+              the xeno graft-failure rate changes (at {xeno_n.toLocaleString()}/yr).{' '}
               {overlay === 'off'
-                ? `${highCPRAThreshold}%+ cPRA, strategy = ${strategy}.`
+                ? `Shown for ${highCPRAThreshold}%+ cPRA (${strategy}).`
                 : overlay === 'thresholds'
-                  ? 'One curve per cPRA threshold.'
-                  : 'One curve per allocation strategy.'}{' '}
-              Lower multiplier = grafts fail less often = bigger waitlist reduction.
+                  ? 'One line per cPRA group.'
+                  : 'One line per allocation strategy.'}{' '}
+              A lower failure rate means grafts last longer, so the waitlist
+              shrinks more.
             </p>
           </CardHeader>
           <CardContent>

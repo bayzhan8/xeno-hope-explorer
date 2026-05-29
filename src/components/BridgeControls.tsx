@@ -113,10 +113,10 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
               <TooltipContent>
                 <p className="max-w-xs text-xs">
                   Bridge Therapy treats the xenograft as a <em>temporary</em>
-                  organ: the recipient remains a transplant candidate and stays
+                  organ. The recipient remains a transplant candidate and stays
                   eligible for a definitive human allokidney. Both bridged and
-                  un-bridged candidates draw from the same fixed human supply —
-                  this simulation does not manufacture extra organs, it changes
+                  un-bridged candidates draw from the same fixed human supply.
+                  This simulation does not manufacture extra organs; it changes
                   who can receive them and when.
                 </p>
               </TooltipContent>
@@ -179,7 +179,7 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span>
                 {isCpraAllStrategy(strategy)
-                  ? 'Age-only (any cPRA) strategies are cPRA-threshold-invariant — fixed at 99%+.'
+                  ? 'Age-only (any cPRA) strategies do not depend on the cPRA threshold, so they stay fixed at 99%+.'
                   : 'Defines who counts as "high cPRA" in this simulation.'}
               </span>
             </div>
@@ -211,16 +211,41 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                 </span>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {xenoKidneysPerYear === 0
-                ? 'No bridge xenografts — baseline scenario. '
-                : `${xenoKidneysPerYear.toLocaleString()} bridge xenografts/year offered. `}
-              Supply levels are fixed absolute counts so allocation strategies
-              compare head-to-head. The human allokidney supply is unchanged; a
-              bridged recipient competes for the same allokidneys as every other
-              candidate. Actual delivered counts (bridge xenos placed, bridge →
-              allo transitions) are on the Throughput card.
-            </p>
+            <div className="flex items-end justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                {xenoKidneysPerYear === 0
+                  ? 'No bridge xenografts (baseline scenario).'
+                  : `${xenoKidneysPerYear.toLocaleString()} bridge xenografts offered per year.`}
+              </p>
+              <button
+                type="button"
+                onClick={() => toggleSection('supply')}
+                className="text-xs text-primary hover:underline flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
+              >
+                Read more
+                {expandedSections.supply ? (
+                  <ChevronUp className="w-3 h-3" />
+                ) : (
+                  <ChevronDown className="w-3 h-3" />
+                )}
+              </button>
+            </div>
+            {expandedSections.supply && (
+              <div className="text-xs text-muted-foreground space-y-2 p-3 bg-muted rounded-md border border-medical-border">
+                <p>
+                  Supply levels are fixed absolute counts so allocation
+                  strategies compare head-to-head.
+                </p>
+                <p>
+                  The human allokidney supply is unchanged. A bridged recipient
+                  competes for the same allokidneys as every other candidate.
+                </p>
+                <p>
+                  Actual delivered counts (bridge xenos placed, bridge → allo
+                  transitions) are on the Throughput card.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Mortality While Bridged — the *central* Task-Group-2 lever */}
@@ -254,17 +279,15 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                 );
               })}
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-end justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                Per-day mortality hazard for patients on a functioning
-                xenograft, as a multiple of the human-kidney post-tx baseline
-                (1.0×). This is the bridge's reason for existing — set it
-                relative to dialysis mortality (see panel above).
+                Death hazard on a working xenograft, as a multiple of the
+                human post-transplant baseline (1.0×).
               </p>
               <button
                 type="button"
                 onClick={() => toggleSection('mortality')}
-                className="text-xs text-primary hover:underline flex items-center gap-1 flex-shrink-0 ml-2"
+                className="text-xs text-primary hover:underline flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
               >
                 Read more
                 {expandedSections.mortality ? (
@@ -291,8 +314,8 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                 <p>
                   <strong>1.0×</strong> models a bridged patient whose
                   death rate matches a standard human-kidney recipient in
-                  the same cPRA bin (~4 %/yr at the 95% threshold) — the
-                  optimistic baseline. <strong>1.2×</strong> models a
+                  the same cPRA bin (~4 %/yr at the 95% threshold), which is
+                  the optimistic baseline. <strong>1.2×</strong> models a
                   bridge that's slightly worse than a human kidney on this
                   axis (a realistic central estimate given current xeno
                   trial data). Use the mortality-comparison panel above
@@ -303,8 +326,8 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                   Because the bridge pickle bakes the M target as a combined
                   hazard (rejection + baseline death), moving this multiplier
                   drifts the achieved mean bridge duration by &lt;0.5% across
-                  the 1.0×/1.2× range — negligible compared with Monte-Carlo
-                  noise.
+                  the 1.0×/1.2× range, which is negligible compared with
+                  Monte-Carlo noise.
                 </p>
               </div>
             )}
@@ -341,16 +364,15 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                 );
               })}
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-end justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                Intrinsic mean lifetime of the xenograft — time until rejection
-                (re-listing) or death-with-functioning-graft, at the canonical
-                1.0× mortality multiplier.
+                Mean useful lifetime of the xenograft before graft failure or
+                death.
               </p>
               <button
                 type="button"
                 onClick={() => toggleSection('survival')}
-                className="text-xs text-primary hover:underline flex items-center gap-1"
+                className="text-xs text-primary hover:underline flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
               >
                 Read more
                 {expandedSections.survival ? (
@@ -365,7 +387,7 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                 <p className="font-medium text-foreground">How "graft survival" is modeled</p>
                 <p>
                   The selected duration is the <em>intrinsic</em> mean useful
-                  lifetime of the xenograft — the time until graft failure (re-
+                  lifetime of the xenograft: the time until graft failure (re-
                   listing) or death-with-functioning-graft if nothing else
                   intervenes. We bake exactly your selected duration into a
                   per-age combined hazard, so a 6-month bridge means an
@@ -376,7 +398,7 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
                   A bridged recipient now has a <em>third</em> exit channel
                   besides re-listing and death-with-graft: a definitive human
                   allokidney can become available while their bridge is still
-                  intact. When that happens the bridge ends early — the patient
+                  intact. When that happens the bridge ends early and the patient
                   becomes a permanent human-kidney recipient (counted in
                   Bridge → Allo on the Throughput card) and the bridge organ is
                   considered consumed. So the <em>observed</em> mean residence

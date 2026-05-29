@@ -155,7 +155,7 @@ const MortalityComparison: React.FC<MortalityComparisonProps> = ({
         <p className="text-xs text-muted-foreground leading-relaxed">
           Annualized per-person death hazard for the high-cPRA bucket the
           bridge targets. Numbers are model assumptions (SRTR 2022, per-day
-          hazard × 365), not Monte-Carlo outputs — so they react to the
+          hazard × 365), not Monte-Carlo outputs, so they react to the
           mortality slider <em>instantly</em>. Use this to anchor what the
           bridge is buying vs. dialysis at your selected multiplier.
         </p>
@@ -217,7 +217,7 @@ const MortalityComparison: React.FC<MortalityComparisonProps> = ({
             </div>
             <p className="pt-1 leading-snug">
               The low-cPRA bucket isn't bridged in any of the included
-              allocation strategies — shown here only to put the high-cPRA
+              allocation strategies. It's shown here only to put the high-cPRA
               numbers in context.
             </p>
           </div>

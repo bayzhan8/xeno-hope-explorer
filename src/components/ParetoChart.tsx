@@ -5,16 +5,11 @@
  * Renders one or more (x, y) curves produced by `loadParetoDataset`.
  *
  *  - Single-curve mode (back-compat): pass `dataset`. The chart joins
- *    the points with a smooth line, plots a marker at each, and circles
- *    the knee (if any) with a dashed `ReferenceDot`.
- *  - Multi-curve overlay (NEW — closes 6.1's "subgroup strictness"
- *    sub-task): pass `datasets: ParetoSeries[]`. Each series gets its
- *    own color, its own line, and its own knee marker. Tooltip lists
- *    every series' y at the hovered x. The legend shows a per-curve
- *    color swatch and (optional) a curve-shape classification chip
- *    (Problem 6.4 deliverable: surfaces saturating / accelerating /
- *    s-shape behaviour at a glance, no eyeballing required).
- *  - Marginal-return view (NEW): set `view='marginal'`. Each underlying
+ *    the points with a smooth line and plots a marker at each.
+ *  - Multi-curve overlay: pass `datasets: ParetoSeries[]`. Each series
+ *    gets its own color and line, and the tooltip lists every series' y
+ *    at the hovered x. The legend shows a per-curve color swatch + label.
+ *  - Marginal-return view: set `view='marginal'`. Each underlying
  *    dataset is transformed to Δy/Δx per segment via
  *    `toMarginalDataset` from pareto.ts, and the chart re-renders with
  *    the per-step rate of return on the y-axis. Useful for spotting
@@ -33,7 +28,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceDot,
   Label,
   Dot,
 } from 'recharts';
@@ -41,12 +35,8 @@ import { Loader2, AlertTriangle } from 'lucide-react';
 
 import {
   type ParetoDataset,
-  type ParetoPoint,
-  classifyCurveShape,
   toMarginalDataset,
-  type CurveShape,
 } from '@/utils/pareto';
-import { cn } from '@/lib/utils';
 
 export interface ParetoSeries {
   dataset: ParetoDataset;
@@ -101,12 +91,6 @@ interface ParetoChartProps {
    */
   view?: 'cumulative' | 'marginal';
   /**
-   * Render a small classification chip on each curve's legend
-   * (saturating / accelerating / linear / s-shape / non-monotonic).
-   * Defaults to true; set false to hide for very short curves.
-   */
-  showShapeChips?: boolean;
-  /**
    * Optional: what the x-axis represents on supply Pareto cards.
    * When set, and a series carries a `baseRate`, the tooltip adds
    * a second-unit annotation per row (e.g. "1.5× = 2,585/yr").
@@ -124,41 +108,6 @@ const defaultFmt = (v: number): string => {
   return v.toFixed(2);
 };
 
-// Human-readable + color hint for each curve-shape category. The
-// dictionary keys mirror the union in pareto.ts/`CurveShape`.
-const SHAPE_META: Record<CurveShape, { label: string; tone: string; explainer: string }> = {
-  linear: {
-    label: 'linear',
-    tone: 'bg-muted text-muted-foreground border-medical-border',
-    explainer: 'Each additional step adds about the same return — no diminishing or accelerating effect detected.',
-  },
-  saturating: {
-    label: 'saturating',
-    tone: 'bg-primary/10 text-primary border-primary/30',
-    explainer: 'Diminishing returns — every additional step adds less than the previous one. Past the inflection, marginal benefit is small.',
-  },
-  accelerating: {
-    label: 'accelerating',
-    tone: 'bg-success/10 text-success border-success/30',
-    explainer: 'Convex curve — each additional step adds MORE than the previous one. Pushing further along this axis pays off disproportionately.',
-  },
-  's-shape': {
-    label: 's-shape',
-    tone: 'bg-warning/10 text-warning border-warning/30',
-    explainer: 'Curve changes regime: accelerates then saturates (or vice versa). One inflection in the slope.',
-  },
-  'non-monotonic': {
-    label: 'noisy',
-    tone: 'bg-destructive/10 text-destructive border-destructive/30',
-    explainer: 'y zig-zags up and down — likely Monte-Carlo noise dominates any underlying trend. Add more trials per config to tighten the curve.',
-  },
-  unknown: {
-    label: '—',
-    tone: 'bg-muted text-muted-foreground border-medical-border',
-    explainer: 'Too few points (< 3) to classify the curve shape.',
-  },
-};
-
 const ParetoChart: React.FC<ParetoChartProps> = ({
   dataset,
   datasets,
@@ -170,7 +119,6 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
   formatY = defaultFmt,
   height = 320,
   view = 'cumulative',
-  showShapeChips = true,
   supplyAxis,
 }) => {
   if (loading) {
@@ -276,17 +224,8 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
     s.dataset.points.some((p) => p.yCI !== undefined && Number.isFinite(p.yCI)),
   );
 
-  // Each series's classification + knee, computed once.
-  const seriesMeta = series.map((s) => {
-    const xs = s.dataset.points.map((p) => p.x);
-    const ys = s.dataset.points.map((p) => p.y);
-    const shape = classifyCurveShape(xs, ys);
-    const knee: ParetoPoint | null =
-      s.dataset.inflectionIndex !== null
-        ? s.dataset.points[s.dataset.inflectionIndex]
-        : null;
-    return { series: s, shape, knee };
-  });
+  // Per-series lookup helper (used by the tooltip for CI values).
+  const seriesMeta = series.map((s) => ({ series: s }));
 
   const isMulti = series.length > 1;
 
@@ -345,8 +284,6 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
                       (pt) => Math.abs(pt.x - xVal) < 1e-9,
                     );
                     const ci = ciPoint?.yCI;
-                    const isKnee =
-                      meta?.knee && Math.abs(meta.knee.x - xVal) < 1e-9;
                     // When a supply axis is in play AND we know this
                     // series' base rate, annotate with the equivalent
                     // value in the OTHER unit so the user can read
@@ -387,11 +324,6 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
                             {supplyNote}
                           </span>
                         )}
-                        {isKnee && (
-                          <span className="text-[10px] uppercase tracking-wide text-primary">
-                            inflection
-                          </span>
-                        )}
                       </div>
                     );
                   })}
@@ -422,38 +354,18 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
               strokeWidth={2}
               connectNulls
               isAnimationActive={false}
-              dot={(props: { cx?: number; cy?: number; payload?: { x: number } }) => {
-                const x = props.payload?.x;
-                const meta = seriesMeta.find((m) => m.series.label === s.label);
-                const isKnee = meta?.knee && x !== undefined && Math.abs(meta.knee.x - x) < 1e-9;
-                return (
-                  <Dot
-                    cx={props.cx}
-                    cy={props.cy}
-                    r={isKnee ? 6 : 4}
-                    fill={isKnee ? s.color : 'hsl(var(--background))'}
-                    stroke={s.color}
-                    strokeWidth={2}
-                  />
-                );
-              }}
+              dot={(props: { cx?: number; cy?: number }) => (
+                <Dot
+                  cx={props.cx}
+                  cy={props.cy}
+                  r={4}
+                  fill="hsl(var(--background))"
+                  stroke={s.color}
+                  strokeWidth={2}
+                />
+              )}
             />
           ))}
-          {seriesMeta.map(({ series: s, knee }) =>
-            knee ? (
-              <ReferenceDot
-                key={`knee-${s.label}`}
-                x={knee.x}
-                y={knee.y}
-                r={9}
-                fill="transparent"
-                stroke={s.color}
-                strokeWidth={2}
-                strokeDasharray="3 3"
-                ifOverflow="extendDomain"
-              />
-            ) : null,
-          )}
         </ComposedChart>
       </ResponsiveContainer>
       {hasBand && (
@@ -462,67 +374,20 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
         </p>
       )}
 
-      {/* Legend with per-curve color swatch + (optional) shape chip. In
-          single-curve mode we show only the shape chip + caption; in
-          multi-curve mode we show the full color/label legend. */}
-      {(isMulti || showShapeChips) && (
+      {/* Color/label legend (multi-curve overlay only). */}
+      {isMulti && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-2 pt-1">
-          {seriesMeta.map(({ series: s, shape, knee }) => {
-            const meta = SHAPE_META[shape];
-            return (
-              <div key={s.label} className="flex items-center gap-2 text-xs">
-                {isMulti && (
-                  <>
-                    <span
-                      className="inline-block w-3 h-3 rounded-full"
-                      style={{ background: s.color }}
-                    />
-                    <span className="font-medium text-foreground">{s.label}</span>
-                  </>
-                )}
-                {showShapeChips && (
-                  <span
-                    title={meta.explainer}
-                    className={cn(
-                      'inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-medium uppercase tracking-wide',
-                      meta.tone,
-                    )}
-                  >
-                    {meta.label}
-                  </span>
-                )}
-                {knee && (
-                  <span className="text-[10px] text-muted-foreground">
-                    inflection at <span className="font-medium text-foreground">{knee.label}</span>
-                  </span>
-                )}
-              </div>
-            );
-          })}
+          {seriesMeta.map(({ series: s }) => (
+            <div key={s.label} className="flex items-center gap-2 text-xs">
+              <span
+                className="inline-block w-3 h-3 rounded-full"
+                style={{ background: s.color }}
+              />
+              <span className="font-medium text-foreground">{s.label}</span>
+            </div>
+          ))}
         </div>
       )}
-
-      {/* Single-curve diagnostic caption (preserved from the old chart so
-          users who were used to the explainer line don't lose it). In
-          multi-curve mode the per-curve chips do this job. */}
-      {!isMulti && seriesMeta[0] && (() => {
-        const { knee, shape } = seriesMeta[0];
-        const meta = SHAPE_META[shape];
-        if (knee) {
-          return (
-            <p className="text-xs text-muted-foreground px-2">
-              Inflection at <span className="font-medium text-foreground">{knee.label}</span>.
-              Past this point, increasing {xLabel.toLowerCase()} yields diminishing
-              returns on {yLabel.toLowerCase()}.
-            </p>
-          );
-        }
-        return (
-          <p className="text-xs text-muted-foreground italic px-2">
-            {meta.explainer}
-          </p>
-        );
-      })()}
     </div>
   );
 };
