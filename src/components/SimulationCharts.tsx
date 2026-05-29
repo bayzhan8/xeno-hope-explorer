@@ -351,6 +351,30 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
     format?: (v: number | undefined) => string;
   };
 
+  // Anchor the tooltip card to whichever corner is diagonally opposite
+  // the hovered point, so the card never sits on top of the data the
+  // user is looking at (e.g. waitlist lines that hug the top edge). The
+  // recharts wrapper is a full-size pointer-transparent overlay (see
+  // TOOLTIP_BASE_PROPS); this just picks the inset corner inside it from
+  // the active `coordinate` relative to the plot `viewBox`.
+  const cornerStyle = (coordinate?: { x?: number; y?: number }, viewBox?: { x?: number; y?: number; width?: number; height?: number }): React.CSSProperties => {
+    const vbX = viewBox?.x ?? 0;
+    const vbY = viewBox?.y ?? 0;
+    const vbW = viewBox?.width ?? 0;
+    const vbH = viewBox?.height ?? 0;
+    const cx = coordinate?.x;
+    const cy = coordinate?.y;
+    const midX = vbX + vbW / 2;
+    const midY = vbY + vbH / 2;
+    // Cursor in the left half → place card on the right, and vice versa.
+    const placeRight = cx == null ? true : cx < midX;
+    const placeBottom = cy == null ? false : cy < midY;
+    const s: React.CSSProperties = { position: 'absolute' };
+    if (placeBottom) s.bottom = 4; else s.top = 4;
+    if (placeRight) s.right = 4; else s.left = 4;
+    return s;
+  };
+
   const makeChartTooltip = (
     rows: Array<Record<string, unknown>>,
     cohorts: TooltipCohort[],
@@ -365,7 +389,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
       if (typeof y === 'number') byYear.set(y, row);
     }
 
-    return ({ active, label }: any) => {
+    return ({ active, label, coordinate, viewBox }: any) => {
       if (!active || label == null) return null;
       // Recharts gives us `label` as the x value (a number). Use it
       // verbatim — using a different lookup key risks the off-by-one
@@ -376,6 +400,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
       const yearLabel = `End of year ${typeof label === 'number' ? label : Number(label).toFixed(0)}`;
 
       return (
+        <div style={cornerStyle(coordinate, viewBox)}>
         <div className="bg-card/95 backdrop-blur-sm border border-medical-border rounded-md p-2 shadow-md text-[11px] leading-tight max-w-[320px]">
           <p className="text-xs font-semibold text-foreground pb-1 mb-1 border-b border-medical-border">
             {yearLabel}
@@ -430,6 +455,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
             <p className="truncate">{supplyTag}</p>
           </div>
         </div>
+        </div>
       );
     };
   };
@@ -449,12 +475,13 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
       if (typeof y === 'number') byYear.set(y, row);
     }
 
-    return ({ active, label }: any) => {
+    return ({ active, label, coordinate, viewBox }: any) => {
       if (!active || label == null) return null;
       const row = byYear.get(label as number);
       if (!row) return null;
       const yearLabel = `End of year ${typeof label === 'number' ? label : Number(label).toFixed(0)}`;
       return (
+        <div style={cornerStyle(coordinate, viewBox)}>
         <div className="bg-card/95 backdrop-blur-sm border border-medical-border rounded-md p-2 shadow-md text-[11px] leading-tight max-w-[260px]">
           <p className="text-xs font-semibold text-foreground pb-1 mb-1 border-b border-medical-border">
             {yearLabel}
@@ -492,30 +519,30 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
             <p className="truncate">{supplyTag}</p>
           </div>
         </div>
+        </div>
       );
     };
   };
 
   // ───────────────────────────────────────────────────────────────────
-  // Tooltip placement — pin to chart's top-right corner so the card
-  // never sits on top of the data the user is hovering. Cursor X is
-  // still tracked via Recharts' vertical guideline (cursor prop); only
-  // the card itself is anchored.
+  // Tooltip placement — the recharts wrapper is stretched to cover the
+  // whole chart as a pointer-transparent overlay; `cornerStyle` then
+  // anchors the actual card to the corner diagonally opposite the
+  // hovered point, so it never sits on top of the data being read.
   //
   // `position={{ x: 0, y: 0 }}` zeroes Recharts' internal placement
   // math; `wrapperStyle` overrides the inline `top/left/transform` the
-  // wrapper div would otherwise carry so right-anchoring actually wins.
-  // `pointerEvents: 'none'` prevents the card from trapping hover and
-  // causing flicker as the cursor moves near it.
+  // wrapper div would otherwise carry. `pointerEvents: 'none'` prevents
+  // the card from trapping hover and causing flicker near it.
   // ───────────────────────────────────────────────────────────────────
   const TOOLTIP_BASE_PROPS = {
     position: { x: 0, y: 0 },
-    allowEscapeViewBox: { x: true, y: false },
+    allowEscapeViewBox: { x: false, y: false },
     wrapperStyle: {
-      top: 4,
-      right: 4,
-      left: 'auto',
-      bottom: 'auto',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
       transform: 'none',
       pointerEvents: 'none' as const,
       zIndex: 10,
