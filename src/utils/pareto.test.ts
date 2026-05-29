@@ -466,21 +466,19 @@ describe('loadParetoDataset', () => {
         );
       };
 
-      // Parse "prop{p}p{...}" out of the URL to vary the response per point.
-      // prop0 → base case (deaths=1000), prop>0 → fewer deaths (concave up):
-      //   prop=0.5 → 800, prop=1 → 700, prop=1.5 → 650, prop=2 → 625
-      // (knee around prop=1)
-      const m = url.match(/prop(\d+)(?:p(\d+))?_/);
-      const propStr = m ? `${m[1]}${m[2] ? '.' + m[2] : ''}` : '0';
-      const prop = parseFloat(propStr);
-      const propToDeaths: Record<string, number> = {
-        '0': 1000, '0.5': 800, '1': 700, '1.5': 650, '2': 625,
+      // Parse "n{N}" (absolute kidneys/yr) out of the URL to vary the
+      // response per point. n0 → base case (deaths=1000), N>0 → fewer
+      // deaths (concave up): knee around N=500.
+      const m = url.match(/_n(\d+)_/);
+      const n = m ? parseInt(m[1], 10) : 0;
+      const nToDeaths: Record<number, number> = {
+        0: 1000, 250: 800, 500: 700, 750: 650, 1000: 625,
       };
-      const propToWaitlist: Record<string, number> = {
-        '0': 5000, '0.5': 4500, '1': 4200, '1.5': 4050, '2': 3975,
+      const nToWaitlist: Record<number, number> = {
+        0: 5000, 250: 4500, 500: 4200, 750: 4050, 1000: 3975,
       };
-      const deaths = propToDeaths[propStr] ?? propToDeaths[String(prop)] ?? 1000;
-      const wl = propToWaitlist[propStr] ?? propToWaitlist[String(prop)] ?? 5000;
+      const deaths = nToDeaths[n] ?? 1000;
+      const wl = nToWaitlist[n] ?? 5000;
       return buildResp(deaths, wl);
     });
   });
@@ -491,10 +489,10 @@ describe('loadParetoDataset', () => {
 
   it('loads all 4 points and detects the inflection (lives saved curve)', async () => {
     const points: ParetoPointSpec[] = [
-      { label: '0.5x', x: 1000, xeno_proportion: 0.5, surv: 12 },
-      { label: '1x', x: 2000, xeno_proportion: 1, surv: 12 },
-      { label: '1.5x', x: 3000, xeno_proportion: 1.5, surv: 12 },
-      { label: '2x', x: 4000, xeno_proportion: 2, surv: 12 },
+      { label: '250/yr', x: 250, xeno_n: 250, surv: 12 },
+      { label: '500/yr', x: 500, xeno_n: 500, surv: 12 },
+      { label: '750/yr', x: 750, xeno_n: 750, surv: 12 },
+      { label: '1000/yr', x: 1000, xeno_n: 1000, surv: 12 },
     ];
     const ds = await loadParetoDataset({
       mode: 'bridge',
@@ -507,16 +505,16 @@ describe('loadParetoDataset', () => {
     expect(ds.points).toHaveLength(4);
     // Diminishing-returns curve → knee detected.
     expect(ds.inflectionIndex).not.toBeNull();
-    // Each point's y = base - scenario = 1000 - {200, 300, 350, 375} = {200, 300, 350, 375}.
+    // Each point's y = base - scenario = 1000 - {800, 700, 650, 625} = {200, 300, 350, 375}.
     expect(ds.points.map((p) => p.y)).toEqual([200, 300, 350, 375]);
   });
 
   it('drops failed-to-load points and still returns the rest', async () => {
     fetchSpy.mockImplementationOnce(async () => new Response('', { status: 500 }));
     const points: ParetoPointSpec[] = [
-      { label: '0.5x', x: 1000, xeno_proportion: 0.5, surv: 12 },
-      { label: '1x', x: 2000, xeno_proportion: 1, surv: 12 },
-      { label: '1.5x', x: 3000, xeno_proportion: 1.5, surv: 12 },
+      { label: '250/yr', x: 250, xeno_n: 250, surv: 12 },
+      { label: '500/yr', x: 500, xeno_n: 500, surv: 12 },
+      { label: '750/yr', x: 750, xeno_n: 750, surv: 12 },
     ];
     const ds = await loadParetoDataset({
       mode: 'bridge',
@@ -539,7 +537,7 @@ describe('loadParetoDataset', () => {
       strategy: 'standard',
       targetYear: 10,
       metric: livesSavedFromViz,
-      points: [{ label: '1x', x: 2000, xeno_proportion: 1, surv: 12 }],
+      points: [{ label: '1000/yr', x: 1000, xeno_n: 1000, surv: 12 }],
     });
     expect(ds.points).toHaveLength(0);
     expect(ds.inflectionIndex).toBeNull();
@@ -573,39 +571,38 @@ describe('loadParetoDataset', () => {
       strategy: 'standard',
       targetYear: 10,
       metric: livesSavedFromViz,
-      // Sweep proportion ∈ {0.5, 1} at fixed surv=12 and death=1.2 (the
-      // new canonical non-baseline multiplier — see XENO_DEATH_MULTIPLIERS
-      // in configFinder.ts).
+      // Sweep supply ∈ {250, 500} at fixed surv=12 and death=1.2 (the new
+      // canonical non-baseline multiplier — see XENO_DEATH_MULTIPLIERS).
       points: [
         {
-          label: '0.5x',
-          x: 0.5,
-          xeno_proportion: 0.5,
+          label: '250/yr',
+          x: 250,
+          xeno_n: 250,
           surv: 12,
           postTransplantDeathRate: 1.2,
         },
         {
-          label: '1x',
-          x: 1,
-          xeno_proportion: 1,
+          label: '500/yr',
+          x: 500,
+          xeno_n: 500,
           surv: 12,
           postTransplantDeathRate: 1.2,
         },
       ] as ParetoPointSpec[],
     });
 
-    // Scenario names: prop0p5_relist1p0_death1p2, prop1p0_relist1p0_death1p2
+    // Scenario names: n250_relist1p0_death1p2, n500_relist1p0_death1p2
     expect(
-      urls.some((u) => u.includes('xeno_age_prop0p5_relist1p0_death1p2.json')),
+      urls.some((u) => u.includes('xeno_age_n250_relist1p0_death1p2.json')),
     ).toBe(true);
     expect(
-      urls.some((u) => u.includes('xeno_age_prop1p0_relist1p0_death1p2.json')),
+      urls.some((u) => u.includes('xeno_age_n500_relist1p0_death1p2.json')),
     ).toBe(true);
-    // Base case is always prop0_relist1_death1 — anchor the lives-saved
+    // Base case is always n0_relist1p0_death1p0 — anchor the lives-saved
     // comparison so the curve is internally consistent regardless of
     // the chosen mortality multiplier.
     expect(
-      urls.some((u) => u.includes('xeno_age_prop0p0_relist1p0_death1p0.json')),
+      urls.some((u) => u.includes('xeno_age_n0_relist1p0_death1p0.json')),
     ).toBe(true);
   });
 
@@ -634,20 +631,20 @@ describe('loadParetoDataset', () => {
       strategy: 'standard',
       targetYear: 10,
       metric: livesSavedFromViz,
-      // Sweep relist multiplier ∈ {0.5, 1, 2} at fixed prop=1 and death=1
+      // Sweep relist multiplier ∈ {0.5, 0.8, 1.2} at fixed N=1000 and death=1
       points: [
-        { label: '0.5x', x: 0.5, xeno_proportion: 1, xenoGraftFailureRate: 0.5, postTransplantDeathRate: 1 },
-        { label: '1x',   x: 1,   xeno_proportion: 1, xenoGraftFailureRate: 1,   postTransplantDeathRate: 1 },
-        { label: '2x',   x: 2,   xeno_proportion: 1, xenoGraftFailureRate: 2,   postTransplantDeathRate: 1 },
+        { label: '0.5x', x: 0.5, xeno_n: 1000, xenoGraftFailureRate: 0.5, postTransplantDeathRate: 1 },
+        { label: '0.8x', x: 0.8, xeno_n: 1000, xenoGraftFailureRate: 0.8, postTransplantDeathRate: 1 },
+        { label: '1.2x', x: 1.2, xeno_n: 1000, xenoGraftFailureRate: 1.2, postTransplantDeathRate: 1 },
       ],
     });
 
-    // Each scenario name encodes the per-point relist multiplier:
-    //   prop1_relist0p5_death1, prop1_relist1_death1, prop1_relist2_death1
-    expect(urls.some((u) => u.includes('xeno_age_prop1_relist0p5_death1.json'))).toBe(true);
-    expect(urls.some((u) => u.includes('xeno_age_prop1_relist1_death1.json'))).toBe(true);
-    expect(urls.some((u) => u.includes('xeno_age_prop1_relist2_death1.json'))).toBe(true);
-    // Base case is always prop0_relist1_death1 regardless of per-point overrides.
-    expect(urls.some((u) => u.includes('xeno_age_prop0_relist1_death1.json'))).toBe(true);
+    // Each scenario name encodes the per-point relist multiplier (toFixed(1)):
+    //   n1000_relist0p5_death1p0, n1000_relist0p8_death1p0, n1000_relist1p2_death1p0
+    expect(urls.some((u) => u.includes('xeno_age_n1000_relist0p5_death1p0.json'))).toBe(true);
+    expect(urls.some((u) => u.includes('xeno_age_n1000_relist0p8_death1p0.json'))).toBe(true);
+    expect(urls.some((u) => u.includes('xeno_age_n1000_relist1p2_death1p0.json'))).toBe(true);
+    // Base case is always n0_relist1p0_death1p0 regardless of per-point overrides.
+    expect(urls.some((u) => u.includes('xeno_age_n0_relist1p0_death1p0.json'))).toBe(true);
   });
 });

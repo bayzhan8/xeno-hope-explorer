@@ -92,11 +92,11 @@ const FIXED_PARAMS_99 = {
 };
 
 interface UserInputs {
-  xeno_proportion: number;
-  xenoGraftFailureRate: number; // multiplier (0, 0.5, 1, 1.5, 2)
-  postTransplantDeathRate: number; // multiplier (0, 0.5, 1, 1.5, 2)
+  xeno_n: number; // absolute xeno supply in kidneys/yr (from the supply grid)
+  xenoGraftFailureRate: number; // relisting multiplier {0.5, 0.8, 1.0, 1.2}
+  postTransplantDeathRate: number; // death multiplier {1.0, 1.2}
   highCPRAThreshold: number; // 85, 95, or 99
-  targetingStrategy?: string; // NEW: "standard", "age60_cpraHigh", etc.
+  targetingStrategy?: string; // "standard", "age60_cpraHigh", etc.
 }
 
 interface ExperimentConfigs {
@@ -105,19 +105,17 @@ interface ExperimentConfigs {
 
 
 
+import { supplyToken } from './supplyGrid';
+
 // Supabase Storage base URL
 const SUPABASE_STORAGE_URL = 'https://bkgpfnhbmkxzwtixiwnh.supabase.co/storage/v1/object/public/viz-data';
 
-// Standard configs were generated with Python int list [0, 0.5, 1, 1.5, 2]
-// so str(0) = "0", str(0.5) = "0p5", str(1) = "1"
-function formatStandard(val: number): string {
-  if (Number.isInteger(val)) return val.toString();
-  return val.toString().replace('.', 'p');
-}
-
-// Targeting configs were generated with Python float list [0.0, 0.5, 1.0, 1.5, 2.0]
-// so str(0.0) = "0.0" → "0p0", str(1.0) = "1.0" → "1p0"
-function formatTargeting(val: number): string {
+// All runners now emit relist/death multipliers via Python `str(float)`, e.g.
+// str(1.0) = "1.0" → "1p0", str(0.8) = "0.8" → "0p8". Every supported value
+// (relist {0.5,0.8,1.0,1.2}, death {1.0,1.2}) is one-decimal, so JS
+// `toFixed(1)` reproduces the Python string exactly. This is the single
+// formatter for both standard and targeted strategies and both therapy modes.
+function fmtMult(val: number): string {
   return val.toFixed(1).replace('.', 'p');
 }
 
@@ -318,14 +316,15 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
     // ALWAYS missing entries the other machine produced. Gating on it
     // would silently break the UI for any config not run on the machine
     // that last uploaded the registry.
-    let configName: string;
-    if (strategy === 'standard') {
-      const fmt = formatStandard;
-      configName = `xeno_age_prop${fmt(userInputs.xeno_proportion)}_relist${fmt(userInputs.xenoGraftFailureRate)}_death${fmt(userInputs.postTransplantDeathRate)}`;
-    } else {
-      const fmt = formatTargeting;
-      configName = `${strategy}_prop${fmt(userInputs.xeno_proportion)}_relist${fmt(userInputs.xenoGraftFailureRate)}_death${fmt(userInputs.postTransplantDeathRate)}`;
-    }
+    const configName = composeConfigName(
+      'replacement',
+      {
+        xeno_n: userInputs.xeno_n,
+        xenoGraftFailureRate: userInputs.xenoGraftFailureRate,
+        postTransplantDeathRate: userInputs.postTransplantDeathRate,
+      },
+      strategy,
+    );
 
     if (import.meta.env.DEV) {
       console.log('═══════════════════════════════════════════════════════════');
@@ -333,7 +332,7 @@ export async function findConfigName(userInputs: UserInputs): Promise<string | n
       console.log('═══════════════════════════════════════════════════════════');
       console.log('  strategy:', strategy);
       console.log('  threshold:', threshold);
-      console.log('  xeno_proportion:', userInputs.xeno_proportion);
+      console.log('  xeno_n (kidneys/yr):', userInputs.xeno_n);
       console.log('  xenoGraftFailureRate:', userInputs.xenoGraftFailureRate);
       console.log('  postTransplantDeathRate:', userInputs.postTransplantDeathRate);
       console.log('  → derived configName:', configName);
@@ -375,36 +374,38 @@ const BACKUP_PREFIX_ROOT = '_backup_pre_rerun_2026_05_14';
 
 // Compose the canonical config-name string for a (mode, strategy, params)
 // triple. Single source of truth shared by the page + the Pareto loader.
+// Supply is an ABSOLUTE count (kidneys/yr) encoded as `n{round(N)}`:
 //
-//   replacement-standard:  xeno_age_prop{p}_relist{r}_death{d}
-//   replacement-targeted:  {strategy}_prop{p}_relist{r}_death{d}
-//   bridge-standard:       xeno_age_prop{p}_relist1p0_death{d}
-//   bridge-targeted:       {strategy}_prop{p}_relist1p0_death{d}
+//   replacement-standard:  xeno_age_n{N}_relist{r}_death{d}
+//   replacement-targeted:  {strategy}_n{N}_relist{r}_death{d}
+//   bridge-standard:       xeno_age_n{N}_relist1p0_death{d}   (surv in folder)
+//   bridge-targeted:       {strategy}_n{N}_relist1p0_death{d}
 //
-// The bridge variants HARD-CODE _relist1p0 because the bridge pickle
-// already encodes per-age survival in `relisting_xeno` (the runner has
-// nothing to scale there). The death multiplier IS expressed in the name
-// so the website's mortality sensitivity slider can navigate the sweep
-// produced by `BRIDGE_DEATH_MULTIPLIERS` in `run_bridge_experiments.py`.
+// The bridge variants HARD-CODE _relist1p0 because the bridge pickle already
+// encodes per-age survival in `relisting_xeno`. The N=0 base case is deduped
+// on every runner to the canonical `n0_relist1p0_death1p0` (no xenograft ever
+// fires, so the multipliers are inert), so the frontend MUST compose the same
+// canonical name at N=0 or it 404s. See supply_grid.py.
 //
-// `XENO_DEATH_MULTIPLIERS` is the canonical list of post-transplant
-// death multipliers covered by the backend sweep, shared by both
-// Replacement and Bridge pages. Each value scales the xeno post-tx
-// death hazard relative to the human-kidney post-tx baseline:
+// `XENO_DEATH_MULTIPLIERS` is the canonical list of post-transplant death
+// multipliers covered by the backend sweep, shared by both pages:
 //   1.0  — xeno mortality equals human-kidney mortality (optimistic baseline)
 //   1.2  — xeno mortality is 20% higher than human-kidney (slightly worse)
-// Frontend pickers MUST snap to one of these values; backend runners
-// (run_age_experiments.py / run_bridge_experiments.py /
-// run_bridge_priority.py) MUST generate at least these. The two
-// "branded" aliases below are kept so historical references in the
-// codebase stay intact, but they now point at the same array.
+// `XENO_RELIST_MULTIPLIERS` is the replacement-only graft-failure grid.
+// Frontend pickers MUST snap to these; backend runners MUST generate them.
 export const XENO_DEATH_MULTIPLIERS = [1.0, 1.2] as const;
 export const BRIDGE_DEATH_MULTIPLIERS = XENO_DEATH_MULTIPLIERS;
 export type BridgeDeathMultiplier = (typeof XENO_DEATH_MULTIPLIERS)[number];
 export type XenoDeathMultiplier = BridgeDeathMultiplier;
 
+// Replacement-therapy relisting (graft-failure) multiplier grid. Must mirror
+// RELISTING_MULTIPLIERS in run_age_experiments.py / run_all_targeting_experiments.py.
+export const XENO_RELIST_MULTIPLIERS = [0.5, 0.8, 1.0, 1.2] as const;
+export type XenoRelistMultiplier = (typeof XENO_RELIST_MULTIPLIERS)[number];
+
 export interface ComposeNameParams {
-  xeno_proportion: number;
+  /** Absolute xeno supply in kidneys/yr (a value from the supply grid). */
+  xeno_n: number;
   xenoGraftFailureRate?: number;     // replacement only; ignored in bridge mode
   /**
    * Post-transplant death multiplier (used by both modes).
@@ -421,29 +422,20 @@ export function composeConfigName(
   params: ComposeNameParams,
   strategy: string = 'standard',
 ): string {
-  if (mode === 'bridge') {
-    // Bridge: targeting-style float formatting throughout (matches
-    // run_bridge_experiments.py::config_name_for which always uses
-    // str(float).replace(".", "p")).
-    const fmt = formatTargeting;
-    const propStr = fmt(params.xeno_proportion);
-    const drate = params.postTransplantDeathRate ?? 1;
-    const base = strategy === 'standard' ? 'xeno_age' : strategy;
-    return `${base}_prop${propStr}_relist1p0_death${fmt(drate)}`;
+  const base = strategy === 'standard' ? 'xeno_age' : strategy;
+  const nTok = supplyToken(params.xeno_n);
+
+  // N=0 base case: deduped on every runner to the canonical (relist1p0,
+  // death1p0) since no xenograft fires and the multipliers are inert.
+  if (Math.round(params.xeno_n) <= 0) {
+    return `${base}_${nTok}_relist1p0_death1p0`;
   }
 
-  // Replacement therapy — preserve historical formatting quirk: the
-  // standard runner uses `str(int_or_float).replace(".", "p")` so 1 stays
-  // "1" while 0.5 becomes "0p5". The targeting runner formats every value
-  // as `f"{v:.1f}".replace(".", "p")` so 1.0 → "1p0".
-  const xrate = params.xenoGraftFailureRate ?? 1;
+  // Bridge hard-codes relist1p0 (survival baked into the pickle); replacement
+  // uses the user's graft-failure multiplier.
+  const relist = mode === 'bridge' ? 1.0 : params.xenoGraftFailureRate ?? 1;
   const drate = params.postTransplantDeathRate ?? 1;
-  if (strategy === 'standard') {
-    const fmt = formatStandard;
-    return `xeno_age_prop${fmt(params.xeno_proportion)}_relist${fmt(xrate)}_death${fmt(drate)}`;
-  }
-  const fmt = formatTargeting;
-  return `${strategy}_prop${fmt(params.xeno_proportion)}_relist${fmt(xrate)}_death${fmt(drate)}`;
+  return `${base}_${nTok}_relist${fmtMult(relist)}_death${fmtMult(drate)}`;
 }
 
 // Resolve the live and backup viz JSON URLs for a given (mode, strategy,

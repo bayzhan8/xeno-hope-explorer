@@ -53,7 +53,27 @@ export interface ParetoSeries {
   label: string;
   /** CSS color (e.g. "hsl(var(--chart-primary))" or "#7c3aed"). */
   color: string;
+  /**
+   * Optional per-curve base transplant rate (kidneys/yr at prop=1.0)
+   * for the subgroup this series represents. When provided AND the
+   * chart's x-axis is the multiplier, the tooltip annotates each
+   * point with the equivalent absolute kidneys/yr (= x × baseRate).
+   * When the chart's x-axis is already kidneys/yr, the tooltip can
+   * back out the multiplier (= x / baseRate). Either direction makes
+   * the supply scale concrete for cross-subgroup comparison
+   * (Task Group 6.1).
+   */
+  baseRate?: number;
 }
+
+/**
+ * What the x-axis represents on the supply Pareto cards. The chart
+ * uses this to (a) pick the right tooltip annotation direction and
+ * (b) decide which units to show in the per-row tooltip label. The
+ * caller is still responsible for passing the right `xLabel` and
+ * `formatX` — `supplyAxis` is purely a tooltip-side hint.
+ */
+export type SupplyAxisKind = 'multiplier' | 'kidneysPerYear';
 
 interface ParetoChartProps {
   /** Single dataset (single-curve mode). */
@@ -85,6 +105,14 @@ interface ParetoChartProps {
    * Defaults to true; set false to hide for very short curves.
    */
   showShapeChips?: boolean;
+  /**
+   * Optional: what the x-axis represents on supply Pareto cards.
+   * When set, and a series carries a `baseRate`, the tooltip adds
+   * a second-unit annotation per row (e.g. "1.5× = 2,585/yr").
+   * Leave undefined for charts whose x-axis isn't a supply axis
+   * (e.g. graft-survival in months, graft-failure multiplier).
+   */
+  supplyAxis?: SupplyAxisKind;
 }
 
 const defaultFmt = (v: number): string => {
@@ -142,6 +170,7 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
   height = 320,
   view = 'cumulative',
   showShapeChips = true,
+  supplyAxis,
 }) => {
   if (loading) {
     return (
@@ -294,6 +323,22 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
                     const meta = seriesMeta.find((m) => m.series.label === sLabel);
                     const isKnee =
                       meta?.knee && Math.abs(meta.knee.x - xVal) < 1e-9;
+                    // When a supply axis is in play AND we know this
+                    // series' base rate, annotate with the equivalent
+                    // value in the OTHER unit so the user can read
+                    // both directly off the tooltip.
+                    const baseRate = meta?.series.baseRate;
+                    let supplyNote: string | null = null;
+                    if (supplyAxis && baseRate && baseRate > 0) {
+                      if (supplyAxis === 'multiplier') {
+                        const k = Math.round(xVal * baseRate);
+                        supplyNote = `= ${k.toLocaleString()}/yr`;
+                      } else {
+                        // x is kidneys/yr → back out the multiplier
+                        const m = xVal / baseRate;
+                        supplyNote = `= ${m.toFixed(2)}×`;
+                      }
+                    }
                     return (
                       <div
                         key={sLabel}
@@ -308,6 +353,11 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
                           {isMulti ? `${sLabel}: ` : ''}
                           {formatY(entry.value as number)}
                         </span>
+                        {supplyNote && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {supplyNote}
+                          </span>
+                        )}
                         {isKnee && (
                           <span className="text-[10px] uppercase tracking-wide text-primary">
                             inflection

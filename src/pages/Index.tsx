@@ -8,16 +8,16 @@ import MarkovChainVisualization from '@/components/MarkovChainVisualization';
 import ModeNav from '@/components/ModeNav';
 import ReplacementPareto from '@/components/ReplacementPareto';
 import WaitTimeChart from '@/components/WaitTimeChart';
-import { findConfigName, loadVisualizationData } from '@/utils/configFinder';
+import { findConfigName, loadVisualizationData, composeConfigName } from '@/utils/configFinder';
 import { transformVizDataToSimulationData, calculateSummaryMetrics, getXenoBaseRate } from '@/utils/dataTransformer';
 
 interface SimulationParams {
   xenoGraftFailureRate: number;
   postTransplantDeathRate: number;
   simulationHorizon: number;
-  xeno_proportion: number;
+  xeno_n: number; // absolute xeno supply (kidneys/yr) from the supply grid
   highCPRAThreshold: number;
-  targetingStrategy?: string;  // NEW: targeting strategy
+  targetingStrategy?: string;  // targeting strategy
 }
 
 interface SimulationData {
@@ -77,7 +77,7 @@ const Index = () => {
     xenoGraftFailureRate: 1,
     postTransplantDeathRate: 1,
     simulationHorizon: 10,
-    xeno_proportion: 1,
+    xeno_n: 1000, // kidneys/yr — present in every (strategy, threshold) grid cell
     highCPRAThreshold: 95, // Age-stratified data uses 95% threshold
     targetingStrategy: 'standard', // Default to standard (high cPRA, all ages)
   });
@@ -96,7 +96,7 @@ const Index = () => {
       try {
         // Find config name from user inputs
         const configName = await findConfigName({
-          xeno_proportion: params.xeno_proportion,
+          xeno_n: params.xeno_n,
           xenoGraftFailureRate: params.xenoGraftFailureRate,
           postTransplantDeathRate: params.postTransplantDeathRate,
           highCPRAThreshold: params.highCPRAThreshold,
@@ -114,16 +114,11 @@ const Index = () => {
         let baseVizData = null;
         let baseConfigName = vizData.base_config_name;
 
-        // Base case = same relist/death settings but xeno_proportion=0
+        // Base case = the canonical N=0 config (no xeno; relist/death inert,
+        // deduped to 1p0/1p0 on the backend). composeConfigName enforces that.
         const strategy = params.targetingStrategy || 'standard';
-        if (strategy === 'standard') {
-          if (!baseConfigName) {
-            const fmt = (v: number) => Number.isInteger(v) ? v.toString() : v.toString().replace('.', 'p');
-            baseConfigName = `xeno_age_prop0_relist${fmt(params.xenoGraftFailureRate)}_death${fmt(params.postTransplantDeathRate)}`;
-          }
-        } else {
-          const fmt = (v: number) => v.toFixed(1).replace('.', 'p');
-          baseConfigName = `${strategy}_prop${fmt(0)}_relist${fmt(params.xenoGraftFailureRate)}_death${fmt(params.postTransplantDeathRate)}`;
+        if (!baseConfigName) {
+          baseConfigName = composeConfigName('replacement', { xeno_n: 0 }, strategy);
         }
 
         // Try to load base case - always attempt if we have a config name
@@ -165,7 +160,7 @@ const Index = () => {
     }
 
     loadData();
-  }, [params.xeno_proportion, params.xenoGraftFailureRate, params.postTransplantDeathRate, params.simulationHorizon, params.highCPRAThreshold, params.targetingStrategy]);
+  }, [params.xeno_n, params.xenoGraftFailureRate, params.postTransplantDeathRate, params.simulationHorizon, params.highCPRAThreshold, params.targetingStrategy]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -298,9 +293,7 @@ const Index = () => {
                   <SummaryMetrics
                     metrics={metrics}
                     horizon={params.simulationHorizon}
-                    xenoIntendedPerYear={Math.round(
-                      getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold) * params.xeno_proportion
-                    )}
+                    xenoIntendedPerYear={params.xeno_n}
                   />
                 </div>
 
@@ -343,10 +336,11 @@ const Index = () => {
                     highCPRAThreshold={params.highCPRAThreshold}
                     simulationHorizon={params.simulationHorizon}
                     xenoBaseRate={getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold)}
-                    xenoProportion={params.xeno_proportion}
-                    xenoIntendedPerYear={Math.round(
-                      getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold) * params.xeno_proportion
-                    )}
+                    xenoProportion={(() => {
+                      const br = getXenoBaseRate(params.targetingStrategy || 'standard', params.highCPRAThreshold);
+                      return br > 0 ? params.xeno_n / br : 0;
+                    })()}
+                    xenoIntendedPerYear={params.xeno_n}
                     targetingStrategy={params.targetingStrategy || 'standard'}
                   />
                 </div>
@@ -355,7 +349,7 @@ const Index = () => {
 
             {/* Tradeoff (Pareto) Curves */}
             <ReplacementPareto
-              xeno_proportion={params.xeno_proportion}
+              xeno_n={params.xeno_n}
               xenoGraftFailureRate={params.xenoGraftFailureRate}
               postTransplantDeathRate={params.postTransplantDeathRate}
               highCPRAThreshold={params.highCPRAThreshold}

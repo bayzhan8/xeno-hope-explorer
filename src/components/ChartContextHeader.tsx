@@ -45,7 +45,7 @@ const ChartContextHeader: React.FC<ChartContextHeaderProps> = ({
   population,
   measure,
   timing,
-  baseline = 'Same parameters, xeno_proportion = 0',
+  baseline = 'Same parameters, 0 xeno kidneys/yr',
   supplyTag,
   note,
 }) => {

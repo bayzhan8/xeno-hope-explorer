@@ -1587,7 +1587,7 @@ const SimulationCharts: React.FC<SimulationChartsProps> = ({
             population={`All simulated patients, cPRA threshold ${highCPRAThreshold}%`}
             measure="Annual flow — (baseline deaths) minus (intervention deaths)"
             timing="One value per simulation year · years 1–10"
-            baseline="Same scenario with xeno_proportion = 0 (no xeno kidneys)"
+            baseline="Same scenario with 0 xeno kidneys/yr (no xeno supply)"
             supplyTag={supplyTag}
             note="Positive bar = xeno scenario had fewer deaths that year. Negative bar = xeno scenario had more deaths."
           />

@@ -12,6 +12,12 @@ import {
   type BridgeSurvivalMonths,
 } from '@/utils/configFinder';
 import {
+  supplyPoints,
+  availableThresholds,
+  isCpraAllStrategy,
+  normalizeSelection,
+} from '@/utils/supplyGrid';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -33,8 +39,8 @@ export interface BridgeParams {
   postTransplantDeathRate: number;
   /** Display horizon — 5 or 10 years (data goes 10y on disk). */
   simulationHorizon: number;
-  /** Xeno proportion (multiplier on baseline yearly transplant volume). */
-  xeno_proportion: number;
+  /** Absolute xeno supply in kidneys/yr (a value from the supply grid). */
+  xeno_n: number;
   /** 85, 95, 99 (% cPRA) — defines who counts as "high cPRA". */
   highCPRAThreshold: number;
   /** "standard" | "age60_cpraHigh" | "age45_cpraHigh" | "age60_cpraAll" | "age45_cpraAll". */
@@ -55,18 +61,31 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
   const updateParam = <K extends keyof BridgeParams>(key: K, value: BridgeParams[K]) =>
     onParamsChange({ ...params, [key]: value });
 
-  const snapTo = (value: number, allowedValues: number[]) =>
-    allowedValues.reduce(
-      (prev, curr) => (Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev),
-      allowedValues[0],
-    );
-
   const toggleHorizon = () =>
     updateParam('simulationHorizon', params.simulationHorizon === 5 ? 10 : 5);
 
   const strategy = params.targetingStrategy || 'standard';
   const xenoBaseRate = getXenoBaseRate(strategy, params.highCPRAThreshold);
-  const xenoKidneysPerYear = Math.round(xenoBaseRate * params.xeno_proportion);
+  const xenoKidneysPerYear = params.xeno_n;
+
+  const supplyGridPoints = supplyPoints(strategy, params.highCPRAThreshold);
+  const supplyIdx = Math.max(0, supplyGridPoints.indexOf(params.xeno_n));
+  const thresholdOptions = availableThresholds(strategy);
+
+  const changeStrategy = (value: string) => {
+    const norm = normalizeSelection(value, params.highCPRAThreshold, params.xeno_n);
+    onParamsChange({
+      ...params,
+      targetingStrategy: value,
+      highCPRAThreshold: norm.threshold,
+      xeno_n: norm.xeno_n,
+    });
+  };
+
+  const changeThreshold = (threshold: number) => {
+    const norm = normalizeSelection(strategy, threshold, params.xeno_n);
+    onParamsChange({ ...params, highCPRAThreshold: norm.threshold, xeno_n: norm.xeno_n });
+  };
 
   // Helpers for the survival button-group: friendly label + duration label.
   const survivalLabel = (m: number): string => (m % 12 === 0 ? `${m / 12} yr` : `${m} mo`);
@@ -113,9 +132,7 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
             </div>
             <Select
               value={params.targetingStrategy || 'standard'}
-              onValueChange={(value) =>
-                onParamsChange({ ...params, targetingStrategy: value })
-              }
+              onValueChange={changeStrategy}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select allocation strategy" />
@@ -140,13 +157,13 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
           <div className="space-y-3 pb-4 border-b border-medical-border">
             <Label className="text-sm font-medium">High cPRA Definition</Label>
             <div className="flex gap-2">
-              {[85, 95, 99].map((threshold) => {
+              {thresholdOptions.map((threshold) => {
                 const isActive = params.highCPRAThreshold === threshold;
                 return (
                   <button
                     key={threshold}
                     type="button"
-                    onClick={() => updateParam('highCPRAThreshold', threshold)}
+                    onClick={() => changeThreshold(threshold)}
                     className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       isActive
                         ? 'border-2 border-primary bg-primary text-primary-foreground'
@@ -160,7 +177,11 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
             </div>
             <div className="text-xs text-muted-foreground flex items-start gap-2">
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-              <span>Defines who counts as "high cPRA" in this simulation.</span>
+              <span>
+                {isCpraAllStrategy(strategy)
+                  ? 'Age-only (any cPRA) strategies are cPRA-threshold-invariant — fixed at 99%+.'
+                  : 'Defines who counts as "high cPRA" in this simulation.'}
+              </span>
             </div>
           </div>
 
@@ -173,32 +194,32 @@ const BridgeControls: React.FC<BridgeControlsProps> = ({ params, onParamsChange 
               </span>
             </div>
             <Slider
-              value={[params.xeno_proportion]}
-              onValueChange={(value) =>
-                updateParam(
-                  'xeno_proportion',
-                  snapTo(value[0], [0, 0.5, 1, 1.5, 2, 3, 4]),
-                )
-              }
-              max={4}
+              value={[supplyIdx]}
+              onValueChange={(value) => {
+                const idx = Math.min(supplyGridPoints.length - 1, Math.max(0, Math.round(value[0])));
+                updateParam('xeno_n', supplyGridPoints[idx]);
+              }}
+              max={Math.max(0, supplyGridPoints.length - 1)}
               min={0}
-              step={0.5}
+              step={1}
               className="w-full"
             />
             <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
-              {[0, 0.5, 1, 1.5, 2, 3, 4].map((m) => (
-                <span key={m} className="whitespace-nowrap">
-                  {formatCompact(Math.round(xenoBaseRate * m))}
+              {supplyGridPoints.map((n) => (
+                <span key={n} className="whitespace-nowrap">
+                  {formatCompact(n)}
                 </span>
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              {xenoKidneysPerYear.toLocaleString()} bridge xenografts/year offered
-              ({params.xeno_proportion}× of {xenoBaseRate.toLocaleString()} base).
-              The human allokidney supply is unchanged; a bridged recipient
-              competes for the same allokidneys as every other candidate.
-              Actual delivered counts (bridge xenos placed, bridge → allo
-              transitions) are on the Throughput card.
+              {xenoKidneysPerYear === 0
+                ? 'No bridge xenografts — baseline scenario. '
+                : `${xenoKidneysPerYear.toLocaleString()} bridge xenografts/year offered. `}
+              Supply levels are fixed absolute counts so allocation strategies
+              compare head-to-head. The human allokidney supply is unchanged; a
+              bridged recipient competes for the same allokidneys as every other
+              candidate. Actual delivered counts (bridge xenos placed, bridge →
+              allo transitions) are on the Throughput card.
             </p>
           </div>
 
