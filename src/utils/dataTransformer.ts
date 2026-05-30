@@ -203,8 +203,8 @@ interface SimulationData {
     baseTotal: number;
     baseWaitlist: number;
     basePostTx: number;
-    // Waitlist REMOVALS (too sick / declined / moved). A DISTINCT exit from
-    // death, never counted in any death bucket. Sourced from the backend
+    // Waitlist REMOVALS (non-death exits; reason not tracked in the data).
+    // A DISTINCT exit from death, never counted in any death bucket. Sourced from the backend
     // `cumulative_waitlist_removals` series when present, else estimated as
     // ∫ wl_removal_rate · C(t) dt from the waitlist trajectory. Surfacing
     // this is what makes "total deaths" interpretable: a transplant removes
@@ -424,7 +424,7 @@ function findFirstIndex<T>(array: T[], predicate: (item: T) => boolean): number 
 //     - Standard (human) transplants            (Δ cumulative_std_transplants)
 //     - Xeno transplants                        (Δ cumulative_xeno_transplants)
 //     - Waitlist deaths                         (waitlist_deaths_per_year[y-1])
-//     - Waitlist removals (too sick / dropped)  (wl_removal_rate × L̄_C × 365)
+//     - Waitlist removals (non-death exits)     (wl_removal_rate × L̄_C × 365)
 //
 // Bridge Therapy (mode='bridge_v2'):
 //   L̄  = mean of (C + H_xeno), because a patient holding a bridge
@@ -883,9 +883,9 @@ export function computeWaitTimeByYear(
     for (const cell of cells) {
       const meanL = meanInWindow(xDays, cell.L, tStart, tEnd);
       // wl_removal hazard operates on the un-bridged candidate pool C
-      // only (a bridged patient on a functioning xenograft isn't
-      // "removed for being too sick"); we use a dedicated meanL_C for
-      // the hazard product to avoid inflating removals in bridge mode.
+      // only (a bridged patient on a functioning xenograft isn't subject
+      // to the candidate-pool removal hazard); we use a dedicated meanL_C
+      // for the hazard product to avoid inflating removals in bridge mode.
       const meanLC = meanInWindow(xDays, cell.LCForRemoval, tStart, tEnd);
       const meanLX = meanInWindow(xDays, cell.LX, tStart, tEnd);
       const txStart = interpolateCumulative(xDays, cell.cumTx, tStart);
@@ -2775,10 +2775,11 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
   let livesSavedTotal: number | undefined;
   let livesSavedWaitlist: number | undefined;
   let postTxDeathsAdded: number | undefined;
-  // Removals avoided = fewer patients leaving the list "too sick / declined"
-  // because they got a transplant instead. Positive = xeno kept people from
-  // the removal exit. Kept SEPARATE from deaths (removal is not death); it's
-  // the missing piece that explains why counted total deaths look flat.
+  // Removals avoided = fewer patients leaving the list via removal (a
+  // non-death exit; reason not tracked in the data) because they got a
+  // transplant instead. Positive = xeno kept people from the removal exit.
+  // Kept SEPARATE from deaths (removal is not death); it's the missing piece
+  // that explains why counted total deaths look flat.
   let removalsAvoided: number | undefined;
   const breakdown = data.deathsBreakdownByYear;
   if (breakdown && breakdown.length) {
