@@ -192,9 +192,9 @@ describe('viz extractors (totalDeathsAtYear / livesSavedFromViz / waitlistAtYear
 
   it('livesSavedFromViz removal-adjusts when the removals series is present', () => {
     // Mirrors the production confound: net total deaths is ~flat/negative, but
-    // the base case censors many more "too sick" removals. The headline must
-    // add (baseRemovals − scenRemovals) so it reflects extra patients kept
-    // alive & in care rather than the misleading near-zero deaths-only figure.
+    // the base case loses many more patients to waitlist removal. The headline
+    // must add (baseRemovals − scenRemovals) so it reflects extra patients
+    // still alive & on the list rather than the near-zero deaths-only figure.
     //   net total deaths diff = 156794 − 156828 = −34
     //   removals diff         = 86211 − 79528   = +6683
     //   removal-adjusted      = −34 + 6683       = +6649

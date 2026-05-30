@@ -3,11 +3,11 @@
  *
  * Three metrics are exposed for use as a Pareto y-axis:
  *
- *   1. `livesSavedFromViz`           — removal-adjusted adverse outcomes
- *      avoided at year H: (baseDeaths+baseRemovals) − (scenDeaths+scenRemovals),
- *      deaths = waitlist + post-tx. Equals the extra patients kept alive and
- *      in care; matches the summary card's "Lives Saved" headline. Falls back
- *      to deaths-only when the removals series is absent.
+ *   1. `livesSavedFromViz`           — removal-adjusted outcomes avoided at
+ *      year H: (baseDeaths+baseRemovals) − (scenDeaths+scenRemovals),
+ *      deaths = waitlist + post-tx. Equals the extra patients still alive and
+ *      on the list; matches the summary card's "Lives Saved" headline. Falls
+ *      back to deaths-only when the removals series is absent.
  *   2. `waitlistReductionFromViz`    — base − scenario waitlist size at
  *      year H (does the intervention shrink the queue).
  *   3. `waitTimeReductionFromViz`    — base − scenario wait time per
@@ -251,13 +251,13 @@ export function waitlistDeathsAtYear(
   return valueAtYear(viz.cumulative_waitlist_deaths, targetYear);
 }
 
-/** Cumulative "too sick / declined / moved" removals at `targetYear`. */
+/** Cumulative waitlist removals (non-death exits, reason not tracked) at `targetYear`. */
 export function removalsAtYear(viz: VizLike, targetYear: number): number | null {
   return valueAtYear(viz.cumulative_waitlist_removals, targetYear);
 }
 
 /**
- * Lives saved = removal-adjusted adverse outcomes avoided (base − scenario)
+ * Lives saved = removal-adjusted outcomes avoided (base − scenario)
  * at `targetYear`:
  *
  *   (baseDeaths + baseRemovals) − (scenDeaths + scenRemovals)
@@ -265,12 +265,12 @@ export function removalsAtYear(viz: VizLike, targetYear: number): number | null 
  * where deaths = waitlist + post-transplant. Net TOTAL deaths alone is ~0
  * over long horizons and can dip negative — NOT because xeno harms, but
  * because (a) transplant DEFERS death (waitlist-death bucket → post-tx
- * bucket) rather than eliminating it, and (b) the base case censors its
- * sickest candidates via "too sick" REMOVAL (an uncounted exit), so its
- * counted deaths are artificially low. Adding the removal term removes that
- * censoring bias. By conservation (arrivals are identical in base and
- * scenario) this equals the number of EXTRA patients kept alive and in care
- * (transplanted or still waiting) instead of dead-or-removed.
+ * bucket) rather than eliminating it, and (b) the base case loses more
+ * patients to waitlist REMOVAL (a non-death exit whose reason isn't tracked
+ * in the data), so its counted deaths are artificially low. Adding the
+ * removal term removes that bias. By conservation (arrivals are identical in
+ * base and scenario) this equals the number of EXTRA patients still alive and
+ * on the list (transplanted or still waiting) instead of dead-or-removed.
  *
  * This matches the summary card's "Lives Saved" headline so the curve and
  * the headline can't contradict each other. The removal term is optional:
