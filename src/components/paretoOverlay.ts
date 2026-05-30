@@ -15,7 +15,6 @@
  */
 
 export type OverlayMode = 'off' | 'thresholds' | 'strategies';
-export type ParetoView = 'cumulative' | 'marginal';
 
 /**
  * X-axis units for the *supply* Pareto cards (lives saved vs. supply,

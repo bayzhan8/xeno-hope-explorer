@@ -9,12 +9,6 @@
  *  - Multi-curve overlay: pass `datasets: ParetoSeries[]`. Each series
  *    gets its own color and line, and the tooltip lists every series' y
  *    at the hovered x. The legend shows a per-curve color swatch + label.
- *  - Marginal-return view: set `view='marginal'`. Each underlying
- *    dataset is transformed to Δy/Δx per segment via
- *    `toMarginalDataset` from pareto.ts, and the chart re-renders with
- *    the per-step rate of return on the y-axis. Useful for spotting
- *    "is each additional step still worth it?" patterns that the
- *    cumulative curve hides.
  *
  * Designed to drop into a `<Card>` so the parent owns the framing/title.
  */
@@ -33,10 +27,7 @@ import {
 } from 'recharts';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
-import {
-  type ParetoDataset,
-  toMarginalDataset,
-} from '@/utils/pareto';
+import { type ParetoDataset } from '@/utils/pareto';
 
 export interface ParetoSeries {
   dataset: ParetoDataset;
@@ -84,13 +75,6 @@ interface ParetoChartProps {
   /** Card height in pixels. Defaults to a reasonable size. */
   height?: number;
   /**
-   * Cumulative (default) or marginal-return view. In marginal mode each
-   * underlying dataset is transformed to Δy/Δx per segment and yLabel
-   * should be set accordingly by the caller (e.g. "Lives saved per
-   * additional kidney/yr").
-   */
-  view?: 'cumulative' | 'marginal';
-  /**
    * Optional: what the x-axis represents on supply Pareto cards.
    * When set, and a series carries a `baseRate`, the tooltip adds
    * a second-unit annotation per row (e.g. "1.5× = 2,585/yr").
@@ -108,26 +92,6 @@ const defaultFmt = (v: number): string => {
   return v.toFixed(2);
 };
 
-/**
- * Y-axis formatter for the MARGINAL (Δy/Δx) view. Callers tune their `formatY`
- * for cumulative magnitudes (e.g. integer "lives saved", "X.X mo"), but the
- * per-step derivative is orders of magnitude smaller, so that fixed precision
- * rounds every tick to "0"/"0.0" and the whole axis reads as zeros. This picks
- * the precision from the value's magnitude so small-but-nonzero rates stay
- * legible (down to scientific notation for truly tiny slopes).
- */
-const marginalFmt = (v: number): string => {
-  if (!Number.isFinite(v)) return '—';
-  const a = Math.abs(v);
-  if (a === 0) return '0';
-  if (a >= 10000) return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  if (a >= 100) return v.toFixed(0);
-  if (a >= 10) return v.toFixed(1);
-  if (a >= 0.1) return v.toFixed(2);
-  if (a >= 0.001) return v.toFixed(4);
-  return v.toExponential(1);
-};
-
 const ParetoChart: React.FC<ParetoChartProps> = ({
   dataset,
   datasets,
@@ -138,13 +102,8 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
   formatX = defaultFmt,
   formatY = defaultFmt,
   height = 320,
-  view = 'cumulative',
   supplyAxis,
 }) => {
-  // In marginal mode the caller's cumulative-tuned formatter collapses the
-  // small Δy/Δx values to zeros, so use the magnitude-adaptive formatter for
-  // both the y-axis ticks and the tooltip.
-  const fmtY = view === 'marginal' ? marginalFmt : formatY;
   if (loading) {
     return (
       <div
@@ -190,31 +149,9 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
     );
   }
 
-  // Apply view transform (marginal converts each cumulative curve to Δy/Δx
-  // per segment). Drop any series whose marginal version has < 2 points
-  // because there's nothing to draw.
-  const series: ParetoSeries[] = rawSeries
-    .map((s) => {
-      if (view !== 'marginal') return s;
-      const m = toMarginalDataset(s.dataset);
-      if (!m) return null;
-      return { ...s, dataset: m };
-    })
-    .filter((s): s is ParetoSeries => s !== null && s.dataset.points.length > 0);
-
-  if (series.length === 0) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center gap-2 text-muted-foreground"
-        style={{ height }}
-      >
-        <AlertTriangle className="w-7 h-7" />
-        <span className="text-sm">
-          Not enough data for the {view} view. Try cumulative.
-        </span>
-      </div>
-    );
-  }
+  const series: ParetoSeries[] = rawSeries.filter(
+    (s) => s.dataset.points.length > 0,
+  );
 
   // Merge into a single recharts-friendly row-per-x dataset. Series with
   // missing x values render as gaps (recharts treats undefined values as
@@ -224,10 +161,6 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
     for (const p of s.dataset.points) allXs.add(p.x);
   }
   const xsSorted = [...allXs].sort((a, b) => a - b);
-  // CI bands are only meaningful on the raw cumulative curve. In the
-  // marginal (Δy/Δx) view the per-segment differencing would require
-  // propagating covariance we don't store, so we suppress bands there.
-  const showBands = view === 'cumulative';
   const chartData = xsSorted.map((x) => {
     const row: Record<string, number | [number, number] | undefined> = { x };
     for (const s of series) {
@@ -236,7 +169,7 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
         row[s.label] = p.y;
         // Range-area datum: recharts renders a band when the value is a
         // [low, high] tuple. Only emitted when this point has a CI.
-        if (showBands && p.yCI !== undefined && Number.isFinite(p.yCI)) {
+        if (p.yCI !== undefined && Number.isFinite(p.yCI)) {
           row[`${s.label}__band`] = [p.y - p.yCI, p.y + p.yCI];
         }
       }
@@ -244,7 +177,7 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
     return row;
   });
   // Whether ANY series carries a CI → controls band rendering + legend note.
-  const hasBand = showBands && series.some((s) =>
+  const hasBand = series.some((s) =>
     s.dataset.points.some((p) => p.yCI !== undefined && Number.isFinite(p.yCI)),
   );
 
@@ -275,7 +208,7 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
           </XAxis>
           <YAxis
             type="number"
-            tickFormatter={fmtY}
+            tickFormatter={formatY}
             stroke="hsl(var(--muted-foreground))"
             tick={{ fontSize: 12 }}
           >
@@ -336,10 +269,10 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
                         />
                         <span className="text-foreground">
                           {isMulti ? `${sLabel}: ` : ''}
-                          {fmtY(entry.value as number)}
+                          {formatY(entry.value as number)}
                           {ci !== undefined && Number.isFinite(ci) && (
                             <span className="text-muted-foreground">
-                              {' '}± {fmtY(ci)}
+                              {' '}± {formatY(ci)}
                             </span>
                           )}
                         </span>

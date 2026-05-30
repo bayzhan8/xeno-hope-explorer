@@ -22,10 +22,8 @@ import {
   livesSavedCIHalfWidth,
   waitlistReductionCIHalfWidth,
   classifyCurveShape,
-  toMarginalDataset,
   loadParetoDataset,
   type ParetoPointSpec,
-  type ParetoDataset,
 } from './pareto';
 
 describe('kneedle', () => {
@@ -455,98 +453,6 @@ describe('classifyCurveShape', () => {
     const x = [862, 1723, 2585, 3446, 5169];
     const y = [175, 423, 592, 860, 1327];
     expect(classifyCurveShape(x, y)).toBe('linear');
-  });
-});
-
-describe('toMarginalDataset', () => {
-  const makeDataset = (xs: number[], ys: number[]): ParetoDataset => ({
-    points: xs.map((x, i) => ({
-      x,
-      y: ys[i],
-      label: `${x}`,
-      configName: `cfg_${i}`,
-      inflection: false,
-    })),
-    inflectionIndex: null,
-  });
-
-  it('returns null for fewer than 2 points', () => {
-    expect(toMarginalDataset(makeDataset([0], [0]))).toBeNull();
-    expect(
-      toMarginalDataset({ points: [], inflectionIndex: null }),
-    ).toBeNull();
-  });
-
-  it('produces N-1 points each at Δy/Δx of the corresponding segment', () => {
-    // y = x² → marginal at index i (between x[i] and x[i+1]) =
-    // (x[i+1]² − x[i]²) / Δx = x[i+1] + x[i] when Δx = 1.
-    const ds = makeDataset([0, 1, 2, 3, 4], [0, 1, 4, 9, 16]);
-    const marg = toMarginalDataset(ds);
-    expect(marg).not.toBeNull();
-    expect(marg!.points).toHaveLength(4);
-    expect(marg!.points.map((p) => p.y)).toEqual([1, 3, 5, 7]);
-    // Marginal x values live at the upper x of each segment so the
-    // chart can read "the marginal return when we went from x[i] to
-    // x[i+1]" at x[i+1].
-    expect(marg!.points.map((p) => p.x)).toEqual([1, 2, 3, 4]);
-  });
-
-  it('differences against marginalBasis (kidneys/yr) instead of the plotted x when present', () => {
-    // Reproduces the bug behind the false "marginal" spike: on the "× base"
-    // axis the plotted x is n/baseRate, so a fixed +250-kidney step is a tiny
-    // Δx that multiplies any wiggle by baseRate. With marginalBasis set to the
-    // absolute kidneys/yr, the slope is "Δy per +1 kidney/yr" and is invariant
-    // to the displayed axis.
-    const baseRate = 2841;
-    const ns = [250, 500, 750];
-    const ys = [100, 148, 359]; // a noisy low-supply wiggle (Δ = 48, then 211)
-    const withBasis: ParetoDataset = {
-      points: ns.map((n, i) => ({
-        x: n / baseRate, // multiplier-axis position
-        y: ys[i],
-        label: `${n}`,
-        configName: `cfg_${i}`,
-        inflection: false,
-        marginalBasis: n,
-      })),
-      inflectionIndex: null,
-    };
-    const marg = toMarginalDataset(withBasis)!;
-    // Slopes are per +1 kidney/yr: 48/250 and 211/250 — NOT inflated by 2841.
-    expect(marg.points[0].y).toBeCloseTo(48 / 250, 6);
-    expect(marg.points[1].y).toBeCloseTo(211 / 250, 6);
-    // x positions remain on the displayed (multiplier) axis.
-    expect(marg.points[0].x).toBeCloseTo(500 / baseRate, 6);
-
-    // Without marginalBasis the same data divides by the tiny multiplier Δx,
-    // inflating the slope ~baseRate× (the artifact we removed).
-    const noBasis = makeDataset(ns.map((n) => n / baseRate), ys);
-    const margBad = toMarginalDataset(noBasis)!;
-    expect(margBad.points[1].y).toBeGreaterThan(2000); // ~211 / (250/2841)
-  });
-
-  it('skips zero-Δx segments instead of producing NaN/Infinity', () => {
-    const ds = makeDataset([0, 1, 1, 2], [0, 5, 5, 10]);
-    const marg = toMarginalDataset(ds);
-    expect(marg).not.toBeNull();
-    // Expect 2 points (the two real segments); the duplicate-x segment is dropped.
-    expect(marg!.points).toHaveLength(2);
-    for (const p of marg!.points) expect(Number.isFinite(p.y)).toBe(true);
-  });
-
-  it('runs Kneedle on the marginal series so the marginal chart can highlight a knee', () => {
-    // Cumulative curve with a sharp diminishing-returns shape →
-    // marginal slopes drop sharply then plateau → marginal Kneedle
-    // should detect a knee.
-    const xs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    const ys = [0, 100, 180, 230, 260, 280, 295, 305, 312, 315];
-    const ds = makeDataset(xs, ys);
-    const marg = toMarginalDataset(ds);
-    expect(marg).not.toBeNull();
-    // The marginal series is [100, 80, 50, 30, 20, 15, 10, 7, 3] — a
-    // clear concave-decreasing curve. After Kneedle's sign flip it
-    // becomes increasing-saturating, which is the canonical shape.
-    expect(marg!.inflectionIndex).not.toBeNull();
   });
 });
 
