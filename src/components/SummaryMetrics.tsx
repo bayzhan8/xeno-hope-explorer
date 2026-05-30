@@ -29,6 +29,10 @@ interface MetricSummary {
   livesSavedTotal?: number;
   livesSavedWaitlist?: number;
   postTxDeathsAdded?: number; // positive = extra deaths after transplant
+  // Fewer patients leaving the list "too sick / declined" because they were
+  // transplanted instead. A separate exit from death (removal is NOT a death);
+  // it explains why counted total deaths can look flat even when xeno helps.
+  removalsAvoided?: number;
   totalTransplants: number;
   xenoTransplants: number;
   penetrationRate: number;
@@ -221,12 +225,27 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
     `${n >= 0 ? '+' : '−'}${formatNumber(Math.abs(n))}`;
   const hasLivesBreakdown =
     metrics.livesSavedTotal !== undefined && Number.isFinite(metrics.livesSavedTotal);
+  const hasRemovals =
+    metrics.removalsAvoided !== undefined && Number.isFinite(metrics.removalsAvoided);
   const livesSavedValue = hasLivesBreakdown
     ? metrics.livesSavedTotal!
     : metrics.deathsPrevented;
-  const livesSavedColor = livesSavedValue >= 0 ? 'text-success' : 'text-destructive';
+  // Counted total deaths can look flat even when xeno clearly helps, because
+  // the sickest candidates otherwise leave via REMOVAL (an uncounted exit, not
+  // a death). So we never paint a near-flat total red as if xeno were harmful:
+  // green when it nets positive, neutral when it's flat/slightly negative but
+  // removals dropped (the honest "deaths just shifted off the removal exit").
+  const livesSavedColor =
+    livesSavedValue > 0
+      ? 'text-success'
+      : hasRemovals && (metrics.removalsAvoided ?? 0) > 0
+        ? 'text-foreground'
+        : 'text-destructive';
+  const removalsClause = hasRemovals
+    ? `, ${fmtSignedCount(metrics.removalsAvoided ?? 0)} fewer removed too sick`
+    : '';
   const livesSavedSubtitle = hasLivesBreakdown
-    ? `Net across all deaths vs. base case: ${fmtSignedCount(metrics.livesSavedWaitlist ?? 0)} on the waitlist, ${fmtSignedCount(-(metrics.postTxDeathsAdded ?? 0))} after a transplant`
+    ? `Net counted deaths vs. base: ${fmtSignedCount(metrics.livesSavedWaitlist ?? 0)} on the waitlist, ${fmtSignedCount(-(metrics.postTxDeathsAdded ?? 0))} after a transplant${removalsClause}. Removal is a separate exit, not a death.`
     : 'Fewer deaths on the waitlist vs. base case (load a base case to net out deaths after transplant)';
   const livesSavedMetric = {
     title: 'Lives Saved',
