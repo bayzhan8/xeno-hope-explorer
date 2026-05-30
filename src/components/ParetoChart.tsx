@@ -108,6 +108,26 @@ const defaultFmt = (v: number): string => {
   return v.toFixed(2);
 };
 
+/**
+ * Y-axis formatter for the MARGINAL (Δy/Δx) view. Callers tune their `formatY`
+ * for cumulative magnitudes (e.g. integer "lives saved", "X.X mo"), but the
+ * per-step derivative is orders of magnitude smaller, so that fixed precision
+ * rounds every tick to "0"/"0.0" and the whole axis reads as zeros. This picks
+ * the precision from the value's magnitude so small-but-nonzero rates stay
+ * legible (down to scientific notation for truly tiny slopes).
+ */
+const marginalFmt = (v: number): string => {
+  if (!Number.isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 10000) return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (a >= 100) return v.toFixed(0);
+  if (a >= 10) return v.toFixed(1);
+  if (a >= 0.1) return v.toFixed(2);
+  if (a >= 0.001) return v.toFixed(4);
+  return v.toExponential(1);
+};
+
 const ParetoChart: React.FC<ParetoChartProps> = ({
   dataset,
   datasets,
@@ -121,6 +141,10 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
   view = 'cumulative',
   supplyAxis,
 }) => {
+  // In marginal mode the caller's cumulative-tuned formatter collapses the
+  // small Δy/Δx values to zeros, so use the magnitude-adaptive formatter for
+  // both the y-axis ticks and the tooltip.
+  const fmtY = view === 'marginal' ? marginalFmt : formatY;
   if (loading) {
     return (
       <div
@@ -251,7 +275,7 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
           </XAxis>
           <YAxis
             type="number"
-            tickFormatter={formatY}
+            tickFormatter={fmtY}
             stroke="hsl(var(--muted-foreground))"
             tick={{ fontSize: 12 }}
           >
@@ -312,10 +336,10 @@ const ParetoChart: React.FC<ParetoChartProps> = ({
                         />
                         <span className="text-foreground">
                           {isMulti ? `${sLabel}: ` : ''}
-                          {formatY(entry.value as number)}
+                          {fmtY(entry.value as number)}
                           {ci !== undefined && Number.isFinite(ci) && (
                             <span className="text-muted-foreground">
-                              {' '}± {formatY(ci)}
+                              {' '}± {fmtY(ci)}
                             </span>
                           )}
                         </span>

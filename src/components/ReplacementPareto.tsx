@@ -203,6 +203,8 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
                 ? `${n.toLocaleString()}/yr`
                 : `${(baseRate > 0 ? n / baseRate : 0).toFixed(1)}×`,
               x: supplyAxis === 'kidneysPerYear' ? n : (baseRate > 0 ? n / baseRate : 0),
+              // Marginal slope is always per +1 kidney/yr (axis-independent).
+              marginalBasis: n,
               xeno_n: n,
               xenoGraftFailureRate,
               postTransplantDeathRate,
@@ -260,6 +262,8 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
                 ? `${n.toLocaleString()}/yr`
                 : `${(baseRate > 0 ? n / baseRate : 0).toFixed(1)}×`,
               x: supplyAxis === 'kidneysPerYear' ? n : (baseRate > 0 ? n / baseRate : 0),
+              // Marginal slope is always per +1 kidney/yr (axis-independent).
+              marginalBasis: n,
               xeno_n: n,
               xenoGraftFailureRate,
               postTransplantDeathRate,
@@ -373,11 +377,11 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
 
   const yLivesLabel =
     view === 'marginal'
-      ? `Δ Lives saved per Δ supply`
+      ? `Δ Lives saved per +1 kidney/yr`
       : `Lives saved by year ${simulationHorizon}`;
   const yWaitLabel =
     view === 'marginal'
-      ? `Δ Wait-time reduction per Δ supply (mo)`
+      ? `Δ Wait-time reduction per +1 kidney/yr (mo)`
       : `Wait time reduction at year ${simulationHorizon} (mo)`;
   const yGraftLabel =
     view === 'marginal'

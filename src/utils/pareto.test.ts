@@ -491,6 +491,40 @@ describe('toMarginalDataset', () => {
     expect(marg!.points.map((p) => p.x)).toEqual([1, 2, 3, 4]);
   });
 
+  it('differences against marginalBasis (kidneys/yr) instead of the plotted x when present', () => {
+    // Reproduces the bug behind the false "marginal" spike: on the "× base"
+    // axis the plotted x is n/baseRate, so a fixed +250-kidney step is a tiny
+    // Δx that multiplies any wiggle by baseRate. With marginalBasis set to the
+    // absolute kidneys/yr, the slope is "Δy per +1 kidney/yr" and is invariant
+    // to the displayed axis.
+    const baseRate = 2841;
+    const ns = [250, 500, 750];
+    const ys = [100, 148, 359]; // a noisy low-supply wiggle (Δ = 48, then 211)
+    const withBasis: ParetoDataset = {
+      points: ns.map((n, i) => ({
+        x: n / baseRate, // multiplier-axis position
+        y: ys[i],
+        label: `${n}`,
+        configName: `cfg_${i}`,
+        inflection: false,
+        marginalBasis: n,
+      })),
+      inflectionIndex: null,
+    };
+    const marg = toMarginalDataset(withBasis)!;
+    // Slopes are per +1 kidney/yr: 48/250 and 211/250 — NOT inflated by 2841.
+    expect(marg.points[0].y).toBeCloseTo(48 / 250, 6);
+    expect(marg.points[1].y).toBeCloseTo(211 / 250, 6);
+    // x positions remain on the displayed (multiplier) axis.
+    expect(marg.points[0].x).toBeCloseTo(500 / baseRate, 6);
+
+    // Without marginalBasis the same data divides by the tiny multiplier Δx,
+    // inflating the slope ~baseRate× (the artifact we removed).
+    const noBasis = makeDataset(ns.map((n) => n / baseRate), ys);
+    const margBad = toMarginalDataset(noBasis)!;
+    expect(margBad.points[1].y).toBeGreaterThan(2000); // ~211 / (250/2841)
+  });
+
   it('skips zero-Δx segments instead of producing NaN/Infinity', () => {
     const ds = makeDataset([0, 1, 1, 2], [0, 5, 5, 10]);
     const marg = toMarginalDataset(ds);

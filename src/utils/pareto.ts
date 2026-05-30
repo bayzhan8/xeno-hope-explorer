@@ -663,11 +663,18 @@ export function toMarginalDataset(ds: ParetoDataset): ParetoDataset | null {
   for (let i = 1; i < ds.points.length; i++) {
     const a = ds.points[i - 1];
     const b = ds.points[i];
-    const dx = b.x - a.x;
-    if (dx === 0) continue;
+    // Difference against the explicit marginal basis (absolute kidneys/yr for
+    // supply sweeps) when BOTH endpoints carry it, so the slope is invariant
+    // to the displayed supply axis and the "× base" axis can't inflate it.
+    // Otherwise fall back to the plotted x (graft-failure-× / survival-month
+    // sweeps, where the displayed x IS the natural denominator).
+    const denomB = b.marginalBasis ?? b.x;
+    const denomA = a.marginalBasis ?? a.x;
+    const dDenom = denomB - denomA;
+    if (dDenom === 0) continue;
     out.push({
       x: b.x,
-      y: (b.y - a.y) / dx,
+      y: (b.y - a.y) / dDenom,
       label: `${a.label} → ${b.label}`,
       configName: b.configName,
       inflection: false,
@@ -694,6 +701,12 @@ export interface ParetoPoint {
   label: string;
   configName: string;
   inflection: boolean;
+  /**
+   * Optional marginal-view denominator (see ParetoPointSpec.marginalBasis).
+   * Carried through so `toMarginalDataset` can difference `y` against the
+   * absolute supply step rather than the (axis-dependent) plotted `x`.
+   */
+  marginalBasis?: number;
   /**
    * Optional 95% CI half-width for `y` (so the band is [y − yCI, y + yCI]).
    * Present only when the loader was given a `metricCI` AND the viz JSONs
@@ -726,6 +739,15 @@ export interface ParetoPointSpec {
   label: string;
   /** Numeric x-axis value associated with this point. */
   x: number;
+  /**
+   * Optional denominator for the MARGINAL (Δy/Δx) view. When set, the marginal
+   * slope is differenced against THIS value instead of the plotted `x`. Supply
+   * sweeps pass the absolute kidneys/yr (`xeno_n`) here so the per-step slope
+   * reads as "Δy per +1 kidney/yr" and is invariant to the displayed supply
+   * axis — otherwise the "× base" axis divides by a tiny Δx and multiplies
+   * Monte-Carlo noise by the (large) base transplant rate, fabricating spikes.
+   */
+  marginalBasis?: number;
   /** Absolute xeno supply in kidneys/yr (a value from the supply grid). */
   xeno_n: number;
   /** Bridge-only: graft survival in months. Required when mode='bridge'. */
@@ -829,6 +851,7 @@ export async function loadParetoDataset(opts: LoadParetoOptions): Promise<Pareto
         label: spec.label,
         configName: scenarioName,
         inflection: false,
+        ...(spec.marginalBasis !== undefined ? { marginalBasis: spec.marginalBasis } : {}),
         ...(yCI !== undefined ? { yCI } : {}),
       };
     } catch (err) {

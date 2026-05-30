@@ -254,6 +254,9 @@ const Bridge: React.FC = () => {
                 ? `${n.toLocaleString()}/yr`
                 : `${(baseRate > 0 ? n / baseRate : 0).toFixed(1)}×`,
               x: overlay === 'off' ? n : (baseRate > 0 ? n / baseRate : 0),
+              // Marginal slope is always per +1 kidney/yr, so the "× base"
+              // overlay axis can't divide by a tiny Δx and inflate noise.
+              marginalBasis: n,
               xeno_n: n,
               surv: params.survivalMonths,
               postTransplantDeathRate: params.postTransplantDeathRate,
@@ -701,7 +704,7 @@ const Bridge: React.FC = () => {
                         ? 'Xeno kidneys per year'
                         : 'Xeno supply (× base, comparable across subgroups)'}
                       yLabel={view === 'marginal'
-                        ? 'Δ Lives saved per Δ supply'
+                        ? 'Δ Lives saved per +1 kidney/yr'
                         : `Lives saved by year ${params.simulationHorizon}`}
                       formatX={overlay === 'off'
                         ? (v) => v.toLocaleString()
