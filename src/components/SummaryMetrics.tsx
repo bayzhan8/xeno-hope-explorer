@@ -120,6 +120,17 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
     : metrics.waitTimeReductionPct;
   const hasWaitData = avgWait !== undefined && Number.isFinite(avgWait);
   const hasReductionData = waitReduction !== undefined && Number.isFinite(waitReduction);
+  // The displayed reduction must NOT be unconditionally green: under
+  // saturation/recycling xeno can lengthen the wait (waitReduction < 0),
+  // which the trend arrow already shows in red. Match the value color to the
+  // direction so a worsening isn't painted as a win.
+  const waitReductionColor = !hasReductionData
+    ? 'text-muted-foreground'
+    : (waitReduction as number) > 0
+      ? 'text-success'
+      : (waitReduction as number) < 0
+        ? 'text-destructive'
+        : 'text-muted-foreground';
   const waitLabel = isBridge ? 'Time on Dialysis' : 'Average Wait Time';
   const waitReductionLabel = isBridge ? 'Dialysis Time Saved' : 'Wait Time Reduction';
   const waitTooltip = isBridge
@@ -227,26 +238,36 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
     metrics.livesSavedTotal !== undefined && Number.isFinite(metrics.livesSavedTotal);
   const hasRemovals =
     metrics.removalsAvoided !== undefined && Number.isFinite(metrics.removalsAvoided);
+  // Pure NET COUNTED deaths avoided (waitlist + post-tx). This hovers near 0
+  // over long horizons — NOT because xeno fails, but because a transplant
+  // DEFERS death (it empties the waitlist-death bucket but the recipient can
+  // still die a post-tx death), and because the base case censors its sickest
+  // candidates via "too sick" REMOVAL (an uncounted exit). We keep this number
+  // visible in the subtitle for full transparency.
+  const netDeathsAverted = hasLivesBreakdown ? metrics.livesSavedTotal! : undefined;
+  // Headline = removal-adjusted adverse outcomes avoided:
+  //   (baseDeaths + baseRemovals) − (scenDeaths + scenRemovals)
+  //   = netDeathsAverted + removalsAvoided.
+  // By conservation (arrivals identical) this is the count of EXTRA patients
+  // kept alive and in care (transplanted or still waiting) rather than
+  // dead-or-removed. It strips the base-case removal-censoring bias that makes
+  // net-deaths-alone read as ~0/negative. Falls back to the waitlist-only
+  // figure when no base case is loaded (no breakdown).
   const livesSavedValue = hasLivesBreakdown
-    ? metrics.livesSavedTotal!
+    ? netDeathsAverted! + (hasRemovals ? (metrics.removalsAvoided ?? 0) : 0)
     : metrics.deathsPrevented;
-  // Counted total deaths can look flat even when xeno clearly helps, because
-  // the sickest candidates otherwise leave via REMOVAL (an uncounted exit, not
-  // a death). So we never paint a near-flat total red as if xeno were harmful:
-  // green when it nets positive, neutral when it's flat/slightly negative but
-  // removals dropped (the honest "deaths just shifted off the removal exit").
   const livesSavedColor =
     livesSavedValue > 0
       ? 'text-success'
-      : hasRemovals && (metrics.removalsAvoided ?? 0) > 0
-        ? 'text-foreground'
-        : 'text-destructive';
+      : livesSavedValue < 0
+        ? 'text-destructive'
+        : 'text-muted-foreground';
   const removalsClause = hasRemovals
-    ? `, ${fmtSignedCount(metrics.removalsAvoided ?? 0)} fewer removed too sick`
+    ? `, ${fmtSignedCount(metrics.removalsAvoided ?? 0)} fewer removed "too sick"`
     : '';
   const livesSavedSubtitle = hasLivesBreakdown
-    ? `Net counted deaths vs. base: ${fmtSignedCount(metrics.livesSavedWaitlist ?? 0)} on the waitlist, ${fmtSignedCount(-(metrics.postTxDeathsAdded ?? 0))} after a transplant${removalsClause}. Removal is a separate exit, not a death.`
-    : 'Fewer deaths on the waitlist vs. base case (load a base case to net out deaths after transplant)';
+    ? `Extra patients alive & in care vs. base over ${horizon} yrs: ${fmtSignedCount(metrics.livesSavedWaitlist ?? 0)} waitlist deaths, ${fmtSignedCount(-(metrics.postTxDeathsAdded ?? 0))} post-transplant deaths${removalsClause}. Net deaths alone ≈ ${fmtSignedCount(netDeathsAverted ?? 0)} (a transplant defers death over this horizon); an avoided "too sick" removal is counted as an avoided adverse outcome.`
+    : 'Fewer deaths on the waitlist vs. base case (load a base case for the full deaths + removals netting)';
   const livesSavedMetric = {
     title: 'Lives Saved',
     value: formatNumber(livesSavedValue),
@@ -556,7 +577,7 @@ const SummaryMetrics: React.FC<SummaryMetricsProps> = ({ metrics, horizon, xenoI
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 {waitReductionLabel}
               </p>
-              <p className="text-xl font-bold text-success">
+              <p className={`text-xl font-bold ${waitReductionColor}`}>
                 {fmtSignedDuration(waitReduction)}
                 <span className="text-sm font-normal text-muted-foreground">
                   {hasReductionData ? fmtSignedPct(waitReductionPct) : ''}

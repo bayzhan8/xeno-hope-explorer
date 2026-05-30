@@ -112,7 +112,7 @@ describe('kneedle', () => {
 describe('viz extractors (totalDeathsAtYear / livesSavedFromViz / waitlistAtYearFromViz)', () => {
   // Synthetic 10-year viz: deaths grow linearly, waitlist grows linearly.
   // x axis is in DAYS to match the production format.
-  const buildViz = (overrides: Partial<{ wl: number[]; wlDeaths: number[]; txDeaths: number[]; total: number[] }>) => {
+  const buildViz = (overrides: Partial<{ wl: number[]; wlDeaths: number[]; txDeaths: number[]; total: number[]; removals: number[] }>) => {
     const xDays = [0, 365, 730, 1095, 1460, 1825, 2190, 2555, 2920, 3285, 3650];
     return {
       total_days: 3650,
@@ -128,6 +128,9 @@ describe('viz extractors (totalDeathsAtYear / livesSavedFromViz / waitlistAtYear
         : undefined,
       cumulative_deaths: overrides.total
         ? { x: xDays, series: [{ label: 'Total deaths', y: overrides.total }] }
+        : undefined,
+      cumulative_waitlist_removals: overrides.removals
+        ? { x: xDays, series: [{ label: 'Total waitlist removals', y: overrides.removals }] }
         : undefined,
     };
   };
@@ -161,11 +164,12 @@ describe('viz extractors (totalDeathsAtYear / livesSavedFromViz / waitlistAtYear
     expect(livesSavedFromViz(scen, base, 10)).toBe(400);
   });
 
-  it('livesSavedFromViz uses NET TOTAL deaths (waitlist + post-tx)', () => {
-    // Honest "lives saved": count ALL deaths, not just waitlist. A bridge
-    // reduces waitlist deaths but adds post-tx exposure, so the net can be
-    // slightly negative — that's the unbiased signal we want to surface,
-    // matching the summary card's `livesSavedTotal`.
+  it('livesSavedFromViz uses NET TOTAL deaths when the removals series is absent', () => {
+    // Fallback path (no `cumulative_waitlist_removals` in the fixtures): count
+    // ALL deaths, not just waitlist. A transplant reduces waitlist deaths but
+    // adds post-tx exposure, so the deaths-only net can be slightly negative.
+    // The production headline removal-adjusts this (see the next test); here we
+    // pin the legacy deaths-only behavior used when removals are unavailable.
     //
     // Numbers mirror 95 %+, 12-mo, prop=1 production data:
     //   base wl=43636, scen wl=43216, base tx=112854, scen tx=113297.
@@ -186,6 +190,29 @@ describe('viz extractors (totalDeathsAtYear / livesSavedFromViz / waitlistAtYear
     const base = buildViz({ total: [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000] });
     const scen = buildViz({ total: [0, 60, 120, 180, 240, 300, 360, 420, 480, 540, 600] });
     expect(livesSavedFromViz(scen, base, 10)).toBe(400);
+  });
+
+  it('livesSavedFromViz removal-adjusts when the removals series is present', () => {
+    // Mirrors the production confound: net total deaths is ~flat/negative, but
+    // the base case censors many more "too sick" removals. The headline must
+    // add (baseRemovals − scenRemovals) so it reflects extra patients kept
+    // alive & in care rather than the misleading near-zero deaths-only figure.
+    //   net total deaths diff = 156794 − 156828 = −34
+    //   removals diff         = 86211 − 79528   = +6683
+    //   removal-adjusted      = −34 + 6683       = +6649
+    const base = buildViz({
+      wlDeaths: Array.from({ length: 11 }, (_, i) => Math.round((43713 / 10) * i)),
+      txDeaths: Array.from({ length: 11 }, (_, i) => Math.round((113081 / 10) * i)),
+      removals: Array.from({ length: 11 }, (_, i) => Math.round((86211 / 10) * i)),
+    });
+    const scen = buildViz({
+      wlDeaths: Array.from({ length: 11 }, (_, i) => Math.round((40810 / 10) * i)),
+      txDeaths: Array.from({ length: 11 }, (_, i) => Math.round((116018 / 10) * i)),
+      removals: Array.from({ length: 11 }, (_, i) => Math.round((79528 / 10) * i)),
+    });
+    // Deaths-only would be ~−34; the removal-adjusted value is robustly positive.
+    expect(livesSavedFromViz(scen, base, 10)).toBeGreaterThan(6000);
+    expect(livesSavedFromViz(scen, base, 10)).toBeCloseTo(6649, -2);
   });
 
   it('waitlistAtYearFromViz returns the Total waitlist value at the requested year', () => {
