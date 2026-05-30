@@ -1,27 +1,42 @@
+// ─── Per-(threshold, cPRA) aggregate rates ────────────────────────────────
+// REGENERATED from the actual per-age simulator input pickles
+// (inputs_age/sim_inputs85.pkl, sim_inputs2.pkl, sim_inputs99.pkl) so they
+// match what the simulator actually runs. The pickle is age-stratified
+// (4 age bins per cPRA group); these are the cPRA-group rollups used only by
+// the front-end display helpers (`getWlRemovalRates`, `getBridgeMortalityRates`)
+// and the Little's-Law wl_removal correction. They are NOT fed back into the
+// simulator. Aggregation:
+//   - waitlist-state hazards (waitlist death, wl_removal): C_start-weighted
+//     mean over ages (matches Σ rate·C / Σ C, the group's effective hazard).
+//   - recipient-state hazards (death with tx, relisting): H_start-weighted.
+//   - C_start / H_start / arrival / transplant: summed over ages.
+// The previous hardcoded values were stale (an older non-age-stratified
+// vintage) and understated the dialysis-vs-transplant mortality gap.
+
 // Fixed parameters for 85% CPRA threshold
 const FIXED_PARAMS_85 = {
   rates_cpra: {
     '0-85': {
-      C_start: 77406,
-      H_start: 229727,
-      wl_removal: 0.0002721411438431126,
+      C_start: 79486,
+      H_start: 269318,
+      wl_removal: 0.00026440691493434196,
       'returned after removal': 0,
-      relisting: 2.1923193403554697e-05,
-      'death with tx': 0.00012645653972841005,
-      arrival: 88.46301369863014,
-      transplant: 61.63013698630137,
-      'waitlist death': 0.00013868799389249342
+      relisting: 2.8629836335793063e-05,
+      'death with tx': 8.496502647379132e-05,
+      arrival: 92.8986301369863,
+      transplant: 62.079452054794515,
+      'waitlist death': 0.0001366241274419106
     },
     '85-100': {
-      C_start: 10900,
-      H_start: 23402,
-      wl_removal: 0.0002835907220782278,
+      C_start: 8794,
+      H_start: 21302,
+      wl_removal: 0.0003334157108723134,
       'returned after removal': 0,
-      relisting: 0.00015338345481403357,
-      'death with tx': 0.0001128364690248253,
-      arrival: 6.6219178082191785,
-      transplant: 8.035616438356165,
-      'waitlist death': 0.0001239570098340096
+      relisting: 4.3015816872412575e-05,
+      'death with tx': 9.673256030370093e-05,
+      arrival: 2.1671232876712327,
+      transplant: 7.7835616438356166,
+      'waitlist death': 0.00014871712789626284
     }
   },
   low_key: '0-85',
@@ -33,26 +48,26 @@ const FIXED_PARAMS_85 = {
 const FIXED_PARAMS_95 = {
   rates_cpra: {
     '0-95': {
-      C_start: 80409,
-      H_start: 238118,
-      wl_removal: 0.0002720666007028558,
+      C_start: 81835,
+      H_start: 277317,
+      wl_removal: 0.00026599340281411937,
       'returned after removal': 0,
-      relisting: 2.4513018943435112e-05,
-      'death with tx': 0.00012624769571973772,
-      arrival: 91.03835616438356,
-      transplant: 64.7013698630137,
-      'waitlist death': 0.00013855812207854242
+      relisting: 2.9010124925944272e-05,
+      'death with tx': 8.530246691579481e-05,
+      arrival: 93.75890410958905,
+      transplant: 65.14246575342466,
+      'waitlist death': 0.00013741444475902636
     },
     '95-100': {
-      C_start: 7897,
-      H_start: 15011,
-      wl_removal: 0.00028860543641315886,
+      C_start: 6445,
+      H_start: 13303,
+      wl_removal: 0.0003381372842696963,
       'returned after removal': 0,
-      relisting: 0.00018666108260153154,
-      'death with tx': 0.00010843080431823859,
-      arrival: 4.046575342465753,
-      transplant: 4.964383561643835,
-      'waitlist death': 0.0001198657931209164
+      relisting: 4.378286389263719e-05,
+      'death with tx': 9.713791846490176e-05,
+      arrival: 1.3068493150684932,
+      transplant: 4.72054794520548,
+      'waitlist death': 0.0001428792875915326
     }
   },
   low_key: '0-95',
@@ -64,26 +79,26 @@ const FIXED_PARAMS_95 = {
 const FIXED_PARAMS_99 = {
   rates_cpra: {
     '0-99': {
-      C_start: 82864,
-      H_start: 244614,
-      wl_removal: 0.0002730779450763655,
+      C_start: 83878,
+      H_start: 283285,
+      wl_removal: 0.0002675718158823498,
       'returned after removal': 0,
-      relisting: 2.735176965784718e-05,
-      'death with tx': 0.00012577194925900294,
-      arrival: 92.78904109589041,
-      transplant: 66.79452054794521,
-      'waitlist death': 0.00013831220594776955
+      relisting: 2.925468116462236e-05,
+      'death with tx': 8.547909676516938e-05,
+      arrival: 94.37534246575343,
+      transplant: 67.1945205479452,
+      'waitlist death': 0.00013769207694358412
     },
     '99-100': {
-      C_start: 5442,
-      H_start: 8515,
-      wl_removal: 0.00028023007713538924,
+      C_start: 4402,
+      H_start: 7335,
+      wl_removal: 0.000341182192160926,
       'returned after removal': 0,
-      relisting: 0.0002291157296188794,
-      'death with tx': 0.00010857952771783283,
-      arrival: 2.2958904109589042,
-      transplant: 2.871232876712329,
-      'waitlist death': 0.00011538885529104263
+      relisting: 4.6382822483912334e-05,
+      'death with tx': 0.00010040543411829085,
+      arrival: 0.6904109589041096,
+      transplant: 2.6684931506849314,
+      'waitlist death': 0.00013995027383539301
     }
   },
   low_key: '0-99',

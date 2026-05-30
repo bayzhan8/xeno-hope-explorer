@@ -203,6 +203,15 @@ interface SimulationData {
     baseTotal: number;
     baseWaitlist: number;
     basePostTx: number;
+    // Waitlist REMOVALS (too sick / declined / moved). A DISTINCT exit from
+    // death, never counted in any death bucket. Sourced from the backend
+    // `cumulative_waitlist_removals` series when present, else estimated as
+    // ∫ wl_removal_rate · C(t) dt from the waitlist trajectory. Surfacing
+    // this is what makes "total deaths" interpretable: a transplant removes
+    // the removal escape-hatch, so flat total deaths is a censoring effect,
+    // not xeno causing harm.
+    scenarioRemovals?: number;
+    baseRemovals?: number;
   }>;
   // Legacy scalar fields: end-of-series cumulative procedure count for
   // backwards compatibility. Prefer the *Series fields below + horizon
@@ -2525,12 +2534,39 @@ export function transformVizDataToSimulationData(
       if (!y) return null;
       return { xDays: chart.x as number[], y };
     };
+    // Cumulative waitlist removals: prefer the backend series; otherwise
+    // estimate ∫ wl_removal_rate · C(t) dt from the waitlist trajectory
+    // (same Little's-Law inputs used by the wait-time correction), so the
+    // removal exit is visible even on viz JSONs predating the series.
+    const estCumRemovals = (viz: VizData | null): { xDays: number[]; y: number[] } | null => {
+      const chart = (viz as any)?.waitlist_sizes;
+      if (!chart?.series || !chart?.x?.length) return null;
+      const low = aggregateAgeSeries(chart.series, 'low cpra');
+      const high = aggregateAgeSeries(chart.series, 'high cpra');
+      if (!low && !high) return null;
+      const thr = (viz as any)?.highCPRAThreshold ?? 85;
+      const rr = getWlRemovalRates(thr);
+      const xDays = chart.x as number[];
+      const y: number[] = new Array(xDays.length).fill(0);
+      let acc = 0;
+      for (let k = 1; k < xDays.length; k++) {
+        const dt = xDays[k] - xDays[k - 1];
+        const lowFlux = (((low?.[k - 1] ?? 0) + (low?.[k] ?? 0)) / 2) * rr.low;
+        const highFlux = (((high?.[k - 1] ?? 0) + (high?.[k] ?? 0)) / 2) * rr.high;
+        acc += (lowFlux + highFlux) * dt;
+        y[k] = acc;
+      }
+      return { xDays, y };
+    };
+
     const sTot = cumTotal(vizData, ['cumulative_deaths'], ['total deaths', 'total']);
     const sWl = cumTotal(vizData, ['cumulative_waitlist_deaths'], ['total waitlist deaths', 'total']);
     const sPt = cumTotal(vizData, ['cumulative_post_tx_deaths'], ['total post-tx deaths', 'total post tx deaths', 'total']);
+    const sRem = cumTotal(vizData, ['cumulative_waitlist_removals'], ['total waitlist removals', 'total']) ?? estCumRemovals(vizData);
     const bTot = cumTotal(baseVizData, ['cumulative_deaths'], ['total deaths', 'total']);
     const bWl = cumTotal(baseVizData, ['cumulative_waitlist_deaths'], ['total waitlist deaths', 'total']);
     const bPt = cumTotal(baseVizData, ['cumulative_post_tx_deaths'], ['total post-tx deaths', 'total post tx deaths', 'total']);
+    const bRem = cumTotal(baseVizData, ['cumulative_waitlist_removals'], ['total waitlist removals', 'total']) ?? estCumRemovals(baseVizData);
     if (sTot && sWl && bTot && bWl) {
       const maxDays = Math.max(...sTot.xDays);
       const maxYear = Math.floor(daysToYears(maxDays));
@@ -2546,6 +2582,8 @@ export function transformVizDataToSimulationData(
           baseTotal: at(bTot, yr),
           baseWaitlist: at(bWl, yr),
           basePostTx: at(bPt, yr),
+          scenarioRemovals: sRem ? at(sRem, yr) : undefined,
+          baseRemovals: bRem ? at(bRem, yr) : undefined,
         });
       }
     }
@@ -2565,6 +2603,7 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
       livesSavedTotal: undefined as number | undefined,
       livesSavedWaitlist: undefined as number | undefined,
       postTxDeathsAdded: undefined as number | undefined,
+      removalsAvoided: undefined as number | undefined,
       totalTransplants: 0,
       xenoTransplants: 0,
       penetrationRate: 0,
@@ -2736,6 +2775,11 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
   let livesSavedTotal: number | undefined;
   let livesSavedWaitlist: number | undefined;
   let postTxDeathsAdded: number | undefined;
+  // Removals avoided = fewer patients leaving the list "too sick / declined"
+  // because they got a transplant instead. Positive = xeno kept people from
+  // the removal exit. Kept SEPARATE from deaths (removal is not death); it's
+  // the missing piece that explains why counted total deaths look flat.
+  let removalsAvoided: number | undefined;
   const breakdown = data.deathsBreakdownByYear;
   if (breakdown && breakdown.length) {
     const row =
@@ -2747,6 +2791,9 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
       livesSavedWaitlist = row.baseWaitlist - row.scenarioWaitlist;
       // Positive = MORE post-tx deaths than base (the cost side of the ledger).
       postTxDeathsAdded = row.scenarioPostTx - row.basePostTx;
+      if (row.baseRemovals !== undefined && row.scenarioRemovals !== undefined) {
+        removalsAvoided = row.baseRemovals - row.scenarioRemovals;
+      }
     }
   }
 
@@ -2756,6 +2803,7 @@ export function calculateSummaryMetrics(data: SimulationData, horizon: number) {
     livesSavedTotal,
     livesSavedWaitlist,
     postTxDeathsAdded,
+    removalsAvoided,
     totalTransplants,
     xenoTransplants,
     bridgeAlloTransplants,
