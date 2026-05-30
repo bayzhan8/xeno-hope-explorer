@@ -18,12 +18,9 @@
  *      kneedle handles either direction).
  *
  * NEW (Problem 6.1 / 6.4): a toolbar above the cards exposes a tri-state
- * overlay selector ("off | thresholds | strategies") and a binary view
- * selector ("cumulative | marginal"). When overlay is on, each card
- * renders one curve per subgroup on the same axes (with shared color
- * coding across cards). When marginal view is on, each curve is
- * transformed to its per-step Δy/Δx so the user can spot
- * acceleration/deceleration patterns the cumulative shape hides.
+ * overlay selector ("off | thresholds | strategies"). When overlay is on,
+ * each card renders one curve per subgroup on the same axes (with shared
+ * color coding across cards).
  *
  * All charts compare against the same canonical "no xeno" base
  * (`xeno_age_prop0_relist1_death1`) so y values are self-consistent
@@ -48,7 +45,6 @@ import { nonZeroSupplyPoints, effectiveThreshold } from '@/utils/supplyGrid';
 import { XENO_RELIST_MULTIPLIERS } from '@/utils/configFinder';
 import {
   type OverlayMode,
-  type ParetoView,
   type SupplyAxis,
   THRESHOLDS,
   THRESHOLD_PALETTE,
@@ -136,13 +132,11 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
 }) => {
   const strategy = targetingStrategy || 'standard';
 
-  // Toolbar state. Defaults: overlay off (matches the previous UI),
-  // cumulative view (the headline, easy-to-read direction), and
+  // Toolbar state. Defaults: overlay off (matches the previous UI) and
   // supply axis = kidneys/yr (the clinically meaningful unit when
   // looking at a single subgroup; users can flip to × multiplier
   // for cross-subgroup shape comparison).
   const [overlay, setOverlay] = useState<OverlayMode>('off');
-  const [view, setView] = useState<ParetoView>('cumulative');
   const [supplyAxis, setSupplyAxis] = useState<SupplyAxis>('kidneysPerYear');
 
   const subgroups = useMemo(
@@ -203,8 +197,6 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
                 ? `${n.toLocaleString()}/yr`
                 : `${(baseRate > 0 ? n / baseRate : 0).toFixed(1)}×`,
               x: supplyAxis === 'kidneysPerYear' ? n : (baseRate > 0 ? n / baseRate : 0),
-              // Marginal slope is always per +1 kidney/yr (axis-independent).
-              marginalBasis: n,
               xeno_n: n,
               xenoGraftFailureRate,
               postTransplantDeathRate,
@@ -262,8 +254,6 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
                 ? `${n.toLocaleString()}/yr`
                 : `${(baseRate > 0 ? n / baseRate : 0).toFixed(1)}×`,
               x: supplyAxis === 'kidneysPerYear' ? n : (baseRate > 0 ? n / baseRate : 0),
-              // Marginal slope is always per +1 kidney/yr (axis-independent).
-              marginalBasis: n,
               xeno_n: n,
               xenoGraftFailureRate,
               postTransplantDeathRate,
@@ -375,18 +365,9 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
       ? (v: number) => v.toLocaleString()
       : (v: number) => `${v}×`;
 
-  const yLivesLabel =
-    view === 'marginal'
-      ? `Δ Lives saved per +1 kidney/yr`
-      : `Lives saved by year ${simulationHorizon}`;
-  const yWaitLabel =
-    view === 'marginal'
-      ? `Δ Wait-time reduction per +1 kidney/yr (mo)`
-      : `Wait time reduction at year ${simulationHorizon} (mo)`;
-  const yGraftLabel =
-    view === 'marginal'
-      ? `Δ Waitlist reduction per Δ failure×`
-      : `Waitlist reduction at year ${simulationHorizon}`;
+  const yLivesLabel = `Lives saved by year ${simulationHorizon}`;
+  const yWaitLabel = `Wait time reduction at year ${simulationHorizon} (mo)`;
+  const yGraftLabel = `Waitlist reduction at year ${simulationHorizon}`;
 
   return (
     <div>
@@ -401,8 +382,7 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
           year {simulationHorizon}. Each sweep holds your other multipliers
           fixed at the values selected on the left. Use the toolbar to
           overlay subgroups (cPRA thresholds or allocation strategies) on
-          the same axes, and to switch between cumulative and per-step
-          marginal views.
+          the same axes.
         </p>
       </div>
 
@@ -445,24 +425,6 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
             },
           ]}
         />
-        <SegmentedControl<ParetoView>
-          label="View:"
-          ariaLabel="Pareto view"
-          value={view}
-          onChange={setView}
-          options={[
-            {
-              value: 'cumulative',
-              label: 'Cumulative',
-              hint: 'Plot total y at each x (default: lives saved by year H).',
-            },
-            {
-              value: 'marginal',
-              label: 'Marginal',
-              hint: 'Plot per-step rate of return (Δy/Δx) so saturation/acceleration shows up directly.',
-            },
-          ]}
-        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -491,7 +453,6 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               yLabel={yLivesLabel}
               formatX={supplyFormatX}
               formatY={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-              view={view}
               supplyAxis={supplyAxis}
             />
           </CardContent>
@@ -517,7 +478,6 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
               yLabel={yWaitLabel}
               formatX={supplyFormatX}
               formatY={(v) => `${v.toFixed(1)} mo`}
-              view={view}
               supplyAxis={supplyAxis}
             />
           </CardContent>
@@ -560,7 +520,6 @@ const ReplacementPareto: React.FC<ReplacementParetoProps> = ({
                 formatY={(v) =>
                   v.toLocaleString(undefined, { maximumFractionDigits: 0 })
                 }
-                view={view}
               />
             )}
           </CardContent>

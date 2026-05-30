@@ -645,49 +645,6 @@ export function classifyCurveShape(xs: number[], ys: number[]): CurveShape {
   return 's-shape';
 }
 
-/**
- * Convert a (cumulative) Pareto dataset into a "marginal" version where
- * each y is the per-x-unit slope of the original curve at that step.
- * Length goes from N points → N-1 points; the marginal y at index i
- * lives at the original x[i+1] ("the marginal return when we went from
- * x[i] to x[i+1]"). Inflection annotation is recomputed against the
- * marginal series — the marginal-curve's "knee" is where the curve's
- * acceleration peaks (often a more clinically useful inflection than
- * the cumulative knee).
- *
- * Returns null if the input has fewer than 2 points (no segments).
- */
-export function toMarginalDataset(ds: ParetoDataset): ParetoDataset | null {
-  if (!ds || ds.points.length < 2) return null;
-  const out: ParetoPoint[] = [];
-  for (let i = 1; i < ds.points.length; i++) {
-    const a = ds.points[i - 1];
-    const b = ds.points[i];
-    // Difference against the explicit marginal basis (absolute kidneys/yr for
-    // supply sweeps) when BOTH endpoints carry it, so the slope is invariant
-    // to the displayed supply axis and the "× base" axis can't inflate it.
-    // Otherwise fall back to the plotted x (graft-failure-× / survival-month
-    // sweeps, where the displayed x IS the natural denominator).
-    const denomB = b.marginalBasis ?? b.x;
-    const denomA = a.marginalBasis ?? a.x;
-    const dDenom = denomB - denomA;
-    if (dDenom === 0) continue;
-    out.push({
-      x: b.x,
-      y: (b.y - a.y) / dDenom,
-      label: `${a.label} → ${b.label}`,
-      configName: b.configName,
-      inflection: false,
-    });
-  }
-  if (out.length < 2) return { points: out, inflectionIndex: null };
-  const xs = out.map((p) => p.x);
-  const ys = out.map((p) => p.y);
-  const knee = kneedle(xs, ys);
-  if (knee !== null) out[knee].inflection = true;
-  return { points: out, inflectionIndex: knee };
-}
-
 // ─── Pareto dataset loader ──────────────────────────────────────────────────
 
 /**
@@ -701,12 +658,6 @@ export interface ParetoPoint {
   label: string;
   configName: string;
   inflection: boolean;
-  /**
-   * Optional marginal-view denominator (see ParetoPointSpec.marginalBasis).
-   * Carried through so `toMarginalDataset` can difference `y` against the
-   * absolute supply step rather than the (axis-dependent) plotted `x`.
-   */
-  marginalBasis?: number;
   /**
    * Optional 95% CI half-width for `y` (so the band is [y − yCI, y + yCI]).
    * Present only when the loader was given a `metricCI` AND the viz JSONs
@@ -739,15 +690,6 @@ export interface ParetoPointSpec {
   label: string;
   /** Numeric x-axis value associated with this point. */
   x: number;
-  /**
-   * Optional denominator for the MARGINAL (Δy/Δx) view. When set, the marginal
-   * slope is differenced against THIS value instead of the plotted `x`. Supply
-   * sweeps pass the absolute kidneys/yr (`xeno_n`) here so the per-step slope
-   * reads as "Δy per +1 kidney/yr" and is invariant to the displayed supply
-   * axis — otherwise the "× base" axis divides by a tiny Δx and multiplies
-   * Monte-Carlo noise by the (large) base transplant rate, fabricating spikes.
-   */
-  marginalBasis?: number;
   /** Absolute xeno supply in kidneys/yr (a value from the supply grid). */
   xeno_n: number;
   /** Bridge-only: graft survival in months. Required when mode='bridge'. */
@@ -851,7 +793,6 @@ export async function loadParetoDataset(opts: LoadParetoOptions): Promise<Pareto
         label: spec.label,
         configName: scenarioName,
         inflection: false,
-        ...(spec.marginalBasis !== undefined ? { marginalBasis: spec.marginalBasis } : {}),
         ...(yCI !== undefined ? { yCI } : {}),
       };
     } catch (err) {

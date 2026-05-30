@@ -43,7 +43,6 @@ import {
 import { nonZeroSupplyPoints, effectiveThreshold, nearestSupplyPoint } from '@/utils/supplyGrid';
 import {
   type OverlayMode,
-  type ParetoView,
   THRESHOLDS,
   THRESHOLD_PALETTE,
   THRESHOLD_LABEL,
@@ -71,11 +70,8 @@ const Bridge: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Pareto toolbar state. Defaults match the previous UI (overlay off,
-  // cumulative view) so the page renders identically until the user
-  // opts into the new modes.
+  // Pareto toolbar state. Defaults match the previous UI (overlay off).
   const [overlay, setOverlay] = useState<OverlayMode>('off');
-  const [view, setView] = useState<ParetoView>('cumulative');
 
   // Pareto state — separate so the main chart load doesn't block them
   // and vice-versa. Each card now owns an array of ParetoSeries (one
@@ -254,9 +250,6 @@ const Bridge: React.FC = () => {
                 ? `${n.toLocaleString()}/yr`
                 : `${(baseRate > 0 ? n / baseRate : 0).toFixed(1)}×`,
               x: overlay === 'off' ? n : (baseRate > 0 ? n / baseRate : 0),
-              // Marginal slope is always per +1 kidney/yr, so the "× base"
-              // overlay axis can't divide by a tiny Δx and inflate noise.
-              marginalBasis: n,
               xeno_n: n,
               surv: params.survivalMonths,
               postTransplantDeathRate: params.postTransplantDeathRate,
@@ -624,7 +617,7 @@ const Bridge: React.FC = () => {
                 </p>
               </div>
 
-              {/* Toolbar: overlay + view selectors */}
+              {/* Toolbar: overlay selector */}
               <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-4">
                 <SegmentedControl<OverlayMode>
                   label="Overlay:"
@@ -642,24 +635,6 @@ const Bridge: React.FC = () => {
                       value: 'strategies',
                       label: 'All 5 strategies',
                       hint: 'Compare the same sweep across all five allocation strategies.',
-                    },
-                  ]}
-                />
-                <SegmentedControl<ParetoView>
-                  label="View:"
-                  ariaLabel="Pareto view"
-                  value={view}
-                  onChange={setView}
-                  options={[
-                    {
-                      value: 'cumulative',
-                      label: 'Cumulative',
-                      hint: 'Plot total y at each x.',
-                    },
-                    {
-                      value: 'marginal',
-                      label: 'Marginal',
-                      hint: 'Plot per-step rate of return (Δy/Δx) so saturation/acceleration shows up directly.',
                     },
                   ]}
                 />
@@ -703,14 +678,11 @@ const Bridge: React.FC = () => {
                       xLabel={overlay === 'off'
                         ? 'Xeno kidneys per year'
                         : 'Xeno supply (× base, comparable across subgroups)'}
-                      yLabel={view === 'marginal'
-                        ? 'Δ Lives saved per +1 kidney/yr'
-                        : `Lives saved by year ${params.simulationHorizon}`}
+                      yLabel={`Lives saved by year ${params.simulationHorizon}`}
                       formatX={overlay === 'off'
                         ? (v) => v.toLocaleString()
                         : (v) => `${v.toFixed(1)}×`}
                       formatY={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      view={view}
                     />
                   </CardContent>
                 </Card>
@@ -741,12 +713,9 @@ const Bridge: React.FC = () => {
                         loading={waitTimeLoading}
                         error={waitTimeError}
                         xLabel="Mean graft survival (months)"
-                        yLabel={view === 'marginal'
-                          ? 'Δ Wait-time reduction per Δ months (mo)'
-                          : `Wait time reduction at year ${params.simulationHorizon} (mo)`}
+                        yLabel={`Wait time reduction at year ${params.simulationHorizon} (mo)`}
                         formatX={(v) => `${v} mo`}
                         formatY={(v) => `${v.toFixed(1)} mo`}
-                        view={view}
                       />
                     )}
                   </CardContent>

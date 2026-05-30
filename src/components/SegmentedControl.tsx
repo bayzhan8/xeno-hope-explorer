@@ -1,11 +1,11 @@
 /**
  * Tiny segmented-control primitive for the Pareto toolbar.
  *
- * Used by `ReplacementPareto` and `Bridge` to expose the new overlay
- * selector (off / thresholds / strategies) and view selector
- * (cumulative / marginal). Pure Tailwind + native <button>; no shadcn
- * Button primitive needed because the dashboard's dependency footprint
- * doesn't include one yet.
+ * Used by `ReplacementPareto` and `Bridge` to expose the overlay
+ * selector (off / thresholds / strategies) and the supply x-axis
+ * selector (kidneys/yr / × multiplier). Pure Tailwind + native <button>;
+ * no shadcn Button primitive needed because the dashboard's dependency
+ * footprint doesn't include one yet.
  */
 import React from 'react';
 import { cn } from '@/lib/utils';
