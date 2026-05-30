@@ -3,9 +3,11 @@
  *
  * Three metrics are exposed for use as a Pareto y-axis:
  *
- *   1. `livesSavedFromViz`           — base − scenario TOTAL deaths
- *      (waitlist + post-tx) at year H (the honest "lives saved" number,
- *      matching the summary card's headline).
+ *   1. `livesSavedFromViz`           — removal-adjusted adverse outcomes
+ *      avoided at year H: (baseDeaths+baseRemovals) − (scenDeaths+scenRemovals),
+ *      deaths = waitlist + post-tx. Equals the extra patients kept alive and
+ *      in care; matches the summary card's "Lives Saved" headline. Falls back
+ *      to deaths-only when the removals series is absent.
  *   2. `waitlistReductionFromViz`    — base − scenario waitlist size at
  *      year H (does the intervention shrink the queue).
  *   3. `waitTimeReductionFromViz`    — base − scenario wait time per
@@ -55,6 +57,11 @@ interface VizLike {
   cumulative_waitlist_deaths?: ChartLike;
   cumulative_post_tx_deaths?: ChartLike;
   cumulative_deaths?: ChartLike;
+  // "Too sick / declined / moved" exits — a DISTINCT outcome from death.
+  // Used to remove the base-case removal-censoring bias from the lives-saved
+  // comparison (see livesSavedFromViz). Optional: absent on viz JSONs that
+  // predate the series, in which case lives-saved falls back to deaths-only.
+  cumulative_waitlist_removals?: ChartLike;
   // `computeWaitTimeByYear` reads these for the Little's-Law wait-time
   // metric. They're optional because the existing lives-saved /
   // waitlist-reduction extractors don't need them.
@@ -244,17 +251,31 @@ export function waitlistDeathsAtYear(
   return valueAtYear(viz.cumulative_waitlist_deaths, targetYear);
 }
 
+/** Cumulative "too sick / declined / moved" removals at `targetYear`. */
+export function removalsAtYear(viz: VizLike, targetYear: number): number | null {
+  return valueAtYear(viz.cumulative_waitlist_removals, targetYear);
+}
+
 /**
- * Lives saved = NET TOTAL deaths prevented (base − scenario) at
- * `targetYear`, counting waitlist + post-transplant deaths.
+ * Lives saved = removal-adjusted adverse outcomes avoided (base − scenario)
+ * at `targetYear`:
  *
- * This matches the honest headline "Lives Saved" the summary card shows
- * (`livesSavedTotal` in dataTransformer.ts), so the curve and the headline
- * can't contradict each other. Total deaths is the unbiased figure: it
- * does NOT hide post-transplant mortality the intervention introduces.
- * The trade-off is that this difference is noisier than the waitlist-only
- * view (it can dip slightly negative), but that's the honest signal — we
- * fall back to waitlist deaths only if total isn't available in the JSON.
+ *   (baseDeaths + baseRemovals) − (scenDeaths + scenRemovals)
+ *
+ * where deaths = waitlist + post-transplant. Net TOTAL deaths alone is ~0
+ * over long horizons and can dip negative — NOT because xeno harms, but
+ * because (a) transplant DEFERS death (waitlist-death bucket → post-tx
+ * bucket) rather than eliminating it, and (b) the base case censors its
+ * sickest candidates via "too sick" REMOVAL (an uncounted exit), so its
+ * counted deaths are artificially low. Adding the removal term removes that
+ * censoring bias. By conservation (arrivals are identical in base and
+ * scenario) this equals the number of EXTRA patients kept alive and in care
+ * (transplanted or still waiting) instead of dead-or-removed.
+ *
+ * This matches the summary card's "Lives Saved" headline so the curve and
+ * the headline can't contradict each other. The removal term is optional:
+ * when `cumulative_waitlist_removals` is absent from either viz JSON we fall
+ * back to the deaths-only difference (the legacy behavior).
  *
  * Falls back to the legacy `cumulative_deaths` Total series only if
  * `cumulative_waitlist_deaths` isn't present in EITHER viz JSON.
@@ -266,7 +287,15 @@ export function livesSavedFromViz(
 ): number | null {
   const scenT = totalDeathsAtYear(scenarioViz, targetYear);
   const baseT = totalDeathsAtYear(baseViz, targetYear);
-  if (scenT !== null && baseT !== null) return baseT - scenT;
+  if (scenT !== null && baseT !== null) {
+    let lives = baseT - scenT;
+    // Remove the base-case removal-censoring bias when the series is present
+    // in BOTH JSONs (deployed data carries it; older JSONs may not).
+    const scenR = removalsAtYear(scenarioViz, targetYear);
+    const baseR = removalsAtYear(baseViz, targetYear);
+    if (scenR !== null && baseR !== null) lives += baseR - scenR;
+    return lives;
+  }
 
   // Fallback: waitlist-only deaths if the total-death charts are absent.
   const scen = waitlistDeathsAtYear(scenarioViz, targetYear);
