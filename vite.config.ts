@@ -19,5 +19,11 @@ export default defineConfig(() => ({
     environment: "jsdom",
     globals: true,
     include: ["src/**/*.test.{ts,tsx}"],
+    // Fixture value so configFinder's required-env check passes under test.
+    // Not a real project URL.
+    env: {
+      VITE_SUPABASE_STORAGE_URL:
+        "https://test.supabase.co/storage/v1/object/public/viz-data",
+    },
   },
 }));
