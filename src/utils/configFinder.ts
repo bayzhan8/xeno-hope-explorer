@@ -122,8 +122,22 @@ interface ExperimentConfigs {
 
 import { supplyToken } from './supplyGrid';
 
-// Supabase Storage base URL
-const SUPABASE_STORAGE_URL = 'https://bkgpfnhbmkxzwtixiwnh.supabase.co/storage/v1/object/public/viz-data';
+// Supabase Storage base URL. Supplied ONLY at build time via the env var
+// VITE_SUPABASE_STORAGE_URL — nothing is hardcoded here. Set it in .env /
+// .env.local locally (see .env.example) and in the Vercel project env for
+// production. It is a PUBLIC read endpoint (no key) and Vite inlines it into
+// the client bundle at build time, so it is not a secret — but keeping it out
+// of source means the repo carries no project-specific config at all.
+const SUPABASE_STORAGE_URL = import.meta.env.VITE_SUPABASE_STORAGE_URL as
+  | string
+  | undefined;
+
+if (!SUPABASE_STORAGE_URL) {
+  throw new Error(
+    'VITE_SUPABASE_STORAGE_URL is not set. Copy .env.example to .env (or set ' +
+      'it in the Vercel project env) with the public viz-data bucket base URL.',
+  );
+}
 
 // All runners now emit relist/death multipliers via Python `str(float)`, e.g.
 // str(1.0) = "1.0" → "1p0", str(0.8) = "0.8" → "0p8". Every supported value

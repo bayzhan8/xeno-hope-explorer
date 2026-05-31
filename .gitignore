@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Env files are shared with collaborators out of band, not via git.
+# .env.example stays tracked as the documented template.
+.env
+.env.*
+!.env.example
+
 # Dev server pid file (written by local dev wrapper, never source)
 .dev_pid
 
