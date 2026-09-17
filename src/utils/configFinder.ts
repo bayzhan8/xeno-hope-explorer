@@ -108,7 +108,7 @@ const FIXED_PARAMS_99 = {
 
 interface UserInputs {
   xeno_n: number; // absolute xeno supply in kidneys/yr (from the supply grid)
-  xenoGraftFailureRate: number; // relisting multiplier {0.5, 0.8, 1.0, 1.2}
+  xenoGraftFailureRate: number; // relisting multiplier {0.5, 0.8, 1.0, 1.2, 1.5, 2.0}
   postTransplantDeathRate: number; // death multiplier {1.0, 1.2}
   highCPRAThreshold: number; // 85, 95, or 99
   targetingStrategy?: string; // "standard", "age60_cpraHigh", etc.
@@ -141,7 +141,7 @@ if (!SUPABASE_STORAGE_URL) {
 
 // All runners now emit relist/death multipliers via Python `str(float)`, e.g.
 // str(1.0) = "1.0" → "1p0", str(0.8) = "0.8" → "0p8". Every supported value
-// (relist {0.5,0.8,1.0,1.2}, death {1.0,1.2}) is one-decimal, so JS
+// (relist {0.5,0.8,1.0,1.2,1.5,2.0}, death {1.0,1.2}) is one-decimal, so JS
 // `toFixed(1)` reproduces the Python string exactly. This is the single
 // formatter for both standard and targeted strategies and both therapy modes.
 function fmtMult(val: number): string {
@@ -429,7 +429,7 @@ export type XenoDeathMultiplier = BridgeDeathMultiplier;
 
 // Replacement-therapy relisting (graft-failure) multiplier grid. Must mirror
 // RELISTING_MULTIPLIERS in run_age_experiments.py / run_all_targeting_experiments.py.
-export const XENO_RELIST_MULTIPLIERS = [0.5, 0.8, 1.0, 1.2] as const;
+export const XENO_RELIST_MULTIPLIERS = [0.5, 0.8, 1.0, 1.2, 1.5, 2.0] as const;
 export type XenoRelistMultiplier = (typeof XENO_RELIST_MULTIPLIERS)[number];
 
 export interface ComposeNameParams {

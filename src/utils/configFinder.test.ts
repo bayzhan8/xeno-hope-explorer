@@ -132,7 +132,7 @@ describe('composeConfigName — replacement mode', () => {
   });
 
   it('every XENO_RELIST_MULTIPLIERS value round-trips into a relist_<k>p<...> suffix', () => {
-    expect(XENO_RELIST_MULTIPLIERS).toEqual([0.5, 0.8, 1.0, 1.2]);
+    expect(XENO_RELIST_MULTIPLIERS).toEqual([0.5, 0.8, 1.0, 1.2, 1.5, 2.0]);
     for (const r of XENO_RELIST_MULTIPLIERS) {
       const name = composeConfigName(
         'replacement',
@@ -142,6 +142,14 @@ describe('composeConfigName — replacement mode', () => {
       const suffix = r.toFixed(1).replace('.', 'p');
       expect(name).toBe(`xeno_age_n1000_relist${suffix}_death1p0`);
     }
+    // 2.0 must be relist2p0 (Python str(2.0)), never integer-str relist2.
+    expect(
+      composeConfigName(
+        'replacement',
+        { xeno_n: 1000, xenoGraftFailureRate: 2.0, postTransplantDeathRate: 1.2 },
+        'standard',
+      ),
+    ).toBe('xeno_age_n1000_relist2p0_death1p2');
   });
 });
 

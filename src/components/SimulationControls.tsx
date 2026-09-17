@@ -105,7 +105,8 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({ params, onParam
   const meanTimeToPostTxDeath = fmtMeanTime(actualPostTxDeathAnnual);
 
   // Multipliers are user-selected from discrete grids:
-  //   - Xeno graft failure: 0.5 grid (0, 0.5, 1, 1.5, 2) — historical slider
+  //   - Xeno graft failure: XENO_RELIST_MULTIPLIERS
+  //     {0.5, 0.8, 1.0, 1.2, 1.5, 2.0}
   //   - Xeno post-tx death: XENO_DEATH_MULTIPLIERS = {1.0, 1.2} — narrow
   //     canonical set shared with Bridge therapy
   // One decimal place is exact for every supported value.

@@ -97,7 +97,7 @@ to match the string the backend uploaded or the fetch 404s.
 
 - `n{N}` is absolute supply in kidneys/yr (`supplyToken` in `supplyGrid.ts`).
 - `relist{r}` is the graft-survival multiplier. Replacement uses
-  `{0.5, 0.8, 1.0, 1.2}`. Bridge hard-codes `1p0` because survival is baked into
+  `{0.5, 0.8, 1.0, 1.2, 1.5, 2.0}`. Bridge hard-codes `1p0` because survival is baked into
   the backend pickle and selected via the prefix instead.
 - `death{d}` is the mortality multiplier, `{1.0, 1.2}`.
 
@@ -111,7 +111,7 @@ The allowed grids are exported constants and have to mirror the backend:
 
 | Constant (`configFinder.ts`) | Values | Backend counterpart |
 |---|---|---|
-| `XENO_RELIST_MULTIPLIERS` | `0.5, 0.8, 1.0, 1.2` | `RELISTING_MULTIPLIERS` |
+| `XENO_RELIST_MULTIPLIERS` | `0.5, 0.8, 1.0, 1.2, 1.5, 2.0` | `RELISTING_MULTIPLIERS` |
 | `XENO_DEATH_MULTIPLIERS` | `1.0, 1.2` | `DEATH_MULTIPLIERS` / `BRIDGE_DEATH_MULTIPLIERS` |
 | `BRIDGE_SURVIVAL_MONTHS` | `6, 12, 18, 24, 36` | `SURVIVALS` |
 | supply points (`supplyGrid.ts`) | per strategy x threshold | `supply_grid.SUPPLY_GRID` |
